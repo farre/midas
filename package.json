@@ -26,6 +26,60 @@
 			{
 				"command": "rrdbg.get-binary",
 				"title": "start rr"
+			},
+			{
+				"command": "rrdbg.start-debug-session",
+				"title": "start debugging using rr"
+			},
+			{
+				"command": "rrdbg.stop-debug-session",
+				"title": "start debugging using rr"
+			}
+		],
+		"debuggers": [
+			{
+				"type": "rrdbg",
+				"languages": ["cpp", "c"],
+				"label": "rrdbg",
+				"configurationAttributes": {
+					"program": {
+						"type": "string",
+						"description": "binary to debug",
+						"default": "${workspaceFolder}/${command:rrdbg.get-binary}"
+					},
+					"stopOnEntry": {
+						"type": "boolean",
+						"description": "Set breakpoint on main",
+						"default": true
+					},
+					"trace": {
+						"type": "boolean",
+						"description": "Enables logging of DA Protocol",
+						"default": false
+					}
+				},
+				"initialConfigurations": [
+					{
+						"type": "rrdbg",
+						"request": "launch",
+						"name": "Foo foo",
+						"program": "${workspaceFolder}/${command:rrdbg.get-binary}",
+						"stopOnEntry": true
+					}
+				],
+				"configurationSnippets": [
+					{
+						"label": "rrdbg: Launch",
+						"description": "Launches rrdbg debugging session for binary selected by user",
+						"body": {
+							"type": "rrdbg",
+							"request": "launch",
+							"name": "Foo foo",
+							"program": "^\"\\${workspaceFolder}/\\${command:rrdbg.get-binary}\"",
+							"stopOnEntry": true
+						}
+					}
+				]
 			}
 		]
 	},
