@@ -56,6 +56,7 @@
 		}
 	],
 	"dependencies": {
-		"gdb-js": "^1.3.0"
+		"gdb-js": "^1.3.0",
+		"vscode-debugadapter": "^1.50.0"
 	}
 }
