@@ -16,8 +16,16 @@
 	"contributes": {
 		"commands": [
 			{
-				"command": "rrdbg.helloWorld",
-				"title": "Hello World"
+				"command": "rrdbg.rr-start",
+				"title": "start rr"
+			},
+			{
+				"command": "rrdbg.rr-stop",
+				"title": "start rr"
+			},
+			{
+				"command": "rrdbg.get-binary",
+				"title": "start rr"
 			}
 		]
 	},
