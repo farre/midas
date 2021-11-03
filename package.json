@@ -39,7 +39,10 @@
 		"debuggers": [
 			{
 				"type": "rrdbg",
-				"languages": ["cpp", "c"],
+				"languages": [
+					"cpp",
+					"c"
+				],
 				"label": "rrdbg",
 				"configurationAttributes": {
 					"program": {
