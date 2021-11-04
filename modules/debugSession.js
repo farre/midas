@@ -35,10 +35,17 @@ class LaunchRequestArguments {
 class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
   /** @type { GDBInterface } */
   #gdbInterface;
+
   /** @type {number} */
   #threadId;
+
   /** @type {boolean} */
   #configurationIsDone;
+
+  /**
+   * Constructs a RRSession object
+   * @param {string} logFile
+   */
   constructor(logFile) {
     super(logFile);
     // NB! i have no idea what thread id this is supposed to refer to
@@ -48,15 +55,31 @@ class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
     this.#gdbInterface = new GDBInterface();
     // TODO(simon): we begin by just making sure this works.. Once it does, the rest is basically smooth sailing
     //  involving some albeit repetitive implementation of all commands etc, but at least there's a 2-way communication between code and gdb
-    this.#gdbInterface.on("stopOnEntry", () => {
+    this.#gdbInterface.on("stopOnEntry", (bp) => {
+      console.log("yay we caught our custom 'stop on entry' event");
       this.sendEvent(
         new vscodeDebugAdapter.StoppedEvent("entry", this.#threadId)
       );
     });
+
+    this.#gdbInterface.on("breakPointValidated", (bp) => {
+      this.sendEvent(
+        new vscodeDebugAdapter.BreakpointEvent("changed", {
+          id: bp.id,
+          verified: true,
+          line: bp.line,
+        })
+      );
+    });
+
     this.#gdbInterface.on("stopOnBreakpoint", () => {
       this.sendEvent(
         new vscodeDebugAdapter.StoppedEvent("breakpoint", this.#threadId)
       );
+    });
+
+    this.#gdbInterface.on("execution-end", (payload) => {
+      this.sendEvent();
     });
   }
   /**
@@ -72,13 +95,13 @@ class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
     // make VS Code use 'evaluate' when hovering over source
-    response.body.supportsEvaluateForHovers = true;
+    response.body.supportsEvaluateForHovers = false;
     // make VS Code show a 'step back' button
-    response.body.supportsStepBack = true;
+    response.body.supportsStepBack = false;
     // make VS Code support data breakpoints
     response.body.supportsDataBreakpoints = true;
     // make VS Code support completion in REPL
-    response.body.supportsCompletionsRequest = true;
+    response.body.supportsCompletionsRequest = false;
     response.body.completionTriggerCharacters = [".", "["];
     // make VS Code send cancel request
     response.body.supportsCancelRequest = true;
@@ -106,13 +129,13 @@ class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
       },
     ];
     // make VS Code send exceptionInfo request
-    response.body.supportsExceptionInfoRequest = true;
+    response.body.supportsExceptionInfoRequest = false;
     // make VS Code send setVariable request
     response.body.supportsSetVariable = false;
     // make VS Code send setExpression request
-    response.body.supportsSetExpression = true;
+    response.body.supportsSetExpression = false;
     // make VS Code send disassemble request
-    response.body.supportsDisassembleRequest = true;
+    response.body.supportsDisassembleRequest = false;
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
     this.sendResponse(response);
@@ -141,12 +164,20 @@ class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
    * @param { LaunchRequestArguments } args
    */
   async launchRequest(response, args) {
-    vscodeDebugAdapter.logger.setup(args.trace ? vscodeDebugAdapter.Logger.LogLevel.Verbose : vscodeDebugAdapter.Logger.LogLevel.Stop, false);
-    console.log("Waiting on configuration");
-    while(!this.#configurationIsDone) {
-      console.log(".");
+    vscodeDebugAdapter.logger.setup(
+      args.trace
+        ? vscodeDebugAdapter.Logger.LogLevel.Verbose
+        : vscodeDebugAdapter.Logger.LogLevel.Stop,
+      false
+    );
+    if (args.program != undefined) {
+      args.binary = args.program;
     }
-    await this.#gdbInterface.start(args.binary, !!args.stopOnEntry, !args.noDebug);
+    await this.#gdbInterface.start(
+      args.program,
+      !!args.stopOnEntry,
+      !args.noDebug
+    );
     this.sendResponse(response);
   }
 }
@@ -169,14 +200,11 @@ class ConfigurationProvider {
   resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config.type && !config.request && !config.name) {
-      const editor = vscode.window.activeTextEditor;
-      if (editor && editor.document.languageId === "cpp") {
-        config.type = "rrdbg";
-        config.name = "Launch";
-        config.request = "launch";
-        config.program = "${file}";
-        config.stopOnEntry = true;
-      }
+      config.type = "rrdbg";
+      config.name = "Launch";
+      config.request = "launch";
+      config.program = "${workspaceFolder}/build/testapp";
+      config.stopOnEntry = true;
     }
 
     if (!config.program) {
@@ -186,11 +214,11 @@ class ConfigurationProvider {
           return undefined; // abort launch
         });
     }
-
     return config;
   }
 }
 
 module.exports = {
   RRSession,
+  ConfigurationProvider,
 };
