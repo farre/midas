@@ -122,6 +122,7 @@
 	],
 	"dependencies": {
 		"gdb-js": "^1.3.0",
+		"regenerator-runtime": "^0.13.9",
 		"vscode-debugadapter": "^1.50.0"
 	}
 }
