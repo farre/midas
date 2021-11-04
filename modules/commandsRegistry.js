@@ -3,7 +3,7 @@
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
-
+const vscode = require("vscode");
 const { showErrorMessage } = require("vscode").window;
 const { registerCommand } = require("vscode").commands;
 
@@ -31,9 +31,15 @@ function getVSCodeCommands() {
     rrdbg_unimplemented("get-binary")
   );
   let startDebugging = registerCommand("rrdbg.start-debug-session", () =>
-    rrdbg_unimplemented("start-debug-session")
+    vscode.debug.startDebugging(undefined, {
+      type: "rrdbg",
+      request: "launch",
+      name: "Foo foo",
+      program: "${workspaceFolder}/build/testapp",
+      stopOnEntry: true,
+    })
   );
-  let stopDebugging = registerCommand("rrdbg.start-debug-session", () =>
+  let stopDebugging = registerCommand("rrdbg.stop-debug-session", () =>
     rrdbg_unimplemented("stop-debug-session")
   );
   return [rrStart, rrStop, getExecutable, startDebugging, stopDebugging];

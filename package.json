@@ -10,7 +10,7 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:rrdbg.helloWorld"
+		"*"
 	],
 	"main": "./extension.js",
 	"contributes": {
@@ -39,26 +39,22 @@
 		"debuggers": [
 			{
 				"type": "rrdbg",
-				"languages": [
-					"cpp",
-					"c"
-				],
 				"label": "rrdbg",
 				"configurationAttributes": {
-					"program": {
-						"type": "string",
-						"description": "binary to debug",
-						"default": "${workspaceFolder}/${command:rrdbg.get-binary}"
-					},
-					"stopOnEntry": {
-						"type": "boolean",
-						"description": "Set breakpoint on main",
-						"default": true
-					},
-					"trace": {
-						"type": "boolean",
-						"description": "Enables logging of DA Protocol",
-						"default": false
+					"launch": {
+						"required": [
+							"program"
+						],
+						"program": {
+							"type": "string",
+							"description": "binary to debug",
+							"default": "${workspaceFolder}/test/cppworkspace/testrrdbg/build/testapp"
+						},
+						"stopOnEntry": {
+							"type": "boolean",
+							"description": "Set breakpoint on main",
+							"default": true
+						}
 					}
 				},
 				"initialConfigurations": [
@@ -66,7 +62,7 @@
 						"type": "rrdbg",
 						"request": "launch",
 						"name": "Foo foo",
-						"program": "${workspaceFolder}/${command:rrdbg.get-binary}",
+						"program": "${workspaceFolder}/build/testapp",
 						"stopOnEntry": true
 					}
 				],
@@ -121,7 +117,7 @@
 		}
 	],
 	"dependencies": {
-		"gdb-js": "https://github.com/theIDinside/gdb-js",
+		"gdb-js": "^1.3.0",
 		"regenerator-runtime": "^0.13.9",
 		"vscode-debugadapter": "^1.50.0"
 	}

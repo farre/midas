@@ -3,7 +3,7 @@
 const vscode = require("vscode");
 const { RRSession } = require("./debugSession");
 const { getVSCodeCommands } = require("./commandsRegistry");
-
+const { ConfigurationProvider } = require("./debugSession");
 /**
  *
  * @param {vscode.ExtensionContext} context
@@ -11,6 +11,9 @@ const { getVSCodeCommands } = require("./commandsRegistry");
  */
 function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
+
+  let provider = new ConfigurationProvider();
+  context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("rrdbg", provider, vscode.DebugConfigurationProviderTriggerKind.Initial));
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       "rrdbg",
@@ -25,7 +28,8 @@ function activateExtension(context, descriptorFactory) {
               name: "Launch",
               request: "launch",
               type: "rrdbg",
-              program: "${config:rrdbg.bin}",
+              program: "${workspaceFolder}/build/testapp",
+              stopOnEntry: true
             },
           ];
         },
