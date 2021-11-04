@@ -5,10 +5,40 @@ const vscode = require("vscode");
 const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDBInterface } = require("./debuggerInterface");
 
+/**
+ * @extends DebugProtocol.LaunchRequestArguments
+ */
+class LaunchRequestArguments {
+  /**If noDebug is true the launch request should launch the program without enabling debugging.
+   * @type {boolean | undefined} noDebug */
+  noDebug;
+
+  /**Optional data from the previous, restarted session.
+   * The data is sent as the 'restart' attribute of the 'terminated' event.
+   * The client should leave the data intact.
+   * @type {any | undefined} __restart */
+  __restart;
+
+  /**Path to binary executable to debug
+   * @type {string} */
+  binary;
+
+  /**Tells debug adapter whether or not we should set a breakpoint on main (or otherwise defined entry point of the executable)
+   * @type {boolean | undefined } */
+  stopOnEntry;
+
+  /**Sets trace logging for this debug adapter
+   * @type {boolean} */
+  trace;
+}
+
 class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
-  /** @type GDBInterface */
+  /** @type { GDBInterface } */
   #gdbInterface;
+  /** @type {number} */
   #threadId;
+  /** @type {boolean} */
+  #configurationIsDone;
   constructor(logFile) {
     super(logFile);
     // NB! i have no idea what thread id this is supposed to refer to
@@ -102,7 +132,22 @@ class RRSession extends vscodeDebugAdapter.LoggingDebugSession {
   configurationDoneRequest(response, args) {
     super.configurationDoneRequest(response, args);
     // notify the launchRequest that configuration has finished
-    this._configurationDone.notify();
+    this.#configurationIsDone = true;
+  }
+
+  /**
+   *
+   * @param { DebugProtocol.LaunchResponse } response
+   * @param { LaunchRequestArguments } args
+   */
+  async launchRequest(response, args) {
+    vscodeDebugAdapter.logger.setup(args.trace ? vscodeDebugAdapter.Logger.LogLevel.Verbose : vscodeDebugAdapter.Logger.LogLevel.Stop, false);
+    console.log("Waiting on configuration");
+    while(!this.#configurationIsDone) {
+      console.log(".");
+    }
+    await this.#gdbInterface.start(args.binary, !!args.stopOnEntry, !args.noDebug);
+    this.sendResponse(response);
   }
 }
 
