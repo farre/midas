@@ -23,6 +23,7 @@
 		"no-unused-vars": "warn",
 		"constructor-super": "warn",
 		"valid-typeof": "warn",
-		"indent": ["error", 2]
+		"indent": ["error", 2],
+		"max-len": ["warn", 120]
 	}
 }

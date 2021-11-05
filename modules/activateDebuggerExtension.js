@@ -13,7 +13,13 @@ function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
 
   let provider = new ConfigurationProvider();
-  context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("rrdbg", provider, vscode.DebugConfigurationProviderTriggerKind.Initial));
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(
+      "rrdbg",
+      provider,
+      vscode.DebugConfigurationProviderTriggerKind.Dynamic
+    )
+  );
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       "rrdbg",
@@ -29,7 +35,7 @@ function activateExtension(context, descriptorFactory) {
               request: "launch",
               type: "rrdbg",
               program: "${workspaceFolder}/build/testapp",
-              stopOnEntry: true
+              stopOnEntry: true,
             },
           ];
         },
