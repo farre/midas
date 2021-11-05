@@ -4,6 +4,8 @@ const vscodeDebugAdapter = require("vscode-debugadapter");
 const vscode = require("vscode");
 const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDBInterface } = require("./gdbInterface");
+const { Subject } = require("await-notify");
+const { Thread } = require("gdb-js");
 
 /**
  * @extends DebugProtocol.LaunchRequestArguments
@@ -34,13 +36,16 @@ class LaunchRequestArguments {
 
 class RRSession extends vscodeDebugAdapter.DebugSession {
   /** @type { GDBInterface } */
-  #gdbInterface;
+  gdbInterface;
 
   /** @type {number} */
-  #threadId;
+  threadId;
 
-  /** @type {boolean} */
-  #configurationIsDone;
+  /** @type { Subject } */
+  configIsDone;
+
+  _reportProgress;
+  useInvalidetedEvent;
 
   /**
    * Constructs a RRSession object
@@ -49,19 +54,19 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   constructor(logFile) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
-    this.#threadId = 1;
-    this.setDebuggerLinesStartAt1(false);
-    this.setDebuggerColumnsStartAt1(false);
-    this.#gdbInterface = new GDBInterface();
+    this.threadId = 1;
+    this.configIsDone = new Subject();
+    this.setDebuggerLinesStartAt1(true);
+    this.setDebuggerColumnsStartAt1(true);
+    this.gdbInterface = new GDBInterface();
     // TODO(simon): we begin by just making sure this works.. Once it does, the rest is basically smooth sailing
     //  involving some albeit repetitive implementation of all commands etc, but at least there's a 2-way communication between code and gdb
-    this.#gdbInterface.on("stopOnEntry", (bp) => {
-      console.log(`yay we caught our custom 'stop on entry' event. Breakpoint: ${bp.thread.id}`);
-      let evt = new vscodeDebugAdapter.StoppedEvent("breakpoint", this.#threadId);
+    this.gdbInterface.on("stopOnEntry", (bp) => {
+      let evt = new vscodeDebugAdapter.StoppedEvent("entry", 1);
       this.sendEvent(evt);
     });
 
-    this.#gdbInterface.on("breakPointValidated", (bp) => {
+    this.gdbInterface.on("breakPointValidated", (bp) => {
       this.sendEvent(
         new vscodeDebugAdapter.BreakpointEvent("changed", {
           id: bp.id,
@@ -71,14 +76,13 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
       );
     });
 
-    this.#gdbInterface.on("stopOnBreakpoint", (payload) => {
-      console.log(`Caught stopOnBreakpoint`);
+    this.gdbInterface.on("breakpoint-hit", (breakpointID) => {
       this.sendEvent(
-        new vscodeDebugAdapter.StoppedEvent("breakpoint", this.#threadId)
+        new vscodeDebugAdapter.StoppedEvent("breakpoint", this.threadId)
       );
     });
 
-    this.#gdbInterface.on("execution-end", (payload) => {
+    this.gdbInterface.on("exited-normally", () => {
       this.sendEvent(new vscodeDebugAdapter.TerminatedEvent());
     });
   }
@@ -95,9 +99,9 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
     // make VS Code use 'evaluate' when hovering over source
-    response.body.supportsEvaluateForHovers = false;
+    response.body.supportsEvaluateForHovers = true;
     // make VS Code show a 'step back' button
-    response.body.supportsStepBack = false;
+    response.body.supportsStepBack = true;
     // make VS Code support data breakpoints
     response.body.supportsDataBreakpoints = true;
     // make VS Code support completion in REPL
@@ -107,6 +111,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsCancelRequest = true;
     // make VS Code send the breakpointLocations request
     response.body.supportsBreakpointLocationsRequest = true;
+    response.body.supportsConditionalBreakpoints = true;
+    response.body.supportsFunctionBreakpoints = true;
     // make VS Code provide "Step in Target" functionality
     response.body.supportsStepInTargetsRequest = true;
     // the adapter defines two exceptions filters, one with support for conditions.
@@ -129,20 +135,19 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
       },
     ];
     // make VS Code send exceptionInfo request
-    response.body.supportsExceptionInfoRequest = false;
+    response.body.supportsExceptionInfoRequest = true;
     // make VS Code send setVariable request
     response.body.supportsSetVariable = false;
     // make VS Code send setExpression request
-    response.body.supportsSetExpression = false;
+    response.body.supportsSetExpression = true;
     // make VS Code send disassemble request
-    response.body.supportsDisassembleRequest = false;
+    response.body.supportsDisassembleRequest = true;
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
     this.sendResponse(response);
     // since this debug adapter can accept configuration requests like 'setBreakpoint' at any time,
     // we request them early by sending an 'initializeRequest' to the frontend.
     // The frontend will end the configuration sequence by calling 'configurationDone' request.
-    this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
   }
 
   /**
@@ -155,7 +160,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   configurationDoneRequest(response, args) {
     super.configurationDoneRequest(response, args);
     // notify the launchRequest that configuration has finished
-    this.#configurationIsDone = true;
+
+    this.configIsDone.notify();
   }
 
   /**
@@ -170,15 +176,15 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
         : vscodeDebugAdapter.Logger.LogLevel.Stop,
       false
     );
+    // wait until configuration has finished (and configurationDoneRequest has been called)
+    await this.configIsDone.wait(1000);
+
     if (args.program != undefined) {
       args.binary = args.program;
     }
-    await this.#gdbInterface.start(
-      args.program,
-      true,
-      !args.noDebug
-    );
     this.sendResponse(response);
+    await this.gdbInterface.start(args.program, true, !args.noDebug);
+    this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
   }
 
   /**
@@ -192,14 +198,13 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     let path = args.source.path;
     const clientLines = args.lines || [];
     let res = [];
-    for(let l of clientLines) {
-      let bp = await this.#gdbInterface.setBreakPointAtLine(path, l);
+    for (let l of clientLines) {
+      let bp = await this.gdbInterface.setBreakPointAtLine(path, l);
       let setbp = new vscodeDebugAdapter.Breakpoint(true, bp.line);
       res.push(setbp);
-      console.log("User tried to set a breakpoint");
       response.body = {
-        breakpoints: res
-      }
+        breakpoints: res,
+      };
     }
 
     this.sendResponse(response);
@@ -212,6 +217,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    */
   continueRequest(response, args, request) {
     console.log("User requested a continue");
+    // todo(simon): for rr this needs to be implemented differently
+    this.gdbInterface.continue(false);
   }
   /**
    *
@@ -223,6 +230,62 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     console.log("User tried to set a FunctionBreakPoint request");
   }
 
+  /**
+   *
+   * @param {DebugProtocol.PauseResponse} response
+   * @param {DebugProtocol.PauseArguments} args
+   * @param {DebugProtocol.PauseRequest} [request]
+   */
+  pauseRequest(response, args, request) {
+    console.log("User requested a pause");
+  }
+  /**
+   *
+   * @param {DebugProtocol.ThreadsResponse} response
+   * @param {DebugProtocol.ThreadsRequest} [request]
+   */
+  threadsRequest(response, request) {
+    response.body = {
+      threads: [new vscodeDebugAdapter.Thread(1, "thread 1")],
+    };
+    this.sendResponse(response);
+  }
+
+  /**
+   * "Borrowed" from unknown sources
+   * @param {number} threadId
+   * @param {number} level
+   * @returns {number}
+   */
+  threadToFrameIdMagic(threadId, level) {
+    return (level << 16) | threadId;
+  }
+
+  /**
+   * A stack trace request is requested by VS Code when it needs to decide "where should be put the cursor at"
+   * @param {DebugProtocol.StackTraceResponse} response
+   * @param {DebugProtocol.StackTraceArguments} args
+   * @param {DebugProtocol.Request} [request]
+   */
+  stackTraceRequest(response, args, request) {
+    console.log("Stack trace requested!");
+    this.gdbInterface.getStack(args.levels, args.threadId).then((stack) => {
+      let res = stack.map((frame) => {
+        let source = new vscodeDebugAdapter.Source(frame.file, frame.fullname);
+        return new vscodeDebugAdapter.StackFrame(
+          this.threadToFrameIdMagic(args.threadId, frame.level),
+          `${frame.func} @ 0x${frame.addr}`,
+          source,
+          frame.line,
+          0
+        );
+      });
+      response.body = {
+        stackFrames: res,
+      };
+      this.sendResponse(response);
+    });
+  }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
   // static run(debugSession: typeof DebugSession): void;
@@ -237,7 +300,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
 
   // protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request): void;
   // protected configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments, request?: DebugProtocol.Request): void;
-  // protected continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments, request?: DebugProtocol.Request): void;
   // protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments, request?: DebugProtocol.Request): void;
   // protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request): void;
   // protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request): void;
@@ -249,7 +311,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   // protected sourceRequest(response: DebugProtocol.SourceResponse, args: DebugProtocol.SourceArguments, request?: DebugProtocol.Request): void;
   // protected threadsRequest(response: DebugProtocol.ThreadsResponse, request?: DebugProtocol.Request): void;
   // protected terminateThreadsRequest(response: DebugProtocol.TerminateThreadsResponse, args: DebugProtocol.TerminateThreadsArguments, request?: DebugProtocol.Request): void;
-  // protected stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments, request?: DebugProtocol.Request): void;
+
   // protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request): void;
   // protected variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request): void;
   // protected setVariableRequest(response: DebugProtocol.SetVariableResponse, args: DebugProtocol.SetVariableArguments, request?: DebugProtocol.Request): void;
@@ -272,12 +334,58 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    * Override this hook to implement custom requests.
    */
   // protected customRequest(command: string, response: DebugProtocol.Response, args: any, request?: DebugProtocol.Request): void;
-  // protected convertClientLineToDebugger(line: number): number;
-  // protected convertDebuggerLineToClient(line: number): number;
-  // protected convertClientColumnToDebugger(column: number): number;
-  // protected convertDebuggerColumnToClient(column: number): number;
-  // protected convertClientPathToDebugger(clientPath: string): string;
-  // protected convertDebuggerPathToClient(debuggerPath: string): string;
+
+  /**
+   * @param {number} line
+   * @returns { number }
+   */
+  convertClientLineToDebugger(line) {
+    console.log("convertClientLineToDebugger called with " + line);
+    return super.convertClientLineToDebugger(line);
+  }
+  /**
+   * @param {number} line
+   * @returns {number}
+   */
+  convertDebuggerLineToClient(line) {
+    console.log("convertDebuggerLineToClient called with " + line);
+    return super.convertDebuggerLineToClient(line);
+  }
+  /**
+   *
+   * @param {number} column
+   * @returns {number}
+   */
+  convertClientColumnToDebugger(column) {
+    console.log("convertClientColumnToDebugger called with " + column);
+    return super.convertClientColumnToDebugger(column);
+  }
+  /**
+   * @param {number} column
+   * @returns {number}
+   */
+  convertDebuggerColumnToClient(column) {
+    console.log("convertDebuggerColumnToClient called with " + column);
+    return super.convertDebuggerColumnToClient(column);
+  }
+  /**
+   * @param {string} clientPath
+   * @returns {string}
+   */
+  convertClientPathToDebugger(clientPath) {
+    console.log("convertClientPathToDebugger called with " + clientPath);
+    return super.convertClientPathToDebugger(clientPath);
+  }
+
+  /**
+   *
+   * @param {string} debuggerPath
+   * @returns {string}
+   */
+  convertDebuggerPathToClient(debuggerPath) {
+    console.log("convertDebuggerPathToClient calledf with " + debuggerPath);
+    return super.convertDebuggerPathToClient(debuggerPath);
+  }
 }
 
 /**

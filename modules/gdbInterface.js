@@ -3,6 +3,7 @@
 // it is through this, we dispatch communication between VSCode and GDB/MI
 const { EventEmitter } = require("events");
 const { GDB } = require("gdb-js");
+const gdbNs = require("gdb-js");
 const { spawn } = require("child_process");
 const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
@@ -11,7 +12,7 @@ class GDBInterface extends EventEmitter {
   #gdb;
   stoppedAtEntry;
   /** Maps file paths -> Breakpoints
-   * @type { Map<string, gdbTypes.Breakpoint[]> } */
+   * @type { Map<number, gdbTypes.Breakpoint> } */
   #breakpoints;
 
   #loadedLibraries;
@@ -30,13 +31,9 @@ class GDBInterface extends EventEmitter {
   async start(program, stopOnEntry, debug) {
     let gdb_process = spawn("gdb", ["-i=mi3", program]);
     this.#gdb = new GDB(gdb_process);
-    if(stopOnEntry) {
+    if (stopOnEntry) {
       this.stoppedAtEntry = true;
       this.#gdb.addBreak("main.cpp", "main").then((breakpoint) => {
-        console.log(
-          `Breakpoint set at ${breakpoint.id}. ${breakpoint.func} @ ${breakpoint.file}:${breakpoint.line}`
-        );
-
         let bp = new gdbTypes.Breakpoint(
           breakpoint.id,
           breakpoint.file,
@@ -44,43 +41,50 @@ class GDBInterface extends EventEmitter {
           breakpoint.func,
           breakpoint.thread
         );
-        this.#breakpoints.set(breakpoint.file, [bp]);
+        this.#breakpoints.set(breakpoint.id, bp);
       });
     }
-    this.#gdb.on("running", (payload) => {
-      console.log("we are running");
-    });
-    this.#gdb.on("exec", (payload) => {
-      console.log("gdb is executing");
-    });
-    this.#gdb.on("stopped", (payload) => {
-      console.log(`gdb stopped: ${payload.reason}`);
+    this.#gdb.on("running", (payload) => {});
+    this.#gdb.on("exec", (payload) => {});
+
+    this.#gdb.on("stopped", (/** @type {gdbNs.Breakpoint}*/ payload) => {
       if (this.stoppedAtEntry) {
-        console.log(`We hit the entry. breakpoint: ${payload.breakpoint.id}`);
-        // we reset the handler
-        setImmediate(() => {
-          this.emit("stopOnEntry", payload);
-        });
+        this.emit("stopOnEntry", payload);
         this.stoppedAtEntry = false;
-        this.#gdb.on("stopped", (pl) => {
-          console.log(`gdb stopped: ${pl.reason}`);
-          if (pl.reason == "breakpoint-hit") {
-            console.log(`hit breakpoint: ${pl.id}`);
-          } else {
-            console.log(`stopped for other reason: ${pl.reason}`);
-          }
+      } else {
+        if (payload.reason == "breakpoint-hit") {
           setImmediate(() => {
-            this.emit("stopOnBreakpoint", pl);
+            this.emit("breakpoint-hit", payload.breakpoint.id);
           });
-        });
+        } else {
+          if (payload.reason == "exited-normally") {
+            this.emit("exited-normally");
+          } else {
+            console.log(`stopped for other reason: ${payload.reason}`);
+          }
+        }
       }
     });
-    this.#gdb.on("notify", (payload) => {
-      console.log(`Caught GDB notify. State: ${payload.state}. Data: ${payload.data}`);
+
+    this.#gdb.on("notify", (data) => {
+      console.log(
+        `Caught GDB notify. State: ${data.state}. Data: ${data.data}`
+      );
+      if (data.state == "breakpoint-modified") {
+        for (let b of this.#breakpoints.values()) {
+          if (b.id === Number.parseInt(data.data.bkpt.number)) {
+            b.address = Number.parseInt(data.data.bkpt.addr);
+          }
+        }
+      }
     });
     this.#gdb.on("status", (payload) => {
-      console.log(`Caught GDB status.  State: ${payload.state}. Data: ${payload.data}`);
+      console.log(
+        `Caught GDB status.  State: ${payload.state}. Data: ${payload.data}`
+      );
     });
+    await this.#gdb.init();
+    await this.#gdb.enableAsync();
     return this.#gdb.run();
   }
 
@@ -88,30 +92,26 @@ class GDBInterface extends EventEmitter {
    *
    * @param { boolean } reverse
    */
-  async continue(reverse = false) {
-    this.#gdb.execMI("-e");
-    return new Promise((resolve, reject) => {});
+  continue(reverse = false) {
+    this.#gdb.execMI("-exec-continue").then(({ cmd, scope }) => {
+      console.log(`executing: ${cmd}`);
+    });
   }
 
   /**
-   * 
+   *
    * @param {string} path
    * @param {number} line
    * @returns { Thenable<gdbTypes.Breakpoint> }
    */
   async setBreakPointAtLine(path, line) {
-    /*
-    let bpsInFile = this.#breakpoints.get(path);
-    if(bpsInFile) {
-      let result = bpsInFile.find(bp => bp.line == line);
-      if(result) {
-        return new Promise((resolve, reject) => resolve(result));
-      }
-    }
-*/
-    return this.#gdb.addBreak(path, line).then(breakpoint => {
+    return this.#gdb.addBreak(path, line).then((breakpoint) => {
       console.log(
-        `Breakpoint set at ${breakpoint.id}. ${breakpoint.func} @ ${breakpoint.file}:${breakpoint.line}. Thread: ${breakpoint.thread ? breakpoint.thread.id : "all threads"}`
+        `Breakpoint set at ${breakpoint.id}. ${breakpoint.func} @ ${
+          breakpoint.file
+        }:${breakpoint.line}. Thread: ${
+          breakpoint.thread ? breakpoint.thread.id : "all threads"
+        }`
       );
       let bp = new gdbTypes.Breakpoint(
         breakpoint.id,
@@ -120,21 +120,29 @@ class GDBInterface extends EventEmitter {
         breakpoint.func,
         breakpoint.thread
       );
-      let bpsInFile = this.#breakpoints.get(breakpoint.file);
-      let existAlready = false;
-      if(bpsInFile) {
-        for(let brkp of bpsInFile) {
-          if(brkp.id == bp.id) {
-            console.log("we already have that breakpoint set");
-            existAlready = true;
-          }
-        }
-        if(!existAlready) {
-          bpsInFile.push(bp);
-        }
+      if (!this.#breakpoints.has(bp.id)) {
+        this.#breakpoints.set(bp.id, bp);
       }
-      this.#breakpoints.set(breakpoint.file, bpsInFile);
       return bp;
+    });
+  }
+
+  /**
+   *
+   * @param {number} levels
+   * @param {number} [threadId]
+   * @returns {Promise<gdbTypes.StackFrame[]>}
+   */
+  async getStack(levels, threadId) {
+    let command = `-stack-list-frames ${
+      threadId != 0 ? `--thread ${threadId}` : ""
+    } 0 ${levels}`;
+    let result = await this.#gdb.execMI(command);
+    let frames = await this.#gdb.callstack();
+    console.log(`found ${result.length} results and ${frames.length}`);
+    return result.stack.map((frame) => {
+      const { addr, arch, file, fullname, func, level, line } = frame.value;
+      return new gdbTypes.StackFrame(file, fullname, line, func, level, addr);
     });
   }
 }
