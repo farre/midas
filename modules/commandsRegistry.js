@@ -36,7 +36,7 @@ function getVSCodeCommands() {
       request: "launch",
       name: "Foo foo",
       program: "${workspaceFolder}/build/testapp",
-      stopOnEntry: true,
+      stopOnEntry: false,
     })
   );
   let stopDebugging = registerCommand("rrdbg.stop-debug-session", () =>
