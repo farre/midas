@@ -40,12 +40,30 @@ function toBP(bp) {
 class Thread {
   /**@type {number} */
   id;
-  /**@type {string} */
-  status;
+  /** @type {number} */
+  core;
+  /** @type {string} */
+  name;
+  /** @type {string} */
+  state;
   /**@type {ThreadGroup} */
   group;
   /**@type {StackFrame} */
   frame;
+  constructor(id, core, name, state, target_id, frame) {
+    this.id = Number.parseInt(id);
+    this.core = Number.parseInt(core);
+    this.group = new ThreadGroup("-1", name, target_id);
+    this.frame = new StackFrame(
+      frame.file,
+      frame.fullname,
+      frame.line,
+      frame.func,
+      frame.level,
+      frame.addr
+    );
+    this.state = state;
+  }
 }
 
 class ThreadGroup {
@@ -55,6 +73,22 @@ class ThreadGroup {
   executable;
   /**@type {number} */
   pid;
+
+  /**
+   *
+   * @param {string} id
+   * @param {string} executable
+   * @param {string} target_id
+   */
+  constructor(id, executable, target_id) {
+    this.id = Number.parseInt(id);
+    this.executable = executable;
+    if (target_id.includes("process")) {
+      this.pid = Number.parseInt(target_id.split(" ")[1]);
+    } else {
+      this.pid = Number.parseInt(target_id);
+    }
+  }
 }
 
 class StackFrame {
@@ -88,6 +122,27 @@ class StackFrame {
     this.level = Number.parseInt(level);
     this.addr = Number.parseInt(addr);
   }
+
+  get address() {
+    return `0x${this.addr.toString(16)}`;
+  }
+}
+
+/**
+ * Compact variable Info. Displays the bare minimum about a variable
+ */
+class VariableCompact {
+  /**@type {string} */
+  name;
+  /**@type {string} */
+  valueStr;
+  /**@type {string} */
+  type;
+  constructor(name, value, type) {
+    this.name = name;
+    this.valueStr = value;
+    this.type = type;
+  }
 }
 
 module.exports = {
@@ -95,5 +150,6 @@ module.exports = {
   Thread,
   ThreadGroup,
   StackFrame,
+  VariableCompact,
   toBP,
 };

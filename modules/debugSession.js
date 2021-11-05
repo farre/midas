@@ -77,6 +77,11 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     });
 
     this.gdbInterface.on("breakpoint-hit", (breakpointID) => {
+      this.gdbInterface
+        .getStackLocals()
+        .then((ctx) => {})
+        .catch((err) => {});
+
       this.sendEvent(
         new vscodeDebugAdapter.StoppedEvent("breakpoint", this.threadId)
       );
@@ -86,6 +91,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
       this.sendEvent(new vscodeDebugAdapter.TerminatedEvent());
     });
   }
+
   /**
    * As per Mock debug adapter:
    * The 'initialize' request is the first request called by the frontend
@@ -216,9 +222,10 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.Request} [request]
    */
   continueRequest(response, args, request) {
-    console.log("User requested a continue");
     // todo(simon): for rr this needs to be implemented differently
-    this.gdbInterface.continue(false);
+    this.gdbInterface.continue(false).then((done) => {
+      this.sendResponse(response);
+    });
   }
   /**
    *
@@ -262,13 +269,20 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   }
 
   /**
+   * @param {number} frameId
+   * @returns {[number, number]}
+   */
+  frameIdToThreadAndLevelMagic(frameId) {
+    return [frameId & 0xffff, frameId >> 16];
+  }
+
+  /**
    * A stack trace request is requested by VS Code when it needs to decide "where should be put the cursor at"
    * @param {DebugProtocol.StackTraceResponse} response
    * @param {DebugProtocol.StackTraceArguments} args
    * @param {DebugProtocol.Request} [request]
    */
   stackTraceRequest(response, args, request) {
-    console.log("Stack trace requested!");
     this.gdbInterface.getStack(args.levels, args.threadId).then((stack) => {
       let res = stack.map((frame) => {
         let source = new vscodeDebugAdapter.Source(frame.file, frame.fullname);
@@ -285,6 +299,20 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
       };
       this.sendResponse(response);
     });
+  }
+  /**
+   *
+   * @param {DebugProtocol.VariablesResponse} response
+   * @param {DebugProtocol.VariablesArguments} args
+   * @param {DebugProtocol.VariablesRequest} [request]
+   */
+  variablesRequest(response, args, request) {
+    console.log("UI requested variables");
+    this.gdbInterface.getStackLocals().then((locals) => {});
+    this.gdbInterface.getContext().then((r) => {
+      console.log("foo");
+    });
+    super.variablesRequest(response, args, request);
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
@@ -311,7 +339,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   // protected sourceRequest(response: DebugProtocol.SourceResponse, args: DebugProtocol.SourceArguments, request?: DebugProtocol.Request): void;
   // protected threadsRequest(response: DebugProtocol.ThreadsResponse, request?: DebugProtocol.Request): void;
   // protected terminateThreadsRequest(response: DebugProtocol.TerminateThreadsResponse, args: DebugProtocol.TerminateThreadsArguments, request?: DebugProtocol.Request): void;
-
   // protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request): void;
   // protected variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request): void;
   // protected setVariableRequest(response: DebugProtocol.SetVariableResponse, args: DebugProtocol.SetVariableArguments, request?: DebugProtocol.Request): void;
