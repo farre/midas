@@ -149,18 +149,21 @@ class GDBInterface extends EventEmitter {
    * @typedef {Object} Local
    * @property {string} name
    * @property {string} type
+   * @property {string} value
    *
    * @returns {Promise<Local[]>}
    */
   async getStackLocals() {
     return this.#gdb
-      .execMI("-stack-list-locals --skip-unavailable 2")
-      .then(async (res) => {
-        await res.locals.map(async (local) => {
-          let t = await this.#gdb.execMI(`-var-list-children 2 ${local.name}`);
-          console.log(t.toString());
+      .execMI("-stack-list-locals --skip-unavailable --simple-values")
+      .then((res) => {
+        return res.locals.map((local) => {
+          return {
+            name: local.name,
+            type: local.type,
+            value: local.value,
+          };
         });
-        return res.locals;
       });
   }
 
@@ -171,10 +174,15 @@ class GDBInterface extends EventEmitter {
    * @returns {Promise<gdbTypes.VariableCompact[]>}
    */
   async getStackVariables(thread, frame) {
-    let a = await this.#gdb.execMI(
-      `stack-list-variables --thread ${thread} --frame ${frame} --simple-values`
-    );
-    return a;
+    return this.#gdb
+      .execMI(
+        `stack-list-variables --thread ${thread} --frame ${frame} --simple-values`
+      )
+      .then((cmd_result) => {
+        cmd_result.variables.map((v) => {
+          return new gdbTypes.VariableCompact(v.name, v.value, v.type);
+        });
+      });
   }
 
   async getContext(thread) {

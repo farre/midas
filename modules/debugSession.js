@@ -7,6 +7,8 @@ const { GDBInterface } = require("./gdbInterface");
 const { Subject } = require("await-notify");
 const { Thread } = require("gdb-js");
 
+const STACK_HANDLES_START = 1000;
+
 /**
  * @extends DebugProtocol.LaunchRequestArguments
  */
@@ -79,12 +81,17 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     this.gdbInterface.on("breakpoint-hit", (breakpointID) => {
       this.gdbInterface
         .getStackLocals()
-        .then((ctx) => {})
-        .catch((err) => {});
-
-      this.sendEvent(
-        new vscodeDebugAdapter.StoppedEvent("breakpoint", this.threadId)
-      );
+        .then((locals) => {
+          return locals;
+        })
+        .catch((err) => {
+          console.log("Error trying to get locals");
+        })
+        .then((locals) => {
+          this.sendEvent(
+            new vscodeDebugAdapter.StoppedEvent("breakpoint", this.threadId)
+          );
+        });
     });
 
     this.gdbInterface.on("exited-normally", () => {
@@ -96,6 +103,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    * As per Mock debug adapter:
    * The 'initialize' request is the first request called by the frontend
    * to interrogate the features the debug adapter provides.
+   * @param {DebugProtocol.InitializeResponse} response
+   * @param {DebugProtocol.InitializeRequestArguments} args
    */
   initializeRequest(response, args) {
     if (args.supportsProgressReporting) this._reportProgress = true;
@@ -106,6 +115,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsConfigurationDoneRequest = true;
     // make VS Code use 'evaluate' when hovering over source
     response.body.supportsEvaluateForHovers = true;
+    response.body.supportsReadMemoryRequest;
     // make VS Code show a 'step back' button
     response.body.supportsStepBack = true;
     // make VS Code support data breakpoints
@@ -123,6 +133,10 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsStepInTargetsRequest = true;
     // the adapter defines two exceptions filters, one with support for conditions.
     response.body.supportsExceptionFilterOptions = true;
+    response.body.supportsGotoTargetsRequest = true;
+    response.body.supportsHitConditionalBreakpoints = true;
+    response.body.supportsSetVariable = true;
+
     response.body.exceptionBreakpointFilters = [
       {
         filter: "namedException",
@@ -151,9 +165,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
     this.sendResponse(response);
-    // since this debug adapter can accept configuration requests like 'setBreakpoint' at any time,
-    // we request them early by sending an 'initializeRequest' to the frontend.
-    // The frontend will end the configuration sequence by calling 'configurationDone' request.
   }
 
   /**
@@ -306,19 +317,63 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.VariablesArguments} args
    * @param {DebugProtocol.VariablesRequest} [request]
    */
-  variablesRequest(response, args, request) {
+  async variablesRequest(response, args, request) {
     console.log("UI requested variables");
-    this.gdbInterface.getStackLocals().then((locals) => {});
+    this.gdbInterface.getStackLocals().then((locals) => {
+      response.body = {
+        variables: locals.map((l) => {
+          return {
+            name: l.name,
+            type: l.type,
+            value: l.value,
+            variablesReference: 0,
+          };
+        }),
+      };
+      this.sendResponse(response);
+    });
     this.gdbInterface.getContext().then((r) => {
       console.log("foo");
     });
-    super.variablesRequest(response, args, request);
+  }
+
+  /**
+   * @param {DebugProtocol.ScopesResponse} response
+   * @param {DebugProtocol.ScopesArguments} args
+   * @param {DebugProtocol.Request} request
+   */
+  scopesRequest(response, args, request) {
+    const scopes = [];
+    // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
+    scopes.push(
+      new vscodeDebugAdapter.Scope(
+        "Local",
+        STACK_HANDLES_START + args.frameId || 0,
+        false // false = means scope is inexpensive to get
+      )
+    );
+    response.body = {
+      scopes: scopes,
+    };
+    this.sendResponse(response);
+  }
+
+  /**
+   *
+   * @param {DebugProtocol.Response} response
+   * @param {DebugProtocol.Message} codeOrMessage
+   * @param {string} [format]
+   * @param {any} [variables]
+   * @param {vscodeDebugAdapter.ErrorDestination} [dest]
+   */
+  sendErrorResponse(response, codeOrMessage, format, variables, dest) {
+    console.log("Sending error resposne");
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
   // static run(debugSession: typeof DebugSession): void;
   // shutdown(): void;
-  // protected sendErrorResponse(response: DebugProtocol.Response, codeOrMessage: number | DebugProtocol.Message, format?: string, variables?: any, dest?: ErrorDestination): void;
+
   // runInTerminalRequest(args: DebugProtocol.RunInTerminalRequestArguments, timeout: number, cb: (response: DebugProtocol.RunInTerminalResponse) => void): void;
   // protected dispatchRequest(request: DebugProtocol.Request): void;
   // protected disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request): void;
