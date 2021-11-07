@@ -8,6 +8,39 @@ const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
 const { spawn } = require("./spawner");
 
+const WatchPointType = {
+  ACCESS: "-a",
+  READ: "-r",
+  WRITE: "",
+};
+
+/**
+ * QueriedTypesMap stores types and their members, so if the user is trying to dive down into an object
+ * instead of querying GDB every time for it's member, we memoize them and can thus request all member variables directly
+ */
+class QueriedTypesMap {
+  /** @type { Map<string, string[]> } */
+  static #types = new Map();
+
+  /**
+   * Returns the members of a C++ class or struct type
+   * @param {string} type - type to get members for
+   * @returns an array of all the members `type` contains
+   */
+  static get_members(type) {
+    return QueriedTypesMap.#types.get(type);
+  }
+
+  /**
+   * Returns the members of a C++ class or struct type
+   * @param {string} type - type to get members for
+   * @returns an array of all the members `type` contains
+   */
+  static record_type(type, members) {
+    QueriedTypesMap.#types.set(type, members);
+  }
+}
+
 class GDBInterface extends EventEmitter {
   #gdb;
   stoppedAtEntry;
@@ -118,6 +151,23 @@ class GDBInterface extends EventEmitter {
     });
   }
 
+  // TODO(simon): List gdb functions we want / need to implement next
+
+  #setWatchPoint(location, wpType) {
+    return this.#gdb.execMI(`-break-watch ${wpType} ${location}`);
+  }
+  setReadWatchPoint(location) {
+    return this.#setWatchPoint(location, WatchPointType.READ);
+  }
+  setWriteWatchPoint(location) {
+    return this.#setWatchPoint(location, WatchPointType.WRITE);
+  }
+  setAccessWatchPoint(location) {
+    return this.#setWatchPoint(location, WatchPointType.ACCESS);
+  }
+
+  // async listBreakpoints(location) {}
+
   /**
    *
    * @param {number} levels
@@ -154,7 +204,7 @@ class GDBInterface extends EventEmitter {
    * @returns {Promise<Local[]>}
    */
   async getStackLocals() {
-    return this.#gdb
+    let stack_locals = await this.#gdb
       .execMI("-stack-list-locals --skip-unavailable --simple-values")
       .then((res) => {
         return res.locals.map((local) => {
@@ -165,6 +215,16 @@ class GDBInterface extends EventEmitter {
           };
         });
       });
+
+    for (const v of stack_locals) {
+      if (v.value == undefined) {
+        let r = await this.#gdb.execCLI(`ptype /tm ${v.type}`);
+        console.log(`Result of CLI command "ptype ${v.type}":`);
+        console.log(r);
+      }
+    }
+
+    return stack_locals;
   }
 
   /**
