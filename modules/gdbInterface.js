@@ -4,9 +4,9 @@
 const { EventEmitter } = require("events");
 const { GDB } = require("gdb-js");
 const gdbNs = require("gdb-js");
-const { spawn } = require("child_process");
 const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
+const { spawn } = require("./spawner");
 
 class GDBInterface extends EventEmitter {
   #gdb;
@@ -185,6 +185,14 @@ class GDBInterface extends EventEmitter {
       });
   }
 
+  /**
+   * Returns the entire context of the application if `thread` is null.
+   * Otherwise returns the context of that thread.
+   * The "context", is here defined as all global, static and local variables.
+   * N.B. This is a potentially costly operation.
+   * @param { number } thread
+   * @returns { Promise<object[]> }
+   */
   async getContext(thread) {
     let a = await this.#gdb.context(thread ? thread : undefined);
     return a;

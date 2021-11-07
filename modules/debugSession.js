@@ -318,7 +318,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.VariablesRequest} [request]
    */
   async variablesRequest(response, args, request) {
-    console.log("UI requested variables");
     this.gdbInterface.getStackLocals().then((locals) => {
       response.body = {
         variables: locals.map((l) => {
@@ -331,9 +330,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
         }),
       };
       this.sendResponse(response);
-    });
-    this.gdbInterface.getContext().then((r) => {
-      console.log("foo");
     });
   }
 
