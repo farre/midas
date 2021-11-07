@@ -10,7 +10,7 @@
 		"Other"
 	],
 	"activationEvents": [
-		"*"
+		"onDebug"
 	],
 	"main": "./extension.js",
 	"contributes": {

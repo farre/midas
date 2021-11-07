@@ -7,8 +7,8 @@ const { GDBInterface } = require("./gdbInterface");
 const { Subject } = require("await-notify");
 const { Thread } = require("gdb-js");
 
-const STACK_HANDLES_START = 1000;
-
+const STACK_ID_START = 1000;
+const VAR_ID_START = 1000 * 1000;
 /**
  * @extends DebugProtocol.LaunchRequestArguments
  */
@@ -37,6 +37,7 @@ class LaunchRequestArguments {
 }
 
 class RRSession extends vscodeDebugAdapter.DebugSession {
+
   /** @type { GDBInterface } */
   gdbInterface;
 
@@ -156,8 +157,6 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     ];
     // make VS Code send exceptionInfo request
     response.body.supportsExceptionInfoRequest = true;
-    // make VS Code send setVariable request
-    response.body.supportsSetVariable = false;
     // make VS Code send setExpression request
     response.body.supportsSetExpression = true;
     // make VS Code send disassemble request
@@ -325,13 +324,15 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
             name: l.name,
             type: l.type,
             value: l.value,
-            variablesReference: 0,
+            variablesReference: this.#variableReferences++,
           };
         }),
       };
       this.sendResponse(response);
     });
   }
+
+  setVariableRequest(response: DebugProtocol.SetVariableResponse, args: DebugProtocol.SetVariableArguments, request?: DebugProtocol.Request): void;
 
   /**
    * @param {DebugProtocol.ScopesResponse} response
@@ -344,7 +345,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     scopes.push(
       new vscodeDebugAdapter.Scope(
         "Local",
-        STACK_HANDLES_START + args.frameId || 0,
+        STACK_ID_START + args.frameId || 0,
         false // false = means scope is inexpensive to get
       )
     );
@@ -392,7 +393,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   // protected terminateThreadsRequest(response: DebugProtocol.TerminateThreadsResponse, args: DebugProtocol.TerminateThreadsArguments, request?: DebugProtocol.Request): void;
   // protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request): void;
   // protected variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request): void;
-  // protected setVariableRequest(response: DebugProtocol.SetVariableResponse, args: DebugProtocol.SetVariableArguments, request?: DebugProtocol.Request): void;
+
   // protected setExpressionRequest(response: DebugProtocol.SetExpressionResponse, args: DebugProtocol.SetExpressionArguments, request?: DebugProtocol.Request): void;
   // protected evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments, request?: DebugProtocol.Request): void;
   // protected stepInTargetsRequest(response: DebugProtocol.StepInTargetsResponse, args: DebugProtocol.StepInTargetsArguments, request?: DebugProtocol.Request): void;
