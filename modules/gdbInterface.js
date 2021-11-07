@@ -3,7 +3,6 @@
 // it is through this, we dispatch communication between VSCode and GDB/MI
 const { EventEmitter } = require("events");
 const { GDB } = require("gdb-js");
-const gdbNs = require("gdb-js");
 const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
 const { spawn } = require("./spawner");
@@ -83,7 +82,7 @@ class GDBInterface extends EventEmitter {
     this.#gdb.on("running", (payload) => {});
     this.#gdb.on("exec", (payload) => {});
 
-    this.#gdb.on("stopped", (/** @type {gdbNs.Breakpoint}*/ payload) => {
+    this.#gdb.on("stopped", (payload) => {
       if (this.stoppedAtEntry) {
         this.emit("stopOnEntry", payload);
         this.stoppedAtEntry = false;

@@ -1,137 +1,138 @@
 {
-	"name": "rrdbg",
-	"displayName": "rrdbg",
-	"description": "rr debugger extension for VS Code",
-	"version": "0.0.1",
-	"engines": {
-		"vscode": "^1.61.0"
-	},
-	"categories": [
-		"Other"
-	],
-	"activationEvents": [
-		"onDebug"
-	],
-	"main": "./extension.js",
-	"contributes": {
-		"breakpoints": [
-			{
-				"language": "cpp"
-			},
-			{
-				"language": "c"
-			},
-			{
-				"language": "c++"
-			}
-		],
-		"commands": [
-			{
-				"command": "rrdbg.rr-start",
-				"title": "start rr"
-			},
-			{
-				"command": "rrdbg.rr-stop",
-				"title": "start rr"
-			},
-			{
-				"command": "rrdbg.get-binary",
-				"title": "start rr"
-			},
-			{
-				"command": "rrdbg.start-debug-session",
-				"title": "start debugging using rr"
-			},
-			{
-				"command": "rrdbg.stop-debug-session",
-				"title": "start debugging using rr"
-			}
-		],
-		"debuggers": [
-			{
-				"type": "rrdbg",
-				"label": "rrdbg",
-				"configurationAttributes": {
-					"launch": {
-						"required": [
-							"program"
-						],
-						"program": {
-							"type": "string",
-							"description": "binary to debug",
-							"default": "${workspaceFolder}/test/cppworkspace/testrrdbg/build/testapp"
-						},
-						"stopOnEntry": {
-							"type": "boolean",
-							"description": "Set breakpoint on main",
-							"default": true
-						}
-					}
-				},
-				"initialConfigurations": [
-					{
-						"type": "rrdbg",
-						"request": "launch",
-						"name": "Foo foo",
-						"program": "${workspaceFolder}/build/testapp",
-						"stopOnEntry": true
-					}
-				],
-				"configurationSnippets": [
-					{
-						"label": "rrdbg: Launch",
-						"description": "Launches rrdbg debugging session for binary selected by user",
-						"body": {
-							"type": "rrdbg",
-							"request": "launch",
-							"name": "Foo foo",
-							"program": "^\"\\${workspaceFolder}/\\${command:rrdbg.get-binary}\"",
-							"stopOnEntry": true
-						}
-					}
-				]
-			}
-		]
-	},
-	"scripts": {
-		"lint": "eslint .",
-		"pretest": "npm run lint",
-		"test": "node ./test/runTest.js"
-	},
-	"devDependencies": {
-		"@babel/cli": "^7.16.0",
-		"@babel/core": "^7.16.0",
-		"@babel/eslint-parser": "^7.16.0",
-		"@babel/preset-env": "^7.16.0",
-		"@types/glob": "^7.1.4",
-		"@types/mocha": "^9.0.0",
-		"@types/node": "14.x",
-		"@types/vscode": "^1.61.0",
-		"@vscode/test-electron": "^1.6.2",
-		"eslint": "^8.1.0",
-		"glob": "^7.1.7",
-		"mocha": "^9.1.3",
-		"typescript": "^4.4.4"
-	},
-	"author": {
-		"name": "Andreas Farre",
-		"email": "andreas@farre.se"
-	},
-	"maintainers": [
-		{
-			"name": "Andreas Farre",
-			"email": "andreas@farre.se"
-		},
-		{
-			"name": "Simon Farre",
-			"email": "simon.farre.cx@gmail.com"
-		}
-	],
-	"dependencies": {
-		"await-notify": "^1.0.1",
-		"gdb-js": "^1.3.0",
-		"regenerator-runtime": "^0.13.9",
-		"vscode-debugadapter": "^1.50.0",
-		"vscode-debugprotocol": "^1.50.1"
-	}
+  "name": "midas",
+  "displayName": "midas",
+  "description": "Midas: A GDB/MI Visual Studio Code Debug Adapter",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.61.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onDebug"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "breakpoints": [
+      {
+        "language": "cpp"
+      },
+      {
+        "language": "c"
+      },
+      {
+        "language": "c++"
+      }
+    ],
+    "commands": [
+      {
+        "command": "midas.start",
+        "title": "start"
+      },
+      {
+        "command": "midas.stop",
+        "title": "stop"
+      },
+      {
+        "command": "midas.get-binary",
+        "title": "get binary"
+      },
+      {
+        "command": "midas.start-debug-session",
+        "title": "start debugging"
+      },
+      {
+        "command": "midas.stop-debug-session",
+        "title": "stop debugging"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "midas",
+        "label": "midas",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "program": {
+              "type": "string",
+              "description": "binary to debug",
+              "default": "${workspaceFolder}/test/cppworkspace/testmidas/build/testapp"
+            },
+            "stopOnEntry": {
+              "type": "boolean",
+              "description": "Set breakpoint on main",
+              "default": true
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "midas",
+            "request": "launch",
+            "name": "Foo foo",
+            "program": "${workspaceFolder}/build/testapp",
+            "stopOnEntry": true
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "midas: Launch",
+            "description": "Launches midas debugging session for binary selected by user",
+            "body": {
+              "type": "midas",
+              "request": "launch",
+              "name": "Foo foo",
+              "program": "^\"\\${workspaceFolder}/\\${command:midas.get-binary}\"",
+              "stopOnEntry": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.16.0",
+    "@babel/core": "^7.16.0",
+    "@babel/eslint-parser": "^7.16.0",
+    "@babel/preset-env": "^7.16.0",
+    "@types/glob": "^7.1.4",
+    "@types/mocha": "^9.0.0",
+    "@types/node": "14.x",
+    "@types/vscode": "^1.61.0",
+    "@vscode/test-electron": "^1.6.2",
+    "eslint": "^8.1.0",
+    "glob": "^7.1.7",
+    "mocha": "^9.1.3",
+    "typescript": "^4.4.4"
+  },
+  "author": {
+    "name": "Andreas Farre",
+    "email": "andreas@farre.se"
+  },
+  "maintainers": [
+    {
+      "name": "Andreas Farre",
+      "email": "andreas@farre.se"
+    },
+    {
+      "name": "Simon Farre",
+      "email": "simon.farre.cx@gmail.com"
+    }
+  ],
+  "dependencies": {
+    "await-notify": "^1.0.1",
+    "gdb-js": "^1.3.0",
+    "regenerator-runtime": "^0.13.9",
+    "vscode-debugadapter": "^1.50.0",
+    "vscode-debugprotocol": "^1.50.1",
+    "vscode-debugadapter-testsupport": "^1.50.0"
+  }
 }

@@ -1059,6 +1059,11 @@ argparse@^2.0.1:
   resolved "https://registry.yarnpkg.com/argparse/-/argparse-2.0.1.tgz#246f50f3ca78a3240f6c997e8a9bd1eac49e4b38"
   integrity sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==
 
+await-notify@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/await-notify/-/await-notify-1.0.1.tgz#0b48133b22e524181e11557665185f2a2f3ce47c"
+  integrity sha1-C0gTOyLlJBgeEVV2ZRhfKi885Hw=
+
 babel-plugin-dynamic-import-node@^2.3.3:
   version "2.3.3"
   resolved "https://registry.yarnpkg.com/babel-plugin-dynamic-import-node/-/babel-plugin-dynamic-import-node-2.3.3.tgz#84fda19c976ec5c6defef57f9427b3def66e17a3"
@@ -2436,6 +2441,13 @@ v8-compile-cache@^2.0.3:
   resolved "https://registry.yarnpkg.com/v8-compile-cache/-/v8-compile-cache-2.3.0.tgz#2de19618c66dc247dcfb6f99338035d8245a2cee"
   integrity sha512-l8lCEmLcLYZh4nbunNZvQCJc5pv7+RCwa8q/LdUx8u7lsWvPDKmpodJAJNwkAhJC//dFY48KuIEmjtd4RViDrA==
 
+vscode-debugadapter-testsupport@^1.50.0:
+  version "1.50.0"
+  resolved "https://registry.yarnpkg.com/vscode-debugadapter-testsupport/-/vscode-debugadapter-testsupport-1.50.0.tgz#17b091ec4ca577f39eb36619f2a5469582bee66a"
+  integrity sha512-stS8yE8le59FLeKvCvdSY6PoYtmUXMxR1WiAW2JS65Sg7ip+yQm+WMKQZz8Dat0vtUF4ALcaKf/P+KjPTdzVww==
+  dependencies:
+    vscode-debugprotocol "1.50.1"
+
 vscode-debugadapter@^1.50.0:
   version "1.50.0"
   resolved "https://registry.yarnpkg.com/vscode-debugadapter/-/vscode-debugadapter-1.50.0.tgz#9afb78bbfc61266012f4e119bdcafd1f014ae96b"
@@ -2444,7 +2456,7 @@ vscode-debugadapter@^1.50.0:
     mkdirp "^1.0.4"
     vscode-debugprotocol "1.50.1"
 
-vscode-debugprotocol@1.50.1:
+vscode-debugprotocol@1.50.1, vscode-debugprotocol@^1.50.1:
   version "1.50.1"
   resolved "https://registry.yarnpkg.com/vscode-debugprotocol/-/vscode-debugprotocol-1.50.1.tgz#8aa7114ede9ded5ee49ba056593ad936116cfb42"
   integrity sha512-kIHIipklHnSjBm2KkRqTJLKL2FMZlJl0+/qpJt2y62YOamMNwcxNATnXXRgAwnzKKRMweqp93tJ83UTJ8+O7SQ==

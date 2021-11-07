@@ -12,8 +12,8 @@ const { registerCommand } = require("vscode").commands;
  * @param {string} commandName
  * @param { string | undefined } msg
  */
-const rrdbg_unimplemented = (commandName, msg = "No message provided") => {
-  showErrorMessage(`rrdbg.${commandName} not yet implemented: ${msg}`);
+const unimplemented = (commandName, msg = "No message provided") => {
+  showErrorMessage(`midas.${commandName} not yet implemented: ${msg}`);
 };
 
 /**
@@ -21,28 +21,24 @@ const rrdbg_unimplemented = (commandName, msg = "No message provided") => {
  * @returns { Disposable[] }
  */
 function getVSCodeCommands() {
-  let rrStart = registerCommand("rrdbg.rr-start", () =>
-    rrdbg_unimplemented("rr-start")
+  let start = registerCommand("midas.start", () => unimplemented("start"));
+  let stop = registerCommand("midas.stop", () => unimplemented("stop"));
+  let getExecutable = registerCommand("midas.get-binary", () =>
+    unimplemented("get-binary")
   );
-  let rrStop = registerCommand("rrdbg.rr-stop", () =>
-    rrdbg_unimplemented("rr-stop")
-  );
-  let getExecutable = registerCommand("rrdbg.get-binary", () =>
-    rrdbg_unimplemented("get-binary")
-  );
-  let startDebugging = registerCommand("rrdbg.start-debug-session", () =>
+  let startDebugging = registerCommand("midas.start-debug-session", () =>
     vscode.debug.startDebugging(undefined, {
-      type: "rrdbg",
+      type: "midas",
       request: "launch",
       name: "Foo foo",
       program: "${workspaceFolder}/build/testapp",
       stopOnEntry: false,
     })
   );
-  let stopDebugging = registerCommand("rrdbg.stop-debug-session", () =>
-    rrdbg_unimplemented("stop-debug-session")
+  let stopDebugging = registerCommand("midas.stop-debug-session", () =>
+    unimplemented("stop-debug-session")
   );
-  return [rrStart, rrStop, getExecutable, startDebugging, stopDebugging];
+  return [start, stop, getExecutable, startDebugging, stopDebugging];
 }
 
 module.exports = {

@@ -3,6 +3,6 @@ node_modules
 *.vsix
 package-lock.json
 .cache
-test/cppworkspace/testrrdbg/.vscode
-test/cppworkspace/testrrdbg/build
-test/cppworkspace/testrrdbg/testapp
+test/cppworkspace/test/.vscode
+test/cppworkspace/test/build
+test/cppworkspace/test/testapp
