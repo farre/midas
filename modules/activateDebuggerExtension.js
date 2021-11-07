@@ -1,9 +1,10 @@
 "use strict";
 
 const vscode = require("vscode");
-const { RRSession } = require("./debugSession");
+const { DebugSession } = require("./debugSession");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider } = require("./debugSession");
+
 /**
  *
  * @param {vscode.ExtensionContext} context
@@ -15,14 +16,14 @@ function activateExtension(context, descriptorFactory) {
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
-      "rrdbg",
+      "midas",
       provider,
       vscode.DebugConfigurationProviderTriggerKind.Dynamic
     )
   );
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
-      "rrdbg",
+      "midas",
       {
         /**
          * @param {vscode.WorkspaceFolder | undefined} folder
@@ -33,7 +34,7 @@ function activateExtension(context, descriptorFactory) {
             {
               name: "Launch",
               request: "launch",
-              type: "rrdbg",
+              type: "midas",
               program: "${workspaceFolder}/build/testapp",
               stopOnEntry: true,
             },
@@ -50,17 +51,17 @@ function activateExtension(context, descriptorFactory) {
   //  we do that by adding subscriptions to the context, by using functions like
   //  vscode.languages.registerEvaluatableExpressionProvider(...)
   if (!descriptorFactory) {
-    descriptorFactory = new RRDebugAdapterFactory();
+    descriptorFactory = new DebugAdapterFactory();
   }
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
-      "rrdbg",
+      "midas",
       descriptorFactory
     )
   );
 }
 
-class RRDebugAdapterFactory {
+class DebugAdapterFactory {
   /**
    *
    * @param { vscode.DebugSession } session
@@ -68,7 +69,7 @@ class RRDebugAdapterFactory {
    */
   createDebugAdapterDescriptor(session) {
     return new vscode.DebugAdapterInlineImplementation(
-      new RRSession("rrdbg.log")
+      new DebugSession("midas.log")
     );
   }
 }

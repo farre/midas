@@ -6,6 +6,7 @@ const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDBInterface } = require("./gdbInterface");
 const { Subject } = require("await-notify");
 const { Thread } = require("gdb-js");
+const fs = require("fs");
 
 const STACK_ID_START = 1000;
 const VAR_ID_START = 1000 * 1000;
@@ -36,7 +37,7 @@ class LaunchRequestArguments {
   trace;
 }
 
-class RRSession extends vscodeDebugAdapter.DebugSession {
+class DebugSession extends vscodeDebugAdapter.DebugSession {
 
   /** @type { GDBInterface } */
   gdbInterface;
@@ -51,10 +52,10 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
   useInvalidetedEvent;
 
   /**
-   * Constructs a RRSession object
+   * Constructs a DebugSession object
    * @param {string} logFile
    */
-  constructor(logFile) {
+  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.threadId = 1;
@@ -495,7 +496,7 @@ class ConfigurationProvider {
   resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config.type && !config.request && !config.name) {
-      config.type = "rrdbg";
+      config.type = "midas";
       config.name = "Launch";
       config.request = "launch";
       config.program = "${workspaceFolder}/build/testapp";
@@ -514,6 +515,6 @@ class ConfigurationProvider {
 }
 
 module.exports = {
-  RRSession,
+  DebugSession,
   ConfigurationProvider,
 };
