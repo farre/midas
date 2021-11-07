@@ -5,3 +5,4 @@ package-lock.json
 .cache
 test/cppworkspace/testrrdbg/.vscode
 test/cppworkspace/testrrdbg/build
+test/cppworkspace/testrrdbg/testapp
