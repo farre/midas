@@ -46,6 +46,6 @@ suite("Extension Test Suite", () => {
         dc.launch({ program: PROGRAM }),
         dc.waitForEvent("terminated"),
       ]);
-    });
+    }).timeout(5000);
   });
 });
