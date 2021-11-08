@@ -14,6 +14,9 @@ const WatchPointType = {
   WRITE: "",
 };
 
+// gdb MI functions that we don't pass params to
+const getCurrentFunctionArgs = `-stack-list-arguments --skip-unavailable 1 0 0`
+
 /**
  * QueriedTypesMap stores types and their members, so if the user is trying to dive down into an object
  * instead of querying GDB every time for it's member, we memoize them and can thus request all member variables directly
@@ -204,7 +207,10 @@ class GDBInterface extends EventEmitter {
    * @returns {Promise<Local[]>}
    */
   async getStackLocals() {
-    let stack_locals = await this.#gdb
+    // TODO(simon): we need to create var objects in GDB
+    //  to manage and keep track of things. This function is not done
+    const frame_arguments = this.#gdb.execMI(getCurrentFunctionArgs);
+    const stack_locals = await this.#gdb
       .execMI("-stack-list-locals --skip-unavailable --simple-values")
       .then((res) => {
         return res.locals.map((local) => {
