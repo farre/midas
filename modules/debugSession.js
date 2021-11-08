@@ -63,7 +63,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     this.setDebuggerColumnsStartAt1(true);
     this.gdbInterface = new GDBInterface();
     // TODO(simon): we begin by just making sure this works.. Once it does, the rest is basically smooth sailing
-    //  involving some albeit repetitive implementation of all commands etc, but at least there's a 2-way communication between code and gdb
+    //  involving some albeit repetitive implementation of all commands etc,
+    //  but at least there's a 2-way communication between code and gdb
     this.gdbInterface.on("stopOnEntry", (bp) => {
       let evt = new vscodeDebugAdapter.StoppedEvent("entry", 1);
       this.sendEvent(evt);
@@ -194,7 +195,8 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     );
     // wait until configuration has finished (and configurationDoneRequest has been called)
     await this.configIsDone.wait(1000);
-
+    // todo(simon): Ugly hack. This part of the setup
+    //  is not fully implemented. Do something about this.
     if (args.program != undefined) {
       args.binary = args.program;
     }
@@ -324,7 +326,7 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
             name: l.name,
             type: l.type,
             value: l.value,
-            variablesReference: this.#variableReferences++,
+            variablesReference: 0,
           };
         }),
       };
@@ -332,7 +334,15 @@ class RRSession extends vscodeDebugAdapter.DebugSession {
     });
   }
 
-  setVariableRequest(response: DebugProtocol.SetVariableResponse, args: DebugProtocol.SetVariableArguments, request?: DebugProtocol.Request): void;
+  /**
+   *
+   * @param {DebugProtocol.SetVariableResponse} response
+   * @param {DebugProtocol.SetVariableArguments} args
+   * @param {DebugProtocol.SetVariableRequest} [request]
+   */
+  setVariableRequest(response, args, request) {
+
+  }
 
   /**
    * @param {DebugProtocol.ScopesResponse} response
