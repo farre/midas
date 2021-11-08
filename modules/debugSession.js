@@ -7,9 +7,14 @@ const { GDBInterface } = require("./gdbInterface");
 const { Subject } = require("await-notify");
 const { Thread } = require("gdb-js");
 const fs = require("fs");
+const net = require("net");
+const { Server } = require("http");
 
 const STACK_ID_START = 1000;
 const VAR_ID_START = 1000 * 1000;
+
+let server;
+
 /**
  * @extends DebugProtocol.LaunchRequestArguments
  */
@@ -38,7 +43,6 @@ class LaunchRequestArguments {
 }
 
 class DebugSession extends vscodeDebugAdapter.DebugSession {
-
   /** @type { GDBInterface } */
   gdbInterface;
 
@@ -51,10 +55,6 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   _reportProgress;
   useInvalidetedEvent;
 
-  /**
-   * Constructs a DebugSession object
-   * @param {string} logFile
-   */
   constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
@@ -110,8 +110,10 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.InitializeRequestArguments} args
    */
   initializeRequest(response, args) {
-    if (args.supportsProgressReporting) this._reportProgress = true;
-    if (args.supportsInvalidatedEvent) this.useInvalidetedEvent = true;
+    this._reportProgress = args.supportsProgressReporting;
+
+    this.useInvalidetedEvent = args.supportsInvalidatedEvent;
+
     // build and return the capabilities of this debug adapter:
     response.body = response.body || {};
     // the adapter implements the configurationDone request.
@@ -166,6 +168,8 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
     this.sendResponse(response);
+
+    // this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
   }
 
   /**
@@ -182,11 +186,6 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
     this.configIsDone.notify();
   }
 
-  /**
-   *
-   * @param { DebugProtocol.LaunchResponse } response
-   * @param { LaunchRequestArguments } args
-   */
   async launchRequest(response, args) {
     vscodeDebugAdapter.logger.setup(
       args.trace
@@ -202,7 +201,11 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
       args.binary = args.program;
     }
     this.sendResponse(response);
-    await this.gdbInterface.start(args.program, true, !args.noDebug);
+    await this.gdbInterface.start(
+      args.program,
+      args.stopOnEntry,
+      !args.noDebug
+    );
     this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
   }
 
@@ -341,9 +344,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.SetVariableArguments} args
    * @param {DebugProtocol.SetVariableRequest} [request]
    */
-  setVariableRequest(response, args, request) {
-
-  }
+  setVariableRequest(response, args, request) {}
 
   /**
    * @param {DebugProtocol.ScopesResponse} response
@@ -379,7 +380,30 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
-  // static run(debugSession: typeof DebugSession): void;
+  static run(port) {
+    if (!port) {
+      vscodeDebugAdapter.DebugSession.run(DebugSession);
+      return;
+    }
+    if (server) {
+      server.close();
+      server = null;
+    }
+
+    // start a server that creates a new session for every connection request
+    server = net
+      .createServer((socket) => {
+        socket.on("end", () => {});
+        const session = new DebugSession();
+        session.setRunAsServer(true);
+        session.start(socket, socket);
+      })
+      .listen(port);
+  }
+
+  static shutdown() {
+    server.close();
+  }
   // shutdown(): void;
 
   // runInTerminalRequest(args: DebugProtocol.RunInTerminalRequestArguments, timeout: number, cb: (response: DebugProtocol.RunInTerminalResponse) => void): void;

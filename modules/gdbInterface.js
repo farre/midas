@@ -14,7 +14,7 @@ const WatchPointType = {
 };
 
 // gdb MI functions that we don't pass params to
-const getCurrentFunctionArgs = `-stack-list-arguments --skip-unavailable 1 0 0`
+const getCurrentFunctionArgs = `-stack-list-arguments --skip-unavailable 1 0 0`;
 
 /**
  * QueriedTypesMap stores types and their members, so if the user is trying to dive down into an object
@@ -65,6 +65,7 @@ class GDBInterface extends EventEmitter {
    */
   async start(program, stopOnEntry, debug) {
     let gdb_process = spawn("gdb", ["-i=mi3", program]);
+    // @ts-ignore
     this.#gdb = new GDB(gdb_process);
     if (stopOnEntry) {
       this.stoppedAtEntry = true;
