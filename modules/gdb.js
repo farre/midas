@@ -174,7 +174,6 @@ class GDB extends GDBBase {
   }
 
   /**
-   *
    * @param { boolean } reverse
    */
   async continue(reverse = false) {
@@ -239,47 +238,34 @@ class GDB extends GDBBase {
 
   async getThreads() {
     const command = "-thread-info";
-    let cmd_result = await this.execMI(command);
-    return cmd_result.threads.map(
-      ({ core, frame, id, name, state, "target-id": target_id }) => {
-        return new gdbTypes.Thread(id, core, name, state, target_id, frame);
-      }
-    );
+    return this.execMI(command).then((res) => {
+      return res.threads.map(
+        ({ core, frame, id, name, state, "target-id": target_id }) => {
+          return new gdbTypes.Thread(id, core, name, state, target_id, frame);
+        }
+      );
+    });
   }
 
   /**
    * @typedef {Object} Local
    * @property {string} name
    * @property {string} type
-   * @property {string} value
+   * @property {string | null} value
    *
    * @returns {Promise<Local[]>}
    */
   async getStackLocals() {
-    // TODO(simon): we need to create var objects in GDB
-    //  to manage and keep track of things. This function is not done
-    const frame_arguments = this.execMI(getCurrentFunctionArgs);
-    const stack_locals = await this.execMI(
-      "-stack-list-locals --skip-unavailable --simple-values"
-    ).then((res) => {
-      return res.locals.map((local) => {
+    const command = `-stack-list-variables --simple-values`;
+    return this.execMI(command).then((res) => {
+      return res.variables.map((variable) => {
         return {
-          name: local.name,
-          type: local.type,
-          value: local.value,
+          name: variable.name,
+          type: variable.type,
+          value: variable.value ? variable.value : null,
         };
       });
     });
-
-    for (const v of stack_locals) {
-      if (v.value == undefined) {
-        let r = await this.execCLI(`ptype /tm ${v.type}`);
-        console.log(`Result of CLI command "ptype ${v.type}":`);
-        console.log(r);
-      }
-    }
-
-    return stack_locals;
   }
 
   /**
