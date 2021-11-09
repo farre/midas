@@ -3,7 +3,7 @@
 const vscodeDebugAdapter = require("vscode-debugadapter");
 const vscode = require("vscode");
 const { DebugProtocol } = require("vscode-debugprotocol");
-const { GDBInterface } = require("./gdbInterface");
+const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const { Thread } = require("gdb-js");
 const fs = require("fs");
@@ -43,8 +43,8 @@ class LaunchRequestArguments {
 }
 
 class DebugSession extends vscodeDebugAdapter.DebugSession {
-  /** @type { GDBInterface } */
-  gdbInterface;
+  /** @type { GDB } */
+  gdb;
 
   /** @type {number} */
   threadId;
@@ -62,44 +62,6 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.gdbInterface = new GDBInterface();
-    // TODO(simon): we begin by just making sure this works.. Once it does, the rest is basically smooth sailing
-    //  involving some albeit repetitive implementation of all commands etc,
-    //  but at least there's a 2-way communication between code and gdb
-    this.gdbInterface.on("stopOnEntry", (bp) => {
-      let evt = new vscodeDebugAdapter.StoppedEvent("entry", 1);
-      this.sendEvent(evt);
-    });
-
-    this.gdbInterface.on("breakPointValidated", (bp) => {
-      this.sendEvent(
-        new vscodeDebugAdapter.BreakpointEvent("changed", {
-          id: bp.id,
-          verified: true,
-          line: bp.line,
-        })
-      );
-    });
-
-    this.gdbInterface.on("breakpoint-hit", (breakpointID) => {
-      this.gdbInterface
-        .getStackLocals()
-        .then((locals) => {
-          return locals;
-        })
-        .catch((err) => {
-          console.log("Error trying to get locals");
-        })
-        .then((locals) => {
-          this.sendEvent(
-            new vscodeDebugAdapter.StoppedEvent("breakpoint", this.threadId)
-          );
-        });
-    });
-
-    this.gdbInterface.on("exited-normally", () => {
-      this.sendEvent(new vscodeDebugAdapter.TerminatedEvent());
-    });
   }
 
   /**
@@ -168,8 +130,6 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
     this.sendResponse(response);
-
-    // this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
   }
 
   /**
@@ -201,12 +161,22 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
       args.binary = args.program;
     }
     this.sendResponse(response);
-    await this.gdbInterface.start(
-      args.program,
-      args.stopOnEntry,
-      !args.noDebug
-    );
-    this.sendEvent(new vscodeDebugAdapter.InitializedEvent());
+
+    this.gdb = new GDB(this, args.program);
+    this.gdb.initialize(args.stopOnEntry);
+
+    await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug);
+  }
+
+  async setBreakPointAtLine(path, line) {
+    let verified = false;
+    if (this.gdb) {
+      let breakpoint = await this.gdb.setBreakPointAtLine(path, line);
+      line = breakpoint.line;
+      verified = true;
+    }
+
+    return new vscodeDebugAdapter.Breakpoint(verified, line);
   }
 
   /**
@@ -218,16 +188,15 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    */
   async setBreakPointsRequest(response, args, request) {
     let path = args.source.path;
-    const clientLines = args.lines || [];
+    const clientLines = args.lines ?? [];
     let res = [];
-    for (let l of clientLines) {
-      let bp = await this.gdbInterface.setBreakPointAtLine(path, l);
-      let setbp = new vscodeDebugAdapter.Breakpoint(true, bp.line);
-      res.push(setbp);
-      response.body = {
-        breakpoints: res,
-      };
+    for (let line of clientLines) {
+      res.push(this.setBreakPointAtLine(path, line));
     }
+
+    response.body = {
+      breakpoints: await Promise.all(res),
+    };
 
     this.sendResponse(response);
   }
@@ -239,7 +208,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    */
   continueRequest(response, args, request) {
     // todo(simon): for rr this needs to be implemented differently
-    this.gdbInterface.continue(false).then((done) => {
+    this.gdb.continue(false).then((done) => {
       this.sendResponse(response);
     });
   }
@@ -299,7 +268,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.Request} [request]
    */
   stackTraceRequest(response, args, request) {
-    this.gdbInterface.getStack(args.levels, args.threadId).then((stack) => {
+    this.gdb.getStack(args.levels, args.threadId).then((stack) => {
       let res = stack.map((frame) => {
         let source = new vscodeDebugAdapter.Source(frame.file, frame.fullname);
         return new vscodeDebugAdapter.StackFrame(
@@ -323,7 +292,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    * @param {DebugProtocol.VariablesRequest} [request]
    */
   async variablesRequest(response, args, request) {
-    this.gdbInterface.getStackLocals().then((locals) => {
+    this.gdb.getStackLocals().then((locals) => {
       response.body = {
         variables: locals.map((l) => {
           return {
