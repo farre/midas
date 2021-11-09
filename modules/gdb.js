@@ -270,6 +270,24 @@ class GDB extends GDBBase {
 
   /**
    *
+   * @param {string} sourceCodeVariableName
+   * @param {string} variableObjectName
+   */
+  async createVarObject(sourceCodeVariableName, variableObjectName) {
+    const cmd = `-var-create ${variableObjectName} * ${sourceCodeVariableName}`;
+    let v = await this.execMI(cmd);
+    // we only ever keep track of parent variable objects; GDB deletes children for us
+    this.variableObjectsRecorded.push(v.name);
+    return v;
+  }
+
+  async clearVariableObjects() {
+    return this.variableObjectsRecorded.map(async (name) => {
+      this.execMI(`-var-delete ${name}`);
+    });
+  }
+  /**
+   *
    * @param {number} thread
    * @param {number} frame
    * @returns {Promise<gdbTypes.VariableCompact[]>}
@@ -297,10 +315,53 @@ class GDB extends GDBBase {
     return a;
   }
 
-  async getVariableListChildren(name) {
-    const command = `-var-list-children ${name} 2`;
-    return this.execMI(command).then((res) => {
-      return res.children;
+  /**
+   * @typedef { {
+   *  variableObjectName: string,
+   *  expression: string,
+   *  value: string,
+   *  type: string,
+   *  threadID: string
+   *  numChild: string }
+   * } VariableObjectChild
+   * @param {string} variableObjectName
+   * @returns {Promise<VariableObjectChild[]>}
+   */
+  async getVariableListChildren(variableObjectName) {
+    let mods = await this.execMI(
+      `-var-list-children --all-values ${variableObjectName}`
+    );
+
+    let requests = [];
+    for (const r of mods.children) {
+      const membersCommands = `-var-list-children --all-values ${r.value.name}`;
+      requests.push(this.execMI(membersCommands));
+    }
+
+    const makeVarObjChild = (res) => {
+      return {
+        variableObjectName: res.name,
+        expression: res.exp,
+        value: res.value,
+        type: res.type,
+        threadID: res["thread-id"],
+        numChild: res.numchild,
+      };
+    };
+
+    return Promise.all([
+      ...requests,
+      //p_privateMembers_res,
+      //p_publicMembers_,
+      //p_protectedMembers,
+    ]).then((values) => {
+      let res = [];
+      for (let arr of values) {
+        for (let v of arr.children) {
+          res.push(makeVarObjChild(v.value));
+        }
+      }
+      return res;
     });
   }
 }
