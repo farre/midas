@@ -1,6 +1,6 @@
 "use strict";
 
-const vscodeDebugAdapter = require("vscode-debugadapter");
+const DebugAdapter = require("vscode-debugadapter");
 const vscode = require("vscode");
 const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDB } = require("./gdb");
@@ -9,6 +9,7 @@ const { Thread } = require("gdb-js");
 const fs = require("fs");
 const net = require("net");
 const { Server } = require("http");
+const { VariableObject } = require("./gdbtypes");
 
 const STACK_ID_START = 1000;
 const VAR_ID_START = 1000 * 1000;
@@ -42,7 +43,103 @@ class LaunchRequestArguments {
   trace;
 }
 
-class DebugSession extends vscodeDebugAdapter.DebugSession {
+class VariableHandler {
+  /** @type { DebugAdapter.Handles<VariableObject> } */
+  #variableHandles;
+  /** @type { { [name: string]: number } } */
+  #nameToIdMapping;
+
+  /** @type { number[] } */
+  #ids;
+
+  constructor() {
+    this.#variableHandles = new DebugAdapter.Handles(VAR_ID_START);
+    this.#nameToIdMapping = {};
+  }
+
+  /**
+   *
+   * @param { VariableObject } variable
+   * @returns
+   */
+  create(variable) {
+    let var_id = this.#variableHandles.create(variable);
+    this.#nameToIdMapping[variable.name] = var_id;
+    this.#ids.push(var_id);
+    return var_id;
+  }
+
+  /**
+   *
+   * @param {string} name
+   * @param {string} expression
+   * @param {string} childrenCount
+   * @param {string} value
+   * @param {string} type
+   * @param {string} has_more
+   * @returns
+   */
+  createNew(name, expression, childrenCount, value, type, has_more) {
+    let vob = new VariableObject(
+      name,
+      expression,
+      childrenCount,
+      value,
+      type,
+      has_more,
+      0
+    );
+    let vid = this.#variableHandles.create(vob);
+    this.#variableHandles.get(vid).variableReference = vid;
+    return vid;
+  }
+
+  /**
+   * @param {string} name
+   * @returns {VariableObject | undefined}
+   */
+  getByName(name) {
+    if (this.#nameToIdMapping.hasOwnProperty(name))
+      return this.#variableHandles.get(this.#nameToIdMapping[name]);
+    else return undefined;
+  }
+
+  /**
+   * @param {number} id
+   * @returns {VariableObject | undefined}
+   */
+  getById(id) {
+    return this.#variableHandles.get(id);
+  }
+
+  /**
+   * @param {string} name
+   * @returns {boolean}
+   */
+  hasName(name) {
+    return this.#nameToIdMapping.hasOwnProperty(name);
+  }
+
+  /**
+   *
+   * @param {number} id
+   * @returns {boolean}
+   */
+  hasID(id) {
+    for (const vid of this.#ids) {
+      if (vid == id) return true;
+    }
+    return false;
+  }
+
+  reset() {
+    this.#ids = [];
+    this.#nameToIdMapping = {};
+    this.#variableHandles = new DebugAdapter.Handles(VAR_ID_START);
+  }
+}
+
+class DebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
 
@@ -51,6 +148,9 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
 
   /** @type { Subject } */
   configIsDone;
+
+  /** @type { VariableHandler } */
+  variableHandler;
 
   _reportProgress;
   useInvalidetedEvent;
@@ -62,6 +162,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
+    this.variableHandler = new VariableHandler();
   }
 
   /**
@@ -147,10 +248,10 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   }
 
   async launchRequest(response, args) {
-    vscodeDebugAdapter.logger.setup(
+    DebugAdapter.logger.setup(
       args.trace
-        ? vscodeDebugAdapter.Logger.LogLevel.Verbose
-        : vscodeDebugAdapter.Logger.LogLevel.Stop,
+        ? DebugAdapter.Logger.LogLevel.Verbose
+        : DebugAdapter.Logger.LogLevel.Stop,
       false
     );
     // wait until configuration has finished (and configurationDoneRequest has been called)
@@ -176,7 +277,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
       verified = true;
     }
 
-    return new vscodeDebugAdapter.Breakpoint(verified, line);
+    return new DebugAdapter.Breakpoint(verified, line);
   }
 
   /**
@@ -238,7 +339,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    */
   threadsRequest(response, request) {
     response.body = {
-      threads: [new vscodeDebugAdapter.Thread(1, "thread 1")],
+      threads: [new DebugAdapter.Thread(1, "thread 1")],
     };
     this.sendResponse(response);
   }
@@ -270,8 +371,8 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   stackTraceRequest(response, args, request) {
     this.gdb.getStack(args.levels, args.threadId).then((stack) => {
       let res = stack.map((frame) => {
-        let source = new vscodeDebugAdapter.Source(frame.file, frame.fullname);
-        return new vscodeDebugAdapter.StackFrame(
+        let source = new DebugAdapter.Source(frame.file, frame.fullname);
+        return new DebugAdapter.StackFrame(
           this.threadToFrameIdMagic(args.threadId, frame.level),
           `${frame.func} @ 0x${frame.addr}`,
           source,
@@ -289,22 +390,96 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
    *
    * @param {DebugProtocol.VariablesResponse} response
    * @param {DebugProtocol.VariablesArguments} args
-   * @param {DebugProtocol.VariablesRequest} [request]
+   * @param {DebugProtocol.VariablesRequest | undefined} request
    */
   async variablesRequest(response, args, request) {
-    this.gdb.getStackLocals().then((locals) => {
-      response.body = {
-        variables: locals.map((l) => {
-          return {
-            name: l.name,
-            type: l.type,
-            value: l.value,
+    const variablesResult = [];
+    /**
+     *  All primitive types shall have DebugProtocol.Variable.variableReference = 0
+     *  All structured types, should have a unique variableReference,
+     *  which shall be used to retrieve children of that variable
+     */
+    const isStructuredType = (valueString) => valueString === "{...}";
+    let vObj = this.variableHandler.getById(args.variablesReference);
+    // if this true; means we're drilling down on a type
+    if (vObj) {
+      // means we're trying to update a variable that has children
+      let children = await this.gdb.getVariableListChildren(vObj.name);
+      let variables = [];
+      for (let child of children) {
+        if (isStructuredType(child.value)) {
+          // means we need to create a variableReference for this child, so that VScode can know we can drill down into this value
+          let variableRef = this.variableHandler.createNew(
+            child.variableObjectName,
+            child.expression,
+            child.numChild,
+            "struct",
+            child.type,
+            "0"
+          );
+          variables.push({
+            name: child.expression,
+            type: child.type,
+            value: child.value,
+            variablesReference: variableRef,
+          });
+        } else {
+          variables.push({
+            name: child.expression,
+            type: child.type,
+            value: child.value,
             variablesReference: 0,
-          };
-        }),
+          });
+        }
+      }
+      response.body = {
+        variables: variables,
       };
       this.sendResponse(response);
-    });
+    } else {
+      // we're drilling down on a scope.
+      // todo(simon): we need to make it so this also clears out the Variable Objects that GDB has in it's book keeping
+      this.variableHandler.reset();
+      let stack_locals = this.gdb.getStackLocals();
+      let variables = [];
+      await Promise.all([this.gdb.clearVariableObjects(), stack_locals]).then(
+        ([frame, locals]) => {
+          for (let arg of locals) {
+            if (arg.value === null) {
+              let varRef = this.variableHandler.createNew(
+                `vo_${arg.name}_${args.variablesReference}`,
+                arg.name,
+                "0",
+                arg.value,
+                arg.type,
+                "0"
+              );
+              this.gdb.createVarObject(
+                arg.name,
+                `vo_${arg.name}_${args.variablesReference}`
+              );
+              variables.push({
+                name: arg.name,
+                type: arg.type,
+                value: "struct",
+                variablesReference: varRef,
+              });
+            } else {
+              variables.push({
+                name: arg.name,
+                type: arg.type,
+                value: arg.value,
+                variablesReference: 0,
+              });
+            }
+          }
+        }
+      );
+      response.body = {
+        variables: variables,
+      };
+      this.sendResponse(response);
+    }
   }
 
   /**
@@ -323,8 +498,9 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   scopesRequest(response, args, request) {
     const scopes = [];
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
+    // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
     scopes.push(
-      new vscodeDebugAdapter.Scope(
+      new DebugAdapter.Scope(
         "Local",
         STACK_ID_START + args.frameId || 0,
         false // false = means scope is inexpensive to get
@@ -351,7 +527,7 @@ class DebugSession extends vscodeDebugAdapter.DebugSession {
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
   static run(port) {
     if (!port) {
-      vscodeDebugAdapter.DebugSession.run(DebugSession);
+      DebugAdapter.DebugSession.run(DebugSession);
       return;
     }
     if (server) {

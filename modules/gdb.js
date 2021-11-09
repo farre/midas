@@ -97,7 +97,7 @@ class GDB extends GDBBase {
     await this.init();
     await this.enableAsync();
 
-    if (stopOnEntry) {
+    if (true) {
       await this.execMI("-exec-run --start");
     } else {
       await this.run();
@@ -125,16 +125,7 @@ class GDB extends GDBBase {
         this.sendEvent(new StoppedEvent("entry", 1));
       } else {
         if (payload.reason == "breakpoint-hit") {
-          this.getStackLocals()
-            .then((locals) => {
-              return locals;
-            })
-            .catch((err) => {
-              console.log("Error trying to get locals");
-            })
-            .then((locals) => {
-              this.sendEvent(new StoppedEvent("breakpoint", this.threadId));
-            });
+          this.sendEvent(new StoppedEvent("breakpoint", this.threadId));
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
