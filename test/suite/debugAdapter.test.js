@@ -29,11 +29,10 @@ suite("Extension Test Suite", () => {
   vscode.window.showInformationMessage("Start all tests.");
 
   suite("initialize", () => {
-    test("should return supported features", () => {
-      return dc.initializeRequest().then((response) => {
-        response.body = response.body || {};
-        assert(response.body.supportsConfigurationDoneRequest, true);
-      });
+    test("should return supported features", async () => {
+      let response = await dc.initializeRequest();
+      response.body = response.body || {};
+      assert(response.body.supportsConfigurationDoneRequest, true);
     });
   });
 
@@ -45,6 +44,16 @@ suite("Extension Test Suite", () => {
         dc.configurationSequence(),
         dc.launch({ program: PROGRAM }),
         dc.waitForEvent("terminated"),
+      ]);
+    }).timeout(5000);
+
+    test("should stop at entry", () => {
+      const PROGRAM = path.join(TEST_PROJECT, "build", "testapp");
+
+      return Promise.all([
+        dc.configurationSequence(),
+        dc.launch({ program: PROGRAM, stopOnEntry: true }),
+        dc.waitForEvent("entry"),
       ]);
     }).timeout(5000);
   });

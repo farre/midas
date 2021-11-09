@@ -69,19 +69,6 @@ class GDB extends GDBBase {
    * @param { boolean } debug
    */
   async start(program, stopOnEntry, debug) {
-    if (stopOnEntry) {
-      this.stoppedAtEntry = true;
-      this.addBreak("main.cpp", "main").then((breakpoint) => {
-        let bp = new gdbTypes.Breakpoint(
-          breakpoint.id,
-          breakpoint.file,
-          breakpoint.line,
-          breakpoint.func,
-          breakpoint.thread
-        );
-        this.#breakpoints.set(breakpoint.id, bp);
-      });
-    }
     this.on("running", (payload) => {});
     this.on("exec", (payload) => {});
 
@@ -123,7 +110,12 @@ class GDB extends GDBBase {
     });
     await this.init();
     await this.enableAsync();
-    return this.run();
+
+    if (stopOnEntry) {
+      this.execMI("-exec-run --start");
+    } else {
+      return this.run();
+    }
   }
 
   /**
