@@ -11,7 +11,7 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"${workspaceFolder}/test/cppworkspace/testrrdbg"
+				"${workspaceFolder}/test/cppworkspace/test"
 			]
 		},
 		{
