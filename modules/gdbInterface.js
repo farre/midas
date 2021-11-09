@@ -6,6 +6,7 @@ const { GDB } = require("gdb-js");
 const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
 const { spawn } = require("./spawner");
+const customCommands = require("./customCommands");
 
 const WatchPointType = {
   ACCESS: "-a",
@@ -80,6 +81,9 @@ class GDBInterface extends EventEmitter {
         this.#breakpoints.set(breakpoint.id, bp);
       });
     }
+
+    await customCommands.initialize();
+
     this.#gdb.on("running", (payload) => {});
     this.#gdb.on("exec", (payload) => {});
 
