@@ -120,7 +120,7 @@ class StackFrame {
     this.line = Number.parseInt(line);
     this.func = func;
     this.level = Number.parseInt(level);
-    this.addr = Number.parseInt(addr);
+    this.addr = Number.parseInt(addr, 16);
   }
 
   get address() {
@@ -145,11 +145,68 @@ class VariableCompact {
   }
 }
 
+/**
+ * 1-to-1 representation of https://sourceware.org/gdb/current/onlinedocs/gdb/GDB_002fMI-Variable-Objects.html
+ */
+class VariableObject {
+  /**
+   * The name assigned by GDB to variable objects, so it's *not* the name of the variable
+   * in the source code
+   * @type {string} */
+  name;
+
+  /** Actual variable name
+   * @type {string} */
+  expression;
+
+  /**
+   * Number of children reported by GDB. Note that GDB reports keywords like public/private/protected as children.
+   * Thus, in order to get the actual members of a type, we must first drill into the public/.. child, to find *it's*
+   * children, then we find the actual members of that block.
+   * @type {number} */
+  numchild;
+
+  /**
+   * If this VariableObject represents a primitive type, this value will be set
+   * @type { string | undefined } */
+  value;
+
+  /** Type of this varible
+   * @type {string} */
+  type;
+
+  /** @type { boolean } */
+  has_more;
+
+  /** This member does not exist on a GDB Variable Object, it's for VSCode only
+   * @type { number } */
+  variableReference;
+
+  constructor(
+    name,
+    expression,
+    childrenCount,
+    value,
+    type,
+    has_more,
+    variableReference
+  ) {
+    this.name = name;
+    this.expression = expression;
+    this.numchild = parseInt(childrenCount);
+    this.value = value;
+    this.type = type;
+    this.has_more = has_more == "0";
+    this.variableReference = variableReference;
+  }
+}
+
 module.exports = {
   Breakpoint,
   Thread,
   ThreadGroup,
   StackFrame,
   VariableCompact,
+  VariableObject,
   toBP,
 };
