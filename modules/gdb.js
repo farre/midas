@@ -79,6 +79,8 @@ class GDB extends GDBBase {
 
   #loadedLibraries;
 
+  variableObjectsRecorded = [];
+
   #target;
 
   constructor(target, binary) {
@@ -125,7 +127,7 @@ class GDB extends GDBBase {
         this.sendEvent(new StoppedEvent("entry", 1));
       } else {
         if (payload.reason == "breakpoint-hit") {
-          this.sendEvent(new StoppedEvent("breakpoint", this.threadId));
+          this.sendEvent(new StoppedEvent("breakpoint", 1));
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
