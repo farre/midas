@@ -65,6 +65,11 @@
               "type": "boolean",
               "description": "Set breakpoint on main",
               "default": true
+            },
+            "trace": {
+              "type": "boolean",
+              "description": "Turns logging on or off",
+              "default": false
             }
           }
         },
@@ -74,7 +79,8 @@
             "request": "launch",
             "name": "Foo foo",
             "program": "${workspaceFolder}/build/testapp",
-            "stopOnEntry": true
+            "stopOnEntry": true,
+            "trace": false
           }
         ],
         "configurationSnippets": [
@@ -86,7 +92,8 @@
               "request": "launch",
               "name": "Foo foo",
               "program": "^\"\\${workspaceFolder}/\\${command:midas.get-binary}\"",
-              "stopOnEntry": true
+              "stopOnEntry": true,
+              "trace": false
             }
           }
         ]
