@@ -6,12 +6,21 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Run Extension",
+			"name": "Run Extension -- non-threads",
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
 				"${workspaceFolder}/test/cppworkspace/test"
+			]
+		},
+		{
+			"name": "Run Extension -- threaded project",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"${workspaceFolder}/test/cppworkspace/thread"
 			]
 		},
 		{
