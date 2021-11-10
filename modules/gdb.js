@@ -57,8 +57,8 @@ function log(location, payload) {
   }
 
   console.log(
-    `Caught GDB ${location}. State: ${payload.state}. Data: ${JSON.stringify(
-      payload.data,
+    `Caught GDB ${location}. Payload: ${JSON.stringify(
+      payload,
       null,
       " "
     )}`
@@ -95,11 +95,12 @@ class GDB extends GDBBase {
    * @param { boolean } stopOnEntry
    * @param { boolean } debug
    */
-  async start(program, stopOnEntry, debug) {
+  async start(program, stopOnEntry, debug, doTrace) {
+    trace = doTrace;
     await this.init();
     await this.enableAsync();
 
-    if (true) {
+    if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
       await this.run();
