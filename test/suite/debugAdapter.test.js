@@ -5,9 +5,14 @@ const vscode = require("vscode");
 const { DebugClient } = require("vscode-debugadapter-testsupport");
 const { DebugSession } = require("../../modules/debugSession");
 const path = require("path");
+const { buildTestFiles } = require("../../modules/utils");
 
 const PROJECT_ROOT = path.normalize(path.join(__dirname, "..", ".."));
 const TEST_PROJECT = path.join(PROJECT_ROOT, "test", "cppworkspace", "test");
+
+setup(() => {
+  return buildTestFiles(TEST_PROJECT);
+});
 
 suite("Extension Launch Test Suite", () => {
   let dc;
