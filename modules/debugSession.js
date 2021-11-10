@@ -256,17 +256,12 @@ class DebugSession extends DebugAdapter.DebugSession {
     );
     // wait until configuration has finished (and configurationDoneRequest has been called)
     await this.configIsDone.wait(1000);
-    // todo(simon): Ugly hack. This part of the setup
-    //  is not fully implemented. Do something about this.
-    if (args.program != undefined) {
-      args.binary = args.program;
-    }
     this.sendResponse(response);
 
     this.gdb = new GDB(this, args.program);
     this.gdb.initialize(args.stopOnEntry);
 
-    await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug);
+    await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace);
   }
 
   async setBreakPointAtLine(path, line) {
@@ -670,6 +665,7 @@ class ConfigurationProvider {
       config.request = "launch";
       config.program = "${workspaceFolder}/build/testapp";
       config.stopOnEntry = true;
+      config.trace = false;
     }
 
     if (!config.program) {
