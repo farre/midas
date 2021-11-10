@@ -163,6 +163,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
     this.variableHandler = new VariableHandler();
+
+    this.on("error", (event) => {
+      console.log(event.body);
+    });
   }
 
   /**
@@ -513,7 +517,7 @@ class DebugSession extends DebugAdapter.DebugSession {
    * @param {DebugProtocol.Message} codeOrMessage
    * @param {string} [format]
    * @param {any} [variables]
-   * @param {vscodeDebugAdapter.ErrorDestination} [dest]
+   * @param {DebugAdapter.ErrorDestination} [dest]
    */
   sendErrorResponse(response, codeOrMessage, format, variables, dest) {
     console.log("Sending error resposne");
@@ -544,50 +548,153 @@ class DebugSession extends DebugAdapter.DebugSession {
   static shutdown() {
     server.close();
   }
-  // shutdown(): void;
 
-  // runInTerminalRequest(args: DebugProtocol.RunInTerminalRequestArguments, timeout: number, cb: (response: DebugProtocol.RunInTerminalResponse) => void): void;
-  // protected dispatchRequest(request: DebugProtocol.Request): void;
-  // protected disconnectRequest(response: DebugProtocol.DisconnectResponse, args: DebugProtocol.DisconnectArguments, request?: DebugProtocol.Request): void;
-  // protected attachRequest(response: DebugProtocol.AttachResponse, args: DebugProtocol.AttachRequestArguments, request?: DebugProtocol.Request): void;
-  // protected terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments, request?: DebugProtocol.Request): void;
-  // protected restartRequest(response: DebugProtocol.RestartResponse, args: DebugProtocol.RestartArguments, request?: DebugProtocol.Request): void;
+  virtualDispatch(...args) {
+    let name;
+    try {
+      throw new Error();
+    } catch (e) {
+      // Get the name of the calling function.
+      name = e.stack.split("\n")[2].match(/^.+?[\.]([^ ]+)/)[1];
+    }
 
-  // protected setExceptionBreakPointsRequest(response: DebugProtocol.SetExceptionBreakpointsResponse, args: DebugProtocol.SetExceptionBreakpointsArguments, request?: DebugProtocol.Request): void;
-  // protected configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse, args: DebugProtocol.ConfigurationDoneArguments, request?: DebugProtocol.Request): void;
-  // protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments, request?: DebugProtocol.Request): void;
-  // protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments, request?: DebugProtocol.Request): void;
-  // protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments, request?: DebugProtocol.Request): void;
-  // protected stepBackRequest(response: DebugProtocol.StepBackResponse, args: DebugProtocol.StepBackArguments, request?: DebugProtocol.Request): void;
-  // protected reverseContinueRequest(response: DebugProtocol.ReverseContinueResponse, args: DebugProtocol.ReverseContinueArguments, request?: DebugProtocol.Request): void;
-  // protected restartFrameRequest(response: DebugProtocol.RestartFrameResponse, args: DebugProtocol.RestartFrameArguments, request?: DebugProtocol.Request): void;
-  // protected gotoRequest(response: DebugProtocol.GotoResponse, args: DebugProtocol.GotoArguments, request?: DebugProtocol.Request): void;
-  // protected pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments, request?: DebugProtocol.Request): void;
-  // protected sourceRequest(response: DebugProtocol.SourceResponse, args: DebugProtocol.SourceArguments, request?: DebugProtocol.Request): void;
-  // protected threadsRequest(response: DebugProtocol.ThreadsResponse, request?: DebugProtocol.Request): void;
-  // protected terminateThreadsRequest(response: DebugProtocol.TerminateThreadsResponse, args: DebugProtocol.TerminateThreadsArguments, request?: DebugProtocol.Request): void;
-  // protected scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments, request?: DebugProtocol.Request): void;
-  // protected variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments, request?: DebugProtocol.Request): void;
+    console.error(`Not Implemented: ${name}`);
+    // Call the calling function on super.
+    super[name](...args);
+  }
 
-  // protected setExpressionRequest(response: DebugProtocol.SetExpressionResponse, args: DebugProtocol.SetExpressionArguments, request?: DebugProtocol.Request): void;
-  // protected evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments, request?: DebugProtocol.Request): void;
-  // protected stepInTargetsRequest(response: DebugProtocol.StepInTargetsResponse, args: DebugProtocol.StepInTargetsArguments, request?: DebugProtocol.Request): void;
-  // protected gotoTargetsRequest(response: DebugProtocol.GotoTargetsResponse, args: DebugProtocol.GotoTargetsArguments, request?: DebugProtocol.Request): void;
-  // protected completionsRequest(response: DebugProtocol.CompletionsResponse, args: DebugProtocol.CompletionsArguments, request?: DebugProtocol.Request): void;
-  // protected exceptionInfoRequest(response: DebugProtocol.ExceptionInfoResponse, args: DebugProtocol.ExceptionInfoArguments, request?: DebugProtocol.Request): void;
-  // protected loadedSourcesRequest(response: DebugProtocol.LoadedSourcesResponse, args: DebugProtocol.LoadedSourcesArguments, request?: DebugProtocol.Request): void;
-  // protected dataBreakpointInfoRequest(response: DebugProtocol.DataBreakpointInfoResponse, args: DebugProtocol.DataBreakpointInfoArguments, request?: DebugProtocol.Request): void;
-  // protected setDataBreakpointsRequest(response: DebugProtocol.SetDataBreakpointsResponse, args: DebugProtocol.SetDataBreakpointsArguments, request?: DebugProtocol.Request): void;
-  // protected readMemoryRequest(response: DebugProtocol.ReadMemoryResponse, args: DebugProtocol.ReadMemoryArguments, request?: DebugProtocol.Request): void;
-  // protected writeMemoryRequest(response: DebugProtocol.WriteMemoryResponse, args: DebugProtocol.WriteMemoryArguments, request?: DebugProtocol.Request): void;
-  // protected disassembleRequest(response: DebugProtocol.DisassembleResponse, args: DebugProtocol.DisassembleArguments, request?: DebugProtocol.Request): void;
-  // protected cancelRequest(response: DebugProtocol.CancelResponse, args: DebugProtocol.CancelArguments, request?: DebugProtocol.Request): void;
-  // protected breakpointLocationsRequest(response: DebugProtocol.BreakpointLocationsResponse, args: DebugProtocol.BreakpointLocationsArguments, request?: DebugProtocol.Request): void;
-  // protected setInstructionBreakpointsRequest(response: DebugProtocol.SetInstructionBreakpointsResponse, args: DebugProtocol.SetInstructionBreakpointsArguments, request?: DebugProtocol.Request): void;
+  runInTerminalRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  // Super's implementation is fine.
+  dispatchRequest(...args) {
+    return super.dispatchRequest(args[0]);
+  }
+
+  // Super's implementation is fine.
+  disconnectRequest(...args) {
+    return super.disconnectRequest(args[0], args[1], args[3]);
+  }
+
+  attachRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  terminateRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  restartRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  setExceptionBreakPointsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  nextRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  stepInRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  stepOutRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  stepBackRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  reverseContinueRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  restartFrameRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  gotoRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  sourceRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  terminateThreadsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  setExpressionRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  evaluateRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  stepInTargetsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  gotoTargetsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  completionsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  exceptionInfoRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  loadedSourcesRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  dataBreakpointInfoRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  setDataBreakpointsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  readMemoryRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  writeMemoryRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  disassembleRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  cancelRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  breakpointLocationsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
+  setInstructionBreakpointsRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
+
   /**
    * Override this hook to implement custom requests.
    */
-  // protected customRequest(command: string, response: DebugProtocol.Response, args: any, request?: DebugProtocol.Request): void;
+  customRequest(...args) {
+    return this.virtualDispatch(...args);
+  }
 
   /**
    * @param {number} line

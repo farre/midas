@@ -57,11 +57,7 @@ function log(location, payload) {
   }
 
   console.log(
-    `Caught GDB ${location}. Payload: ${JSON.stringify(
-      payload,
-      null,
-      " "
-    )}`
+    `Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`
   );
 }
 
