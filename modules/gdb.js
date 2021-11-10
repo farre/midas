@@ -118,16 +118,18 @@ class GDB extends GDBBase {
 
     this.on("stopped", (payload) => {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
-
+      const THREADID = 1;
       if (stopOnEntry) {
         stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", 1));
+        this.sendEvent(new StoppedEvent("entry", THREADID));
       } else {
         if (payload.reason == "breakpoint-hit") {
-          this.sendEvent(new StoppedEvent("breakpoint", 1));
+          this.sendEvent(new StoppedEvent("breakpoint", THREADID));
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
+          } else if(payload.reason === "signal-received") {
+            this.sendEvent(new StoppedEvent("pause", THREADID));
           } else {
             console.log(`stopped for other reason: ${payload.reason}`);
           }
@@ -168,6 +170,14 @@ class GDB extends GDBBase {
    */
   async continue(reverse = false) {
     return this.execMI("-exec-continue");
+  }
+
+  async pauseExecution(thread) {
+    if(!thread) {
+      return await this.execMI("-exec-interrupt --all")
+    } else {
+      return await this.execMI(`-exec-interrupt ${thread}`);
+    }
   }
 
   /**

@@ -332,8 +332,10 @@ class DebugSession extends DebugAdapter.DebugSession {
    * @param {DebugProtocol.PauseArguments} args
    * @param {DebugProtocol.PauseRequest} [request]
    */
-  pauseRequest(response, args, request) {
-    console.log("User requested a pause");
+  async pauseRequest(response, args, request) {
+    this.gdb.pauseExecution(args.threadId).then(r => {
+
+    });
   }
   /**
    *
