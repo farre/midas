@@ -488,14 +488,6 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   /**
-   *
-   * @param {DebugProtocol.SetVariableResponse} response
-   * @param {DebugProtocol.SetVariableArguments} args
-   * @param {DebugProtocol.SetVariableRequest} [request]
-   */
-  setVariableRequest(response, args, request) {}
-
-  /**
    * @param {DebugProtocol.ScopesResponse} response
    * @param {DebugProtocol.ScopesArguments} args
    * @param {DebugProtocol.Request} request
@@ -567,6 +559,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     console.error(`Not Implemented: ${name}`);
     // Call the calling function on super.
     super[name](...args);
+  }
+
+  setVariableRequest(...args) {
+    return this.virtualDispatch(...args);
   }
 
   runInTerminalRequest(...args) {
