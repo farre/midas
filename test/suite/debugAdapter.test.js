@@ -9,7 +9,7 @@ const path = require("path");
 const PROJECT_ROOT = path.normalize(path.join(__dirname, "..", ".."));
 const TEST_PROJECT = path.join(PROJECT_ROOT, "test", "cppworkspace", "test");
 
-suite("Extension Test Suite", () => {
+suite("Extension Launch Test Suite", () => {
   let dc;
   let ds;
 
@@ -30,8 +30,6 @@ suite("Extension Test Suite", () => {
     dc.stop();
   });
 
-  vscode.window.showInformationMessage("Start all tests.");
-
   suite("initialize", () => {
     test("should return supported features", async () => {
       let response = await dc.initializeRequest();
@@ -49,7 +47,7 @@ suite("Extension Test Suite", () => {
         dc.launch({ program: PROGRAM }),
         dc.waitForEvent("terminated"),
       ]);
-    }).timeout(5000);
+    }).timeout("5s");
 
     test("should stop at entry", () => {
       const PROGRAM = path.join(TEST_PROJECT, "build", "testapp");
@@ -57,8 +55,74 @@ suite("Extension Test Suite", () => {
       return Promise.all([
         dc.configurationSequence(),
         dc.launch({ program: PROGRAM, stopOnEntry: true }),
-        dc.waitForEvent("entry"),
+        dc.waitForEvent("stopped").then((event) => {
+          assert.strictEqual(
+            event.body.reason,
+            "entry",
+            "should receive entry event"
+          );
+        }),
       ]);
-    }).timeout(5000);
+    }).timeout("5s");
+  });
+});
+
+suite("Extension Breakpoints Test Suite", () => {
+  const PROGRAM = path.join(TEST_PROJECT, "build", "testapp");
+  const PORT = 44444;
+  let dc;
+  let ds;
+
+  setup(async () => {
+    ds = DebugSession.run(PORT);
+
+    dc = new DebugClient(
+      "node",
+      "we're running the adapter as a server and don't need an executable",
+      "midas"
+    );
+
+    await dc.start(PORT);
+    return Promise.all([
+      dc.configurationSequence(),
+      dc.launch({ program: PROGRAM, stopOnEntry: true }),
+      dc.waitForEvent("stopped"),
+    ]);
+  });
+
+  teardown(() => {
+    dc.stop();
+  });
+
+  suite("breakpoints with restart", () => {
+    teardown(() => {
+      return Promise.all([
+        dc.restartRequest({ program: PROGRAM, stopOnEntry: true }),
+        dc.waitForEvent("stopped"),
+      ]);
+    });
+
+    test("should hit breakpoint", async () => {
+      const name = "main.cpp";
+      const source = { path: path.join(TEST_PROJECT, "src", name), name };
+      const line = 20;
+      const threadId = 1;
+      await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
+      return Promise.all([
+        dc.continueRequest({ threadId }),
+        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
+      ]);
+    });
+
+    test("should hit breakpoint after restart", async () => {
+      const name = "main.cpp";
+      const source = { path: path.join(TEST_PROJECT, "src", name), name };
+      const line = 20;
+      const threadId = 1;
+      return Promise.all([
+        dc.continueRequest({ threadId }),
+        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
+      ]);
+    });
   });
 });

@@ -265,7 +265,12 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.gdb = new GDB(this, args.program);
     this.gdb.initialize(args.stopOnEntry);
 
-    await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace);
+    await this.gdb.start(
+      args.program,
+      args.stopOnEntry,
+      !args.noDebug,
+      args.trace
+    );
   }
 
   async setBreakPointAtLine(path, line) {
@@ -288,9 +293,8 @@ class DebugSession extends DebugAdapter.DebugSession {
    */
   async setBreakPointsRequest(response, args, request) {
     let path = args.source.path;
-    const clientLines = args.lines ?? [];
     let res = [];
-    for (let line of clientLines) {
+    for (let { line } of args?.breakpoints ?? []) {
       res.push(this.setBreakPointAtLine(path, line));
     }
 
