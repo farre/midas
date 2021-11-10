@@ -6,3 +6,5 @@ package-lock.json
 test/cppworkspace/test/.vscode
 test/cppworkspace/test/build
 test/cppworkspace/test/testapp
+test/cppworkspace/thread/.vscode/
+test/cppworkspace/thread/build
