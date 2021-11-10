@@ -1,8 +1,9 @@
 # For testing of GDB
 
 Building a debug build with cmake:
+
 ```bash
-# While in testrrdbg folder
+# While in thread folder
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Debug
