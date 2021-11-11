@@ -133,7 +133,7 @@ class GDB extends GDBBase {
 
   initialize(stopOnEntry) {
     this.on("exec", (payload) => {
-      // log("exec", payload);
+      log("exec", payload);
     });
 
     this.on("running", (payload) => {
