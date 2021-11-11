@@ -2,44 +2,82 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <mutex>
 
-#include <number.hpp>
-#include <todo.hpp>
+std::mutex g_stdio_mutex;
 
-template <IsNumber Num> Number<Num> add_two(Num a, Num b) {
-  Number l{a};
-  Number r{b};
-  return Number<Num>::sum(l, r);
+struct Surface {
+  int width;
+  int height;
+  // mapping onto the surface's dimensions
+  struct Mapping {
+    double min;
+    double max;
+  } x, y;
+};
+using Iterations = int;
+Iterations mandelbrot(double real, double imag, int limit = 100) {
+	double re = real;
+	double im = imag;
+
+	for (int i = 0; i < limit; ++i) {
+		double r2 = re * re;
+		double i2 = im * im;
+
+		if (r2 + i2 > 4.0) return Iterations { i };
+
+		im = 2.0 * re * im + imag;
+		re = r2 - i2 + real;
+	}
+	return Iterations { limit };
+}
+
+// lets pretend this looks up cpus
+constexpr int ncpus() { return 4; }
+
+void process_range(Surface surface, int y_start, int y_to) {
+  const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
+  const auto dy = (surface.y.max - surface.y.min) / static_cast<double>(surface.height - 1);
+  int limit = 1200;
+  auto escaped = 0;
+  auto contained = 0;
+  auto total = 0;
+  for(auto x = 0; x < surface.width; x++) {
+    for(auto y = y_start; y < y_to; ++y) {
+      const auto r = mandelbrot(surface.x.min + x * dx , surface.y.max - y * dy, limit);
+      if(r != limit) {
+        contained++;
+      } else {
+        escaped++;
+      }
+      total++;
+    }
+  }
+  {
+    const std::lock_guard lock(g_stdio_mutex);
+    std::cout << y_start << " -> " << y_to << " (" << total << ")" <<std::endl;
+    std::cout << escaped << " spun out of control " << contained << " was contained in the mandelbrot field " << std::endl;
+  }
+
+}
+
+void process_tasks_and_run(int screen_width, int screen_height) {
+  const auto jobs = ncpus();
+  const auto job_size = screen_height / jobs;
+  std::vector<std::thread> tasks;
+  tasks.reserve(jobs);
+  const auto surface = Surface{ .width = screen_width, .height = screen_height, .x = {-2.0, 1.0 }, .y = { -1.0, 1.0 } };
+  for(auto i = 0; i < screen_height; i+=job_size) {
+    tasks.push_back(std::thread{process_range, surface, i, i+job_size});
+  }
+  std::cout << jobs << " jobs spun up" << std::endl;
+  for(auto& t : tasks) t.join();
 }
 
 int main(int argc, const char **argv) {
-  using namespace std::chrono_literals;
-  const auto somelocal = 42;
-  Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
-  auto Double = add_two(1.550795, 1.590795);
-  auto Float = add_two(668.19685f, 668.93685f);
-  auto Int = add_two(20, 22);
-
-  std::cout << "Value of " << Double << std::endl;
-  std::cout << "Value of " << Float << std::endl;
-  std::cout << "Value of " << Int << std::endl;
-
-  std::vector<Todo> todos{};
-  todos.push_back(Todo{"Make test app for debugger extension",
-                       Date{.day = 3, .month = 11, .year = 2021}});
-  todos.push_back(Todo{"Read code-debug & look for useful stuff",
-                       Date{.day = 4, .month = 11, .year = 2021}});
-  todos.push_back(Todo{"Read vscode-mock-debug & rip out things of use",
-                       Date{.day = 5, .month = 11, .year = 2021}});
-
-  std::cout << "Things to do: " << Todo::todo_count() << std::endl;
-  for (const auto &t : todos) {
-    std::cout << "\tTodo id " << t.id() << ": " << t.title() << " @" << t.date()
-              << std::endl;
-  }
-
   // so that we can test pausing execution, for instance.
-  std::this_thread::sleep_for(1000ms);
+  // this is an insanely large mandelbrot screen space
+  process_tasks_and_run(3840 * 4 * 10, 2160 * 4 * 10);
 
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
