@@ -350,7 +350,7 @@ class DebugSession extends DebugAdapter.DebugSession {
             (thread) =>
               new DebugAdapter.Thread(
                 thread.id,
-                `thread #${thread.id} (${thread.group.target_id})`
+                `thread #${thread.id} (${thread.target_id})`
               )
           ),
         };
