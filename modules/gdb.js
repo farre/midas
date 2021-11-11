@@ -86,6 +86,8 @@ class GDB extends GDBBase {
 
   threadsCreated = [];
 
+  currentThreadHitBreakPoint;
+
   constructor(target, binary) {
     super(spawn("gdb", ["-i=mi3", binary]));
     this.stoppedAtEntry = false;
@@ -149,37 +151,38 @@ class GDB extends GDBBase {
       } else {
         if (payload.reason == "breakpoint-hit") {
           const THREADID = payload.thread.id;
+          this.currentThreadHitBreakPoint = THREADID;
           // wow... coulda been like, cool if gdb-js told us in the docs
           // that this *doesn't* trigger "notify" events (i.e. circular event chainings).
           // then this wouldn't have taken so long to figure out.
           await this.interrupt();
           let stopEvent = new StoppedEvent("breakpoint", THREADID);
-          this.sendEventAllThreads(stopEvent, (event, threadId) => {
-            let body = {
-              reason: event.body.reason,
-              allThreadsStopped: true,
-              threadId: threadId,
-            };
-            event.body = body;
-            return event;
-          });
+          let body = {
+            reason: stopEvent.body.reason,
+            allThreadsStopped: true,
+            threadId: THREADID,
+          };
+          stopEvent.body = body;
+          await this.interrupt();
+          this.sendEvent(stopEvent);
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
           } else if (payload.reason === "signal-received") {
             let THREADID = payload.thread ? payload.thread.id : 1;
             // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-            await this.interrupt();
-            let stopEvent = new StoppedEvent("pause", THREADID);
-            this.sendEventAllThreads(stopEvent, (event, threadId) => {
+            if (this.currentThreadHitBreakPoint == THREADID) {
+              this.currentThreadHitBreakPoint = -1;
+            } else if (this.currentThreadHitBreakPoint == -1) {
+              let stopEvent = new StoppedEvent("pause", THREADID);
               let body = {
-                reason: event.body.reason,
+                reason: stopEvent.body.reason,
                 allThreadsStopped: true,
-                threadId: threadId,
+                threadId: THREADID,
               };
-              event.body = body;
-              return event;
-            });
+              stopEvent.body = body;
+              this.sendEvent(stopEvent);
+            }
           } else {
             console.log(`stopped for other reason: ${payload.reason}`);
           }
