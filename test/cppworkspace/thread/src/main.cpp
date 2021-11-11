@@ -76,8 +76,7 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 
 int main(int argc, const char **argv) {
   // so that we can test pausing execution, for instance.
-  // this is an insanely large mandelbrot screen space
-  process_tasks_and_run(3840 * 4 * 10, 2160 * 4 * 10);
+  process_tasks_and_run(3840 * ncpus(), 2160 * ncpus());
 
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";

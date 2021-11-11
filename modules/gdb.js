@@ -11,6 +11,8 @@ const {
   StoppedEvent,
   BreakpointEvent,
   TerminatedEvent,
+  Event,
+  ThreadEvent,
 } = require("vscode-debugadapter");
 
 const WatchPointType = {
@@ -79,6 +81,10 @@ class GDB extends GDBBase {
 
   #target;
 
+  #selfInterrupted = 0;
+
+  threadsCreated = [];
+
   constructor(target, binary) {
     super(spawn("gdb", ["-i=mi3", binary]));
     this.stoppedAtEntry = false;
@@ -103,20 +109,31 @@ class GDB extends GDBBase {
     }
   }
 
+  sendEventAllThreads(event, fn) {
+    for (let tid of this.threadsCreated) {
+      let evt = fn(event, tid);
+      this.sendEvent(evt);
+    }
+  }
+
   sendEvent(event) {
     this.#target.sendEvent(event);
   }
 
+  async selfInterrupt() {
+    await this.interrupt();
+  }
+
   initialize(stopOnEntry) {
     this.on("exec", (payload) => {
-      log("exec", payload);
+      // log("exec", payload);
     });
 
     this.on("running", (payload) => {
       log("running", payload);
     });
 
-    this.on("stopped", (payload) => {
+    this.on("stopped", async (payload) => {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
       const THREADID = 1;
       if (stopOnEntry) {
@@ -124,17 +141,53 @@ class GDB extends GDBBase {
         this.sendEvent(new StoppedEvent("entry", THREADID));
       } else {
         if (payload.reason == "breakpoint-hit") {
-          this.sendEvent(new StoppedEvent("breakpoint", THREADID));
+          // wow... coulda been like, cool if gdb-js told us in the docs
+          // that this *doesn't* trigger "notify" events (i.e. circular event chainings).
+          // then this wouldn't have taken so long to figure out.
+          await this.interrupt();
+          let stopEvent = new StoppedEvent("breakpoint", THREADID);
+          this.sendEventAllThreads(stopEvent, (event, threadId) => {
+            let body = {
+              reason: event.body.reason,
+              allThreadsStopped: true,
+              threadId: threadId,
+            };
+            event.body = body;
+            return event;
+          });
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
-          } else if(payload.reason === "signal-received") {
-            this.sendEvent(new StoppedEvent("pause", THREADID));
+          } else if (payload.reason === "signal-received") {
+            // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
+            await this.interrupt();
+            let stopEvent = new StoppedEvent("pause", THREADID);
+            for (let tid of this.threadsCreated) {
+              let body = {
+                reason: stopEvent.body.reason,
+                allThreadsStopped: true,
+                threadId: tid,
+              };
+              stopEvent.body = body;
+              this.sendEvent(stopEvent);
+            }
           } else {
             console.log(`stopped for other reason: ${payload.reason}`);
           }
         }
       }
+    });
+
+    this.on("thread-created", (payload) => {
+      this.threadsCreated.push(payload.id);
+      log("thread-created", payload);
+      this.#target.sendEvent(new ThreadEvent("started", payload.id));
+    });
+
+    this.on("thread-exited", async (pl) => {
+      log("thread-exited", pl);
+      this.threadsCreated.splice(this.threadsCreated.indexOf(pl.id), 1);
+      this.#target.sendEvent(new ThreadEvent("exited", pl.id));
     });
 
     this.on("status", (payload) => {
@@ -169,15 +222,12 @@ class GDB extends GDBBase {
    * @param { boolean } reverse
    */
   async continue(reverse = false) {
-    return this.execMI("-exec-continue");
+    if (!reverse) return this.proceed();
+    else return this.reverseProceed();
   }
 
   async pauseExecution(thread) {
-    if(!thread) {
-      return await this.execMI("-exec-interrupt --all")
-    } else {
-      return await this.execMI(`-exec-interrupt ${thread}`);
-    }
+    this.selfInterrupt();
   }
 
   /**
@@ -236,15 +286,30 @@ class GDB extends GDBBase {
     });
   }
 
+  /**
+   *
+   * @returns {Promise<gdbTypes.Thread[]>}
+   */
   async getThreads() {
     const command = "-thread-info";
-    return this.execMI(command).then((res) => {
-      return res.threads.map(
-        ({ core, frame, id, name, state, "target-id": target_id }) => {
+    return await this.execMI(command)
+      .then((res) => {
+        let result = res.threads.map((threadInfo) => {
+          const {
+            core,
+            frame,
+            id,
+            name,
+            state,
+            "target-id": target_id,
+          } = threadInfo;
           return new gdbTypes.Thread(id, core, name, state, target_id, frame);
-        }
-      );
-    });
+        });
+        return result;
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   }
 
   /**
