@@ -33,7 +33,7 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 }
 
 // lets pretend this looks up cpus
-constexpr int ncpus() { return 4; }
+auto ncpus() { return std::thread::hardware_concurrency(); }
 
 void process_range(Surface surface, int y_start, int y_to) {
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
@@ -42,7 +42,8 @@ void process_range(Surface surface, int y_start, int y_to) {
   auto escaped = 0;
   auto contained = 0;
   auto total = 0;
-  const auto two_thirds = ((y_to - y_start) / 3) * 2;
+  const auto two_thirds = ((y_to - y_start) / 3) * 2 + y_start;
+  bool hitOnce = false;
   for(auto x = 0; x < surface.width; x++) {
     for(auto y = y_start; y < y_to; ++y) {
       const auto r = mandelbrot(surface.x.min + x * dx , surface.y.max - y * dy, limit);
@@ -52,7 +53,8 @@ void process_range(Surface surface, int y_start, int y_to) {
         escaped++;
       }
       total++;
-      if(y == two_thirds) {
+      if(y == two_thirds && !hitOnce) {
+        hitOnce = true;
         auto some_break_point_here = []{};
         some_break_point_here();
       }
@@ -67,7 +69,7 @@ void process_range(Surface surface, int y_start, int y_to) {
 }
 
 void process_tasks_and_run(int screen_width, int screen_height) {
-  const auto jobs = ncpus();
+  const auto jobs = ncpus() - 1;
   const auto job_size = screen_height / jobs;
   std::vector<std::thread> tasks;
   tasks.reserve(jobs);
@@ -81,7 +83,7 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 
 int main(int argc, const char **argv) {
   // so that we can test pausing execution, for instance.
-  process_tasks_and_run(3840 * ncpus(), 2160 * ncpus());
+  process_tasks_and_run(3840 * 4, 2160 * 4);
 
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
