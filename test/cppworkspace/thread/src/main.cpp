@@ -42,6 +42,7 @@ void process_range(Surface surface, int y_start, int y_to) {
   auto escaped = 0;
   auto contained = 0;
   auto total = 0;
+  const auto two_thirds = ((y_to - y_start) / 3) * 2;
   for(auto x = 0; x < surface.width; x++) {
     for(auto y = y_start; y < y_to; ++y) {
       const auto r = mandelbrot(surface.x.min + x * dx , surface.y.max - y * dy, limit);
@@ -51,6 +52,10 @@ void process_range(Surface surface, int y_start, int y_to) {
         escaped++;
       }
       total++;
+      if(y == two_thirds) {
+        auto some_break_point_here = []{};
+        some_break_point_here();
+      }
     }
   }
   {
