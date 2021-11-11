@@ -54,14 +54,18 @@ class Thread {
     this.id = Number.parseInt(id);
     this.core = Number.parseInt(core);
     this.group = new ThreadGroup("-1", name, target_id);
-    this.frame = new StackFrame(
-      frame.file,
-      frame.fullname,
-      frame.line,
-      frame.func,
-      frame.level,
-      frame.addr
-    );
+    if (frame) {
+      this.frame = new StackFrame(
+        frame.file,
+        frame.fullname,
+        frame.line,
+        frame.func,
+        frame.level,
+        frame.addr
+      );
+    } else {
+      this.frame = undefined;
+    }
     this.state = state;
   }
 }
@@ -73,6 +77,8 @@ class ThreadGroup {
   executable;
   /**@type {number} */
   pid;
+  /**@type {string} */
+  target_id;
 
   /**
    *
@@ -88,6 +94,7 @@ class ThreadGroup {
     } else {
       this.pid = Number.parseInt(target_id);
     }
+    this.target_id = target_id;
   }
 }
 

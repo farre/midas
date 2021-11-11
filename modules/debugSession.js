@@ -10,6 +10,7 @@ const fs = require("fs");
 const net = require("net");
 const { Server } = require("http");
 const { VariableObject } = require("./gdbtypes");
+const { Message } = require("vscode-debugadapter/lib/messages");
 
 const STACK_ID_START = 1000;
 const VAR_ID_START = 1000 * 1000;
@@ -318,12 +319,12 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
   /**
    *
-   * @param {DebugProtocol.SetFunctionBreakpointsResponse} response
-   * @param {DebugProtocol.SetFunctionBreakpointsArguments} args
-   * @param {DebugProtocol.SetFunctionBreakpointsRequest} [request]
+   * param {DebugProtocol.SetFunctionBreakpointsResponse} response
+   * param {DebugProtocol.SetFunctionBreakpointsArguments} args
+   * param {DebugProtocol.SetFunctionBreakpointsRequest} [request]
    */
-  setFunctionBreakPointsRequest(response, args, request) {
-    console.log("User tried to set a FunctionBreakPoint request");
+  setFunctionBreakPointsRequest(...args) {
+    return this.virtualDispatch(...args);
   }
 
   /**
@@ -333,20 +334,31 @@ class DebugSession extends DebugAdapter.DebugSession {
    * @param {DebugProtocol.PauseRequest} [request]
    */
   async pauseRequest(response, args, request) {
-    this.gdb.pauseExecution(args.threadId).then(r => {
-
-    });
+    await this.gdb.pauseExecution().then((r) => {});
   }
   /**
    *
    * @param {DebugProtocol.ThreadsResponse} response
    * @param {DebugProtocol.ThreadsRequest} [request]
    */
-  threadsRequest(response, request) {
-    response.body = {
-      threads: [new DebugAdapter.Thread(1, "thread 1")],
-    };
-    this.sendResponse(response);
+  async threadsRequest(response, request) {
+    await this.gdb
+      .getThreads()
+      .then((res) => {
+        response.body = {
+          threads: res.map(
+            (thread) =>
+              new DebugAdapter.Thread(
+                thread.id,
+                `thread #${thread.id} (${thread.group.target_id})`
+              )
+          ),
+        };
+        this.sendResponse(response);
+      })
+      .catch((err) => {
+        this.sendErrorResponse(response, 17, `Could not get threads: ${err}`);
+      });
   }
 
   /**
@@ -507,18 +519,6 @@ class DebugSession extends DebugAdapter.DebugSession {
       scopes: scopes,
     };
     this.sendResponse(response);
-  }
-
-  /**
-   *
-   * @param {DebugProtocol.Response} response
-   * @param {DebugProtocol.Message} codeOrMessage
-   * @param {string} [format]
-   * @param {any} [variables]
-   * @param {DebugAdapter.ErrorDestination} [dest]
-   */
-  sendErrorResponse(response, codeOrMessage, format, variables, dest) {
-    console.log("Sending error resposne");
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
