@@ -37,6 +37,22 @@ function toBP(bp) {
   );
 }
 
+/**
+ * GDB returns a target-id string that (probably) contains LWP NNNNNN where N stands for
+ * the light weight process ID.
+ * @param {string} target_id
+ * @returns string
+ */
+function formatTargetId(target_id) {
+  let pos = target_id.indexOf("LWP");
+  if (pos != -1) {
+    let res = Number.parseInt(target_id.substr(pos + 4));
+    return res == NaN ? target_id : res;
+  } else {
+    return target_id;
+  }
+}
+
 class Thread {
   /**@type {number} */
   id;
@@ -50,10 +66,15 @@ class Thread {
   group;
   /**@type {StackFrame} */
   frame;
+  /**@type {string | number} */
+  target_id;
   constructor(id, core, name, state, target_id, frame) {
     this.id = Number.parseInt(id);
     this.core = Number.parseInt(core);
-    this.group = new ThreadGroup("-1", name, target_id);
+    this.group = new ThreadGroup("-1", name);
+
+    this.target_id = formatTargetId(target_id);
+
     if (frame) {
       this.frame = new StackFrame(
         frame.file,
@@ -75,26 +96,17 @@ class ThreadGroup {
   id;
   /**@type {string} */
   executable;
-  /**@type {number} */
+  /**@type {number | undefined} */
   pid;
-  /**@type {string} */
-  target_id;
 
   /**
    *
    * @param {string} id
    * @param {string} executable
-   * @param {string} target_id
    */
-  constructor(id, executable, target_id) {
+  constructor(id, executable) {
     this.id = Number.parseInt(id);
     this.executable = executable;
-    if (target_id.includes("process")) {
-      this.pid = Number.parseInt(target_id.split(" ")[1]);
-    } else {
-      this.pid = Number.parseInt(target_id);
-    }
-    this.target_id = target_id;
   }
 }
 

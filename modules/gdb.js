@@ -6,6 +6,7 @@ const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
 const { spawn } = require("./spawner");
 const { EventEmitter } = require("events");
+const { DebugProtocol } = require("vscode-debugprotocol");
 const {
   InitializedEvent,
   StoppedEvent,
@@ -109,6 +110,12 @@ class GDB extends GDBBase {
     }
   }
 
+  /**
+   * Sends an event to the UI, for all registered threads.
+   * fn is a closure that sets up the data for each thread to send.
+   * @param { DebugProtocol.Event } event
+   * @param { function } fn
+   */
   sendEventAllThreads(event, fn) {
     for (let tid of this.threadsCreated) {
       let evt = fn(event, tid);
@@ -126,7 +133,7 @@ class GDB extends GDBBase {
 
   initialize(stopOnEntry) {
     this.on("exec", (payload) => {
-      // log("exec", payload);
+      log("exec", payload);
     });
 
     this.on("running", (payload) => {
@@ -135,12 +142,13 @@ class GDB extends GDBBase {
 
     this.on("stopped", async (payload) => {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
-      const THREADID = 1;
-      if (stopOnEntry) {
+
+      if (stopOnEntry && payload.thread) {
         stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", THREADID));
+        this.sendEvent(new StoppedEvent("entry", payload.thread));
       } else {
         if (payload.reason == "breakpoint-hit") {
+          const THREADID = payload.thread.id;
           // wow... coulda been like, cool if gdb-js told us in the docs
           // that this *doesn't* trigger "notify" events (i.e. circular event chainings).
           // then this wouldn't have taken so long to figure out.
@@ -159,18 +167,19 @@ class GDB extends GDBBase {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
           } else if (payload.reason === "signal-received") {
+            let THREADID = payload.thread ? payload.thread.id : 1;
             // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
             await this.interrupt();
             let stopEvent = new StoppedEvent("pause", THREADID);
-            for (let tid of this.threadsCreated) {
+            this.sendEventAllThreads(stopEvent, (event, threadId) => {
               let body = {
-                reason: stopEvent.body.reason,
+                reason: event.body.reason,
                 allThreadsStopped: true,
-                threadId: tid,
+                threadId: threadId,
               };
-              stopEvent.body = body;
-              this.sendEvent(stopEvent);
-            }
+              event.body = body;
+              return event;
+            });
           } else {
             console.log(`stopped for other reason: ${payload.reason}`);
           }
@@ -180,12 +189,10 @@ class GDB extends GDBBase {
 
     this.on("thread-created", (payload) => {
       this.threadsCreated.push(payload.id);
-      log("thread-created", payload);
       this.#target.sendEvent(new ThreadEvent("started", payload.id));
     });
 
     this.on("thread-exited", async (pl) => {
-      log("thread-exited", pl);
       this.threadsCreated.splice(this.threadsCreated.indexOf(pl.id), 1);
       this.#target.sendEvent(new ThreadEvent("exited", pl.id));
     });
