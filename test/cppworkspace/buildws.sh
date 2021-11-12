@@ -7,6 +7,6 @@ for project in "${projects[@]}"; do
     mkdir build
     cd build
     cmake .. -DCMAKE_BUILD_TYPE=Debug
-    cmake --build . --config Debug -- -j
+    cmake --build . --config Debug -- -j 15 
     cd ../..
 done

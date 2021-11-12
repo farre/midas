@@ -81,11 +81,7 @@ class GDB extends GDBBase {
   variableObjectsRecorded = [];
 
   #target;
-
-  #selfInterrupted = 0;
-
   threadsCreated = [];
-  threadsToInterrupt = [];
   userRequestedInterrupt = false;
 
   /**
@@ -95,7 +91,12 @@ class GDB extends GDBBase {
    * @param {string[]} args
    */
   constructor(target, binary, args = undefined) {
-    super(spawn("gdb", !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]));
+    super(
+      spawn(
+        "gdb",
+        !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]
+      )
+    );
     this.stoppedAtEntry = false;
     this.#breakpoints = new Map();
     this.#target = target;
@@ -145,11 +146,9 @@ class GDB extends GDBBase {
       log("running", payload);
     });
 
-    this.on("user-interrupt", () => {
+    this.on("user-interrupt", () => {});
 
-    });
-
-    this.on("stopped", async (payload) => {
+    this.on("stopped", (payload) => {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
       if (stopOnEntry && payload.thread) {
         stopOnEntry = false;
@@ -157,9 +156,7 @@ class GDB extends GDBBase {
       } else {
         if (payload.reason == "breakpoint-hit") {
           const THREADID = payload.thread.id;
-          this.threadsToInterrupt = this.threadsCreated.filter(e => e != THREADID).map(tid => tid);
           this.userRequestedInterrupt = false;
-          await setImmediate(() => this.interrupt());
           let stopEvent = new StoppedEvent("breakpoint", THREADID);
           let body = {
             reason: stopEvent.body.reason,
@@ -168,15 +165,20 @@ class GDB extends GDBBase {
           };
           stopEvent.body = body;
           this.sendEvent(stopEvent);
+          setImmediate(() =>
+            this.interrupt()
+              .then((r) => {})
+              .catch((err) => {
+                console.log(`failed to interrupt: ${err}`);
+              })
+          );
         } else {
           if (payload.reason == "exited-normally") {
-            console.log("Times interrupted: " + timesInterrupted);
             this.sendEvent(new TerminatedEvent());
           } else if (payload.reason === "signal-received") {
-            timesInterrupted++;
             let THREADID = payload.thread ? payload.thread.id : 1;
             // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-            if(this.userRequestedInterrupt) {
+            if (this.userRequestedInterrupt) {
               let stopEvent = new StoppedEvent("pause", THREADID);
               let body = {
                 reason: stopEvent.body.reason,

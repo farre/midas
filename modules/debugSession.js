@@ -322,9 +322,16 @@ class DebugSession extends DebugAdapter.DebugSession {
    */
   continueRequest(response, args, request) {
     // todo(simon): for rr this needs to be implemented differently
-    this.gdb.continue(false).then((done) => {
-      this.sendResponse(response);
-    });
+    this.gdb
+      .continue(false)
+      .then((done) => {
+        this.sendResponse(response);
+      })
+      .catch((err) => {
+        vscode.window.showErrorMessage(
+          "Failed to continue with debuggee request"
+        );
+      });
   }
   /**
    *
