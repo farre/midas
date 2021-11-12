@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <mutex>
+#include <iomanip>
 
 std::mutex g_stdio_mutex;
 
@@ -82,8 +83,15 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 }
 
 int main(int argc, const char **argv) {
+  const auto asTestSuite = argc > 1;
   // so that we can test pausing execution, for instance.
-  process_tasks_and_run(3840 * 4, 2160 * 4);
+
+  if(asTestSuite) {
+    process_tasks_and_run(640, 480);
+  } else {
+    process_tasks_and_run(3840, 2160);
+  }
+
 
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";

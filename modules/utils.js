@@ -4,7 +4,7 @@ const { exec } = require("child_process");
 var fs = require("fs");
 var path = require("path");
 
-async function buildTestFiles(testPath) {
+async function buildTestFiles(testPath, compiler) {
   const buildPath = path.join(testPath, "build");
   if (!fs.existsSync(buildPath)) {
     fs.mkdirSync(buildPath);
