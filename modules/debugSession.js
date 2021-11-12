@@ -33,7 +33,7 @@ class LaunchRequestArguments {
 
   /**Path to binary executable to debug
    * @type {string} */
-  binary;
+  program;
 
   /**Tells debug adapter whether or not we should set a breakpoint on main (or otherwise defined entry point of the executable)
    * @type {boolean | undefined } */
@@ -42,6 +42,9 @@ class LaunchRequestArguments {
   /**Sets trace logging for this debug adapter
    * @type {boolean} */
   trace;
+
+  /** @type { string[] } */
+  debuggeeArgs;
 }
 
 class VariableHandler {
@@ -252,7 +255,13 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.configIsDone.notify();
   }
 
-  async launchRequest(response, args) {
+  /**
+   * args: DebugProtocol.LaunchRequestArguments, request?:
+   * @param {DebugProtocol.LaunchResponse} response
+   * @param {LaunchRequestArguments} args
+   * @param {DebugProtocol.Request?} request
+   */
+  async launchRequest(response, args, request) {
     DebugAdapter.logger.setup(
       args.trace
         ? DebugAdapter.Logger.LogLevel.Verbose
@@ -263,7 +272,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    this.gdb = new GDB(this, args.program);
+    this.gdb = new GDB(this, args.program, args.debuggeeArgs);
     this.gdb.initialize(args.stopOnEntry);
 
     await this.gdb.start(
