@@ -75,6 +75,11 @@
               "type": "string[]",
               "description": "Command line arguments passed to debuggee",
               "default": []
+            },
+            "allStopMode": {
+              "type": "boolean",
+              "description": "Whether or not GDB should run in all stop mode",
+              "default": false
             }
           }
         },
@@ -85,7 +90,8 @@
             "name": "Foo foo",
             "program": "${workspaceFolder}/build/testapp",
             "stopOnEntry": true,
-            "trace": false
+            "trace": false,
+            "allStopMode": false
           }
         ],
         "configurationSnippets": [
@@ -98,7 +104,8 @@
               "name": "Foo foo",
               "program": "^\"\\${workspaceFolder}/\\${command:midas.get-binary}\"",
               "stopOnEntry": true,
-              "trace": false
+              "trace": false,
+              "allStopMode": false
             }
           }
         ]
