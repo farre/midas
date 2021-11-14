@@ -77,6 +77,7 @@ class GDB extends GDBBase {
     trace = doTrace;
     this.allStopMode = allStopMode;
     await this.init();
+    await this.execMI(`-gdb-set mi-async on`);
     if (!allStopMode) await this.enableAsync();
 
     if (stopOnEntry) {
