@@ -4,6 +4,10 @@
 #include <number.hpp>
 #include <todo.hpp>
 
+int overload(int a) { return a * 2; }
+float overload(float a) { return a * 2.0f; }
+double overload(double a) { return a * 2.0; }
+
 template <IsNumber Num> Number<Num> add_two(Num a, Num b) {
   Number l{a};
   Number r{b};
@@ -20,6 +24,10 @@ int main(int argc, const char **argv) {
   std::cout << "Value of " << Double << std::endl;
   std::cout << "Value of " << Float << std::endl;
   std::cout << "Value of " << Int << std::endl;
+
+  int ol1 = overload(1);
+  float ol2 = overload(2.0f);
+  double ol3 = overload(3.0);
 
   std::vector<Todo> todos{};
   todos.push_back(Todo{"Make test app for debugger extension",

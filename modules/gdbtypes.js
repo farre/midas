@@ -4,37 +4,13 @@
 class Breakpoint {
   /**@type {number} */
   id;
-  /**@type {string} */
-  file;
   /**@type {number} */
   line;
-  /**@type {string[]} */
-  functions;
-  /**@type {Thread} */
-  thread;
-  /**@type number */
-  address = 0;
 
-  constructor(id, file, line, functions, thread) {
+  constructor(id, line) {
     this.id = id;
-    this.file = file;
     this.line = line;
-    this.functions = functions;
-    this.thread = thread;
   }
-
-  toString() {
-    return `Breakpoint: ${this.id} - ${this.file}:${this.line} in ${this.functions}`;
-  }
-}
-
-function toBP(bp) {
-  return new Breakpoint(
-    bp.id,
-    bp.options.file,
-    bp.options.functions,
-    bp.options.thread
-  );
 }
 
 /**
@@ -227,5 +203,4 @@ module.exports = {
   StackFrame,
   VariableCompact,
   VariableObject,
-  toBP,
 };

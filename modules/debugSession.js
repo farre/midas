@@ -25,6 +25,7 @@ let server;
 /**
  * @extends DebugProtocol.LaunchRequestArguments
  */
+// eslint-disable-next-line no-unused-vars
 class LaunchRequestArguments {
   /**If noDebug is true the launch request should launch the program without enabling debugging.
    * @type {boolean | undefined} noDebug */
@@ -149,6 +150,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   _reportProgress;
   useInvalidetedEvent;
 
+  // eslint-disable-next-line no-unused-vars
   constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
@@ -250,11 +252,9 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   /**
-   * args: DebugProtocol.LaunchRequestArguments, request?:
-   * @param {DebugProtocol.LaunchResponse} response
    * @param {LaunchRequestArguments} args
-   * @param {DebugProtocol.Request?} request
    */
+  // eslint-disable-next-line no-unused-vars
   async launchRequest(response, args, request) {
     DebugAdapter.logger.setup(
       args.trace
@@ -279,23 +279,21 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async setBreakPointAtLine(path, line) {
-    let verified = false;
+    let id = 0;
     if (this.gdb) {
       let breakpoint = await this.gdb.setBreakPointAtLine(path, line);
       line = breakpoint.line;
-      verified = true;
+      id = breakpoint.id;
     }
-
-    return new DebugAdapter.Breakpoint(verified, line);
+    let response = {
+      verified: true,
+      line: line,
+      id: id,
+    };
+    return response;
   }
 
-  /**
-   * This is the function that VSCode UI code calls when they set a breakpoint
-   * in the UI.
-   * @param {DebugProtocol.SetBreakpointsResponse} response
-   * @param {DebugProtocol.SetBreakpointsArguments} args
-   * @param {DebugProtocol.Request} [request]
-   */
+  // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequest(response, args, request) {
     let path = args.source.path;
     let res = [];
@@ -309,53 +307,44 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body = {
       breakpoints: await Promise.all(res),
     };
-
     this.sendResponse(response);
   }
-  /**
-   *
-   * @param {DebugProtocol.ContinueResponse} response
-   * @param {DebugProtocol.ContinueArguments} args
-   * @param {DebugProtocol.Request} [request]
-   */
-  continueRequest(response, args, request) {
+
+  // eslint-disable-next-line no-unused-vars
+  continueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
     this.gdb
       .continue(false)
-      .then((done) => {
+      .then(() => {
         this.sendResponse(response);
       })
       .catch((err) => {
         vscode.window.showErrorMessage(
-          "Failed to continue with debuggee request"
+          `Failed to continue with debuggee request: ${err}`
         );
       });
   }
-  /**
-   *
-   * param {DebugProtocol.SetFunctionBreakpointsResponse} response
-   * param {DebugProtocol.SetFunctionBreakpointsArguments} args
-   * param {DebugProtocol.SetFunctionBreakpointsRequest} [request]
-   */
-  setFunctionBreakPointsRequest(...args) {
-    return this.virtualDispatch(...args);
+
+  async setFunctionBreakPointsRequest(response, args) {
+    this.gdb.clearFunctionBreakpoints();
+    let res = [];
+    for (let { name, condition, hitCondition } of args.breakpoints) {
+      res.push(this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
+    }
+    response.body = {
+      breakpoints: await Promise.all(res).then((res) =>
+        res.map(() => new DebugAdapter.Breakpoint(true))
+      ),
+    };
+    this.sendResponse(response);
   }
 
-  /**
-   *
-   * @param {DebugProtocol.PauseResponse} response
-   * @param {DebugProtocol.PauseArguments} args
-   * @param {DebugProtocol.PauseRequest} [request]
-   */
-  async pauseRequest(response, args, request) {
+  // eslint-disable-next-line no-unused-vars
+  async pauseRequest(response, args) {
     await this.gdb.pauseExecution().then(() => {});
   }
-  /**
-   *
-   * @param {DebugProtocol.ThreadsResponse} response
-   * @param {DebugProtocol.ThreadsRequest} [request]
-   */
-  async threadsRequest(response, request) {
+
+  async threadsRequest(response) {
     await this.gdb
       .getThreads()
       .then((res) => {
@@ -393,13 +382,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     return [frameId & 0xffff, frameId >> 16];
   }
 
-  /**
-   * A stack trace request is requested by VS Code when it needs to decide "where should be put the cursor at"
-   * @param {DebugProtocol.StackTraceResponse} response
-   * @param {DebugProtocol.StackTraceArguments} args
-   * @param {DebugProtocol.Request} [request]
-   */
-  stackTraceRequest(response, args, request) {
+  stackTraceRequest(response, args) {
     this.gdb.getStack(args.levels, args.threadId).then((stack) => {
       let res = stack.map((frame) => {
         let source = new DebugAdapter.Source(frame.file, frame.fullname);
@@ -417,14 +400,8 @@ class DebugSession extends DebugAdapter.DebugSession {
       this.sendResponse(response);
     });
   }
-  /**
-   *
-   * @param {DebugProtocol.VariablesResponse} response
-   * @param {DebugProtocol.VariablesArguments} args
-   * @param {DebugProtocol.VariablesRequest | undefined} request
-   */
-  async variablesRequest(response, args, request) {
-    const variablesResult = [];
+
+  async variablesRequest(response, args) {
     /**
      *  All primitive types shall have DebugProtocol.Variable.variableReference = 0
      *  All structured types, should have a unique variableReference,
@@ -439,6 +416,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       let variables = [];
       for (let child of children) {
         if (isStructuredType(child.value)) {
+          // eslint-disable-next-line max-len
           // means we need to create a variableReference for this child, so that VScode can know we can drill down into this value
           let variableRef = this.variableHandler.createNew(
             child.variableObjectName,
@@ -474,7 +452,8 @@ class DebugSession extends DebugAdapter.DebugSession {
       let stack_locals = this.gdb.getStackLocals();
       let variables = [];
       await Promise.all([this.gdb.clearVariableObjects(), stack_locals]).then(
-        ([frame, locals]) => {
+        // eslint-disable-next-line no-unused-vars
+        ([_, locals]) => {
           for (let arg of locals) {
             if (arg.value === null) {
               let varRef = this.variableHandler.createNew(
@@ -513,12 +492,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  /**
-   * @param {DebugProtocol.ScopesResponse} response
-   * @param {DebugProtocol.ScopesArguments} args
-   * @param {DebugProtocol.Request} request
-   */
-  scopesRequest(response, args, request) {
+  scopesRequest(response, args) {
     const scopes = [];
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
     // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
@@ -765,21 +739,8 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 }
 
-/**
- * "Implements" DebugConfigurationProvider interface. We are basically mimicking vscode-mock-debug
- * at first go here. technically, we won't need this for testing even, as we'll make sure to provide a launch.json anyhow
- * to begin with.
- */
 class ConfigurationProvider {
-  /**
-   * DebugConfigurationProvider
-   * Massage a debug configuration just before a debug session is being launched,
-   * e.g. add all missing attributes to the debug configuration.
-   * @param { vscode.WorkspaceFolder? } folder
-   * @param { vscode.DebugConfiguration } config
-   * @param { vscode.CancellationToken? } token
-   * @returns { vscode.ProviderResult<vscode.DebugConfiguration> }
-   */
+  // eslint-disable-next-line no-unused-vars
   resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config.type && !config.request && !config.name) {
@@ -794,7 +755,7 @@ class ConfigurationProvider {
     if (!config.program) {
       return vscode.window
         .showInformationMessage("Cannot find a program to debug")
-        .then((_) => {
+        .then(() => {
           return undefined; // abort launch
         });
     }

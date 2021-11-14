@@ -2,17 +2,19 @@
 // pull in EventEmitter, which DebugInterface extends
 // it is through this, we dispatch communication between VSCode and GDB/MI
 const gdbjs = require("gdb-js");
+// eslint-disable-next-line no-unused-vars
 const regeneratorRuntime = require("regenerator-runtime");
 const gdbTypes = require("./gdbtypes");
 const { spawn } = require("./spawner");
+// eslint-disable-next-line no-unused-vars
 const { EventEmitter } = require("events");
+// eslint-disable-next-line no-unused-vars
 const { DebugProtocol } = require("vscode-debugprotocol");
 const {
   InitializedEvent,
   StoppedEvent,
   BreakpointEvent,
   TerminatedEvent,
-  Event,
   ThreadEvent,
 } = require("vscode-debugadapter");
 
@@ -21,9 +23,6 @@ const WatchPointType = {
   READ: "-r",
   WRITE: "",
 };
-
-// gdb MI functions that we don't pass params to
-const getCurrentFunctionArgs = `-stack-list-arguments --skip-unavailable 1 0 0`;
 
 let trace = true;
 function log(location, payload) {
@@ -47,8 +46,8 @@ class GDB extends GDBBase {
   /** Maps file paths -> Breakpoints
    * @type { Map<string, gdbTypes.Breakpoint[]> } */
   #lineBreakpoints;
-  /** Maps function name -> Breakpoints
-   * @type { Map<string, gdbTypes.Breakpoint[]> } */
+  /** Maps function name (original location) -> Function breakpoint id
+   * @type { Map<string, number> } */
   #fnBreakpoints;
 
   #loadedLibraries;
@@ -68,6 +67,7 @@ class GDB extends GDBBase {
     );
     this.stoppedAtEntry = false;
     this.#lineBreakpoints = new Map();
+    this.#fnBreakpoints = new Map();
     this.#target = target;
   }
 
@@ -157,15 +157,6 @@ class GDB extends GDBBase {
 
     this.on("notify", (payload) => {
       log("notify", payload);
-      /*
-      if (payload.state == "breakpoint-modified") {
-        for (let b of this.#breakpoints.values()) {
-          if (b.id === Number.parseInt(payload.data.bkpt.number)) {
-            b.address = Number.parseInt(payload.data.bkpt.addr);
-          }
-        }
-      }
-      */
     });
 
     this.on("breakPointValidated", (bp) => {
@@ -181,38 +172,47 @@ class GDB extends GDBBase {
     this.sendEvent(new InitializedEvent());
   }
 
-  /**
-   * @param { boolean } reverse
-   */
   async continue(reverse = false) {
     if (!reverse) return this.proceed();
     else return this.reverseProceed();
   }
 
-  async pauseExecution(thread) {
+  async pauseExecution(threads) {
     this.userRequestedInterrupt = true;
-    return await this.interrupt();
+    return await this.interrupt(threads);
   }
 
   /**
-   *
    * @param {string} path
    * @param {number} line
    * @returns { Promise<gdbTypes.Breakpoint> }
    */
   async setBreakPointAtLine(path, line) {
     return this.addBreak(path, line).then((breakpoint) => {
-      let bp = new gdbTypes.Breakpoint(
-        breakpoint.id,
-        breakpoint.file,
-        breakpoint.line,
-        breakpoint.func,
-        breakpoint.thread
-      );
-      let ref = this.#lineBreakpoints.get(bp.file) ?? [];
+      let bp = new gdbTypes.Breakpoint(breakpoint.id, breakpoint.line);
+      let ref = this.#lineBreakpoints.get(breakpoint.file) ?? [];
       ref.push(bp);
-      this.#lineBreakpoints.set(bp.file, ref);
+      this.#lineBreakpoints.set(breakpoint.file, ref);
       return bp;
+    });
+  }
+
+  clearFunctionBreakpoints() {
+    let ids = [];
+    for (let id of this.#fnBreakpoints.values()) {
+      ids.push(id);
+    }
+    if (ids.length > 0) {
+      this.execMI(`-break-delete ${ids.join(" ")}`);
+      this.#fnBreakpoints.clear();
+    }
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  async setFunctionBreakpoint(name, condition, hitCondition) {
+    return this.execMI(`-break-insert ${name}`).then((res) => {
+      this.#fnBreakpoints.set(name, res.bkpt.number);
+      return res.bkpt.number;
     });
   }
 
@@ -256,6 +256,7 @@ class GDB extends GDBBase {
     } 0 ${levels}`;
     let result = await this.execMI(command);
     return result.stack.map((frame) => {
+      // eslint-disable-next-line no-unused-vars
       const { addr, arch, file, fullname, func, level, line } = frame.value;
       return new gdbTypes.StackFrame(file, fullname, line, func, level, addr);
     });
