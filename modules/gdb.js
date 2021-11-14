@@ -71,10 +71,10 @@ class GDB extends GDBBase {
     this.#target = target;
   }
 
-  async start(program, stopOnEntry, debug, doTrace) {
+  async start(program, stopOnEntry, debug, doTrace, allStopMode) {
     trace = doTrace;
     await this.init();
-    await this.enableAsync();
+    if (!allStopMode) await this.enableAsync();
 
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
@@ -97,16 +97,11 @@ class GDB extends GDBBase {
       log("running", payload);
     });
 
-    this.on("user-interrupt", () => {});
-
-    this.on("stopped", (payload) => {
-      log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
-      const THREADID = payload.thread.id;
-      if (stopOnEntry && payload.thread) {
-        stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", THREADID));
-      } else {
-        if (payload.reason == "breakpoint-hit") {
+    this.once("stopped", (payload) => {
+      this.on("stopped", (payload) => {
+        log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
+        if (payload.reason === "breakpoint-hit") {
+          const THREADID = payload.thread.id;
           this.userRequestedInterrupt = false;
           let stopEvent = new StoppedEvent("breakpoint", THREADID);
           let body = {
@@ -116,28 +111,35 @@ class GDB extends GDBBase {
           };
           stopEvent.body = body;
           this.sendEvent(stopEvent);
-        } else {
-          if (payload.reason == "exited-normally") {
-            this.sendEvent(new TerminatedEvent());
-          } else if (payload.reason === "signal-received") {
-            let THREADID = payload.thread ? payload.thread.id : 1;
-            // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-            if (this.userRequestedInterrupt) {
-              let stopEvent = new StoppedEvent("pause", THREADID);
-              let body = {
-                reason: stopEvent.body.reason,
-                allThreadsStopped: true,
-                threadId: THREADID,
-              };
-              stopEvent.body = body;
-              this.sendEvent(stopEvent);
-            }
-          } else {
-            console.log(`stopped for other reason: ${payload.reason}`);
+        } else if (payload.reason === "exited-normally") {
+          this.sendEvent(new TerminatedEvent());
+        } else if (payload.reason === "signal-received") {
+          const THREADID = payload.thread.id;
+          // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
+          if (this.userRequestedInterrupt) {
+            let stopEvent = new StoppedEvent("pause", THREADID);
+            let body = {
+              reason: stopEvent.body.reason,
+              allThreadsStopped: true,
+              threadId: THREADID,
+            };
+            stopEvent.body = body;
+            this.sendEvent(stopEvent);
           }
+        } else {
+          console.log(`stopped for other reason: ${payload.reason}`);
         }
+      });
+      if (stopOnEntry) {
+        const THREADID = payload.thread.id;
+        stopOnEntry = false;
+        this.sendEvent(new StoppedEvent("entry", THREADID));
+      } else {
+        this.emit("stopped", payload);
       }
     });
+
+    this.on("user-interrupt", () => {});
 
     this.on("thread-created", (payload) => {
       this.threadsCreated.push(payload.id);
