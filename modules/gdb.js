@@ -25,35 +25,7 @@ const WatchPointType = {
 // gdb MI functions that we don't pass params to
 const getCurrentFunctionArgs = `-stack-list-arguments --skip-unavailable 1 0 0`;
 
-/**
- * QueriedTypesMap stores types and their members, so if the user is trying to dive down into an object
- * instead of querying GDB every time for it's member, we memoize them and can thus request all member variables directly
- */
-class QueriedTypesMap {
-  /** @type { Map<string, string[]> } */
-  static #types = new Map();
-
-  /**
-   * Returns the members of a C++ class or struct type
-   * @param {string} type - type to get members for
-   * @returns an array of all the members `type` contains
-   */
-  static get_members(type) {
-    return QueriedTypesMap.#types.get(type);
-  }
-
-  /**
-   * Returns the members of a C++ class or struct type
-   * @param {string} type - type to get members for
-   * @returns an array of all the members `type` contains
-   */
-  static record_type(type, members) {
-    QueriedTypesMap.#types.set(type, members);
-  }
-}
-
 let trace = true;
-let timesInterrupted = 0;
 function log(location, payload) {
   if (!trace) {
     return;
@@ -73,7 +45,7 @@ let GDBBase = gdbjs.GDB;
 class GDB extends GDBBase {
   stoppedAtEntry;
   /** Maps file paths -> Breakpoints
-   * @type { Map<number, gdbTypes.Breakpoint> } */
+   * @type { Map<string, gdbTypes.Breakpoint[]> } */
   #breakpoints;
 
   #loadedLibraries;
@@ -84,12 +56,6 @@ class GDB extends GDBBase {
   threadsCreated = [];
   userRequestedInterrupt = false;
 
-  /**
-   *
-   * @param {DebugSession} target
-   * @param {string} binary
-   * @param {string[]} args
-   */
   constructor(target, binary, args = undefined) {
     super(
       spawn(
@@ -102,11 +68,6 @@ class GDB extends GDBBase {
     this.#target = target;
   }
 
-  /** Starts debugging of executable `program`
-   * @param { string} program
-   * @param { boolean } stopOnEntry
-   * @param { boolean } debug
-   */
   async start(program, stopOnEntry, debug, doTrace) {
     trace = doTrace;
     await this.init();
@@ -116,19 +77,6 @@ class GDB extends GDBBase {
       await this.execMI("-exec-run --start");
     } else {
       await this.run();
-    }
-  }
-
-  /**
-   * Sends an event to the UI, for all registered threads.
-   * fn is a closure that sets up the data for each thread to send.
-   * @param { DebugProtocol.Event } event
-   * @param { function } fn
-   */
-  sendEventAllThreads(event, fn) {
-    for (let tid of this.threadsCreated) {
-      let evt = fn(event, tid);
-      this.sendEvent(evt);
     }
   }
 
@@ -204,6 +152,7 @@ class GDB extends GDBBase {
 
     this.on("notify", (payload) => {
       log("notify", payload);
+      /*
       if (payload.state == "breakpoint-modified") {
         for (let b of this.#breakpoints.values()) {
           if (b.id === Number.parseInt(payload.data.bkpt.number)) {
@@ -211,6 +160,7 @@ class GDB extends GDBBase {
           }
         }
       }
+      */
     });
 
     this.on("breakPointValidated", (bp) => {
@@ -254,11 +204,22 @@ class GDB extends GDBBase {
         breakpoint.func,
         breakpoint.thread
       );
-      if (!this.#breakpoints.has(bp.id)) {
-        this.#breakpoints.set(bp.id, bp);
-      }
+      let ref = this.#breakpoints.get(bp.file) ?? [];
+      ref.push(bp);
+      this.#breakpoints.set(bp.file, ref);
       return bp;
     });
+  }
+
+  async clearBreakPointsInFile(path) {
+    let breakpointIds = (this.#breakpoints.get(path) ?? []).map(
+      (bkpt) => bkpt.id
+    );
+    if (breakpointIds.length > 0) {
+      // we need this check. an "empty" param list to break-delete deletes all
+      this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
+      this.#breakpoints.set(path, []);
+    }
   }
 
   // TODO(simon): List gdb functions we want / need to implement next

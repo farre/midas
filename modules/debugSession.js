@@ -304,6 +304,9 @@ class DebugSession extends DebugAdapter.DebugSession {
   async setBreakPointsRequest(response, args, request) {
     let path = args.source.path;
     let res = [];
+    // todo(simon): room for optimization. instead of emptying and re-setting, just remove those not in request.
+    this.gdb.clearBreakPointsInFile(path);
+
     for (let { line } of args?.breakpoints ?? []) {
       res.push(this.setBreakPointAtLine(path, line));
     }
