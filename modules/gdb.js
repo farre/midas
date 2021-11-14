@@ -57,7 +57,7 @@ class GDB extends GDBBase {
   #target;
   threadsCreated = [];
   userRequestedInterrupt = false;
-
+  allStopMode;
   constructor(target, binary, args = undefined) {
     super(
       spawn(
@@ -73,6 +73,7 @@ class GDB extends GDBBase {
 
   async start(program, stopOnEntry, debug, doTrace, allStopMode) {
     trace = doTrace;
+    this.allStopMode = allStopMode;
     await this.init();
     if (!allStopMode) await this.enableAsync();
 
@@ -172,9 +173,9 @@ class GDB extends GDBBase {
     this.sendEvent(new InitializedEvent());
   }
 
-  async continue(reverse = false) {
-    if (!reverse) return this.proceed();
-    else return this.reverseProceed();
+  async continue(threadId, reverse = false) {
+    if (!reverse) return this.proceed(this.allStopMode ? undefined : threadId);
+    else return this.reverseProceed(this.allStopMode ? undefined : threadId);
   }
 
   async pauseExecution(threads) {
