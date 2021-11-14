@@ -2,14 +2,19 @@
 
 const DebugAdapter = require("vscode-debugadapter");
 const vscode = require("vscode");
+
+// eslint-disable-next-line no-unused-vars
 const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
+// eslint-disable-next-line no-unused-vars
 const { Thread } = require("gdb-js");
 const fs = require("fs");
 const net = require("net");
+// eslint-disable-next-line no-unused-vars
 const { Server } = require("http");
 const { VariableObject } = require("./gdbtypes");
+// eslint-disable-next-line no-unused-vars
 const { Message } = require("vscode-debugadapter/lib/messages");
 
 const STACK_ID_START = 1000;
@@ -24,29 +29,11 @@ class LaunchRequestArguments {
   /**If noDebug is true the launch request should launch the program without enabling debugging.
    * @type {boolean | undefined} noDebug */
   noDebug;
-
-  /**Optional data from the previous, restarted session.
-   * The data is sent as the 'restart' attribute of the 'terminated' event.
-   * The client should leave the data intact.
-   * @type {any | undefined} __restart */
   __restart;
-
-  /**Path to binary executable to debug
-   * @type {string} */
   program;
-
-  /**Tells debug adapter whether or not we should set a breakpoint on main (or otherwise defined entry point of the executable)
-   * @type {boolean | undefined } */
   stopOnEntry;
-
-  /**Sets trace logging for this debug adapter
-   * @type {boolean} */
   trace;
-
-  /** @type { string[] } */
   debuggeeArgs;
-
-  /** @type {boolean} */
   allStopMode;
 }
 
@@ -361,7 +348,7 @@ class DebugSession extends DebugAdapter.DebugSession {
    * @param {DebugProtocol.PauseRequest} [request]
    */
   async pauseRequest(response, args, request) {
-    await this.gdb.pauseExecution().then((r) => {});
+    await this.gdb.pauseExecution().then(() => {});
   }
   /**
    *
