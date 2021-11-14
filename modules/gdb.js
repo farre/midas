@@ -46,7 +46,10 @@ class GDB extends GDBBase {
   stoppedAtEntry;
   /** Maps file paths -> Breakpoints
    * @type { Map<string, gdbTypes.Breakpoint[]> } */
-  #breakpoints;
+  #lineBreakpoints;
+  /** Maps function name -> Breakpoints
+   * @type { Map<string, gdbTypes.Breakpoint[]> } */
+  #fnBreakpoints;
 
   #loadedLibraries;
 
@@ -64,7 +67,7 @@ class GDB extends GDBBase {
       )
     );
     this.stoppedAtEntry = false;
-    this.#breakpoints = new Map();
+    this.#lineBreakpoints = new Map();
     this.#target = target;
   }
 
@@ -204,21 +207,21 @@ class GDB extends GDBBase {
         breakpoint.func,
         breakpoint.thread
       );
-      let ref = this.#breakpoints.get(bp.file) ?? [];
+      let ref = this.#lineBreakpoints.get(bp.file) ?? [];
       ref.push(bp);
-      this.#breakpoints.set(bp.file, ref);
+      this.#lineBreakpoints.set(bp.file, ref);
       return bp;
     });
   }
 
   async clearBreakPointsInFile(path) {
-    let breakpointIds = (this.#breakpoints.get(path) ?? []).map(
+    let breakpointIds = (this.#lineBreakpoints.get(path) ?? []).map(
       (bkpt) => bkpt.id
     );
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
-      this.#breakpoints.set(path, []);
+      this.#lineBreakpoints.set(path, []);
     }
   }
 
