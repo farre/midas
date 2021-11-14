@@ -128,7 +128,11 @@ class GDB extends GDBBase {
 
   async pauseExecution(threads) {
     this.userRequestedInterrupt = true;
-    return await this.interrupt(threads);
+    if (!threads) {
+      return await this.execMI(`-exec-interrupt --all`);
+    } else {
+      return await this.interrupt(threads);
+    }
   }
 
   /**
@@ -174,6 +178,18 @@ class GDB extends GDBBase {
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
       this.#lineBreakpoints.set(path, []);
     }
+  }
+
+  async stepIn() {
+    await this.execMI(`-exec-step`);
+  }
+
+  async stepOver() {
+    await this.execMI(`-exec-next`);
+  }
+
+  async stepInstruction() {
+    await this.execMI("-exec-next-instruction");
   }
 
   // TODO(simon): List gdb functions we want / need to implement next
@@ -358,8 +374,6 @@ class GDB extends GDBBase {
   // Async record handlers
   #onNotify(payload) {
     log("notify", payload);
-    if (payload.state == "breakpoint-modified") {
-    }
 
     switch (payload.state) {
       case "running": {
@@ -428,34 +442,22 @@ class GDB extends GDBBase {
   }
 
   #onStopped(payload) {
-    if (payload.reason === "breakpoint-hit") {
-      const THREADID = payload.thread.id;
-      this.userRequestedInterrupt = false;
-      let stopEvent = new StoppedEvent("breakpoint", THREADID);
-      let body = {
-        reason: stopEvent.body.reason,
-        allThreadsStopped: this.allStopMode,
-        threadId: THREADID,
-      };
-      stopEvent.body = body;
-      this.sendEvent(stopEvent);
-    } else if (payload.reason === "exited-normally") {
-      this.sendEvent(new TerminatedEvent());
-    } else if (payload.reason === "signal-received") {
-      const THREADID = payload.thread.id;
-      // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-      if (this.userRequestedInterrupt) {
-        let stopEvent = new StoppedEvent("pause", THREADID);
-        let body = {
-          reason: stopEvent.body.reason,
-          allThreadsStopped: true,
-          threadId: THREADID,
-        };
-        stopEvent.body = body;
-        this.sendEvent(stopEvent);
-      }
-    } else {
-      console.log(`stopped for other reason: ${payload.reason}`);
+    log(getFunctionName(), payload);
+    switch (payload.reason) {
+      case "breakpoint-hit":
+        this.#onBreakpointHit(payload.thread);
+        break;
+      case "exited-normally":
+        this.sendEvent(new TerminatedEvent());
+        break;
+      case "signal-received":
+        this.#onSignalReceived(payload.thread, payload);
+        break;
+      case "end-stepping-range":
+        this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
+        break;
+      default:
+        console.log(`stopped for other reason: ${payload.reason}`);
     }
   }
 
@@ -574,10 +576,11 @@ class GDB extends GDBBase {
   /**
    * A thread was created.
    *
-   * @param {{id: number, groupId: number}} payload
+   * @param { { id: number, groupId: number }} payload
    */
   #onNotifyThreadCreated(payload) {
     log(getFunctionName());
+    this.#target.sendEvent(new ThreadEvent("started", payload.id));
   }
 
   /**
@@ -654,6 +657,33 @@ class GDB extends GDBBase {
    */
   #onNotifyBreakpointDeleted(payload) {
     log(getFunctionName());
+  }
+
+  #onBreakpointHit(thread) {
+    const THREADID = thread.id;
+    let stopEvent = new StoppedEvent("breakpoint", THREADID);
+    const body = {
+      reason: stopEvent.body.reason,
+      allThreadsStopped: this.allStopMode,
+      threadId: THREADID,
+    };
+    stopEvent.body = body;
+    this.sendEvent(stopEvent);
+  }
+
+  #onSignalReceived(thread, code) {
+    const THREADID = thread.id;
+    // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
+    if (this.userRequestedInterrupt) {
+      let stopEvent = new StoppedEvent("pause", THREADID);
+      let body = {
+        reason: stopEvent.body.reason,
+        allThreadsStopped: true,
+        threadId: THREADID,
+      };
+      stopEvent.body = body;
+      this.sendEvent(stopEvent);
+    }
   }
 }
 
