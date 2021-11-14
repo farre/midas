@@ -201,8 +201,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body.completionTriggerCharacters = [".", "["];
     // make VS Code send cancel request
     response.body.supportsCancelRequest = true;
-    // make VS Code send the breakpointLocations request
-    response.body.supportsBreakpointLocationsRequest = true;
+    // this option actually would require LSP support; since we would have to
+    // scan the source code and analyze it for possible ways to set a breakpoint.
+    // We are language server agnostic, for a reason: speed.
+    response.body.supportsBreakpointLocationsRequest = false;
     response.body.supportsConditionalBreakpoints = true;
     response.body.supportsFunctionBreakpoints = true;
     // make VS Code provide "Step in Target" functionality
