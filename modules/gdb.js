@@ -18,6 +18,8 @@ const {
   ThreadEvent,
 } = require("vscode-debugadapter");
 
+const { getFunctionName } = require("./utils");
+
 const WatchPointType = {
   ACCESS: "-a",
   READ: "-r",
@@ -89,76 +91,22 @@ class GDB extends GDBBase {
   }
 
   initialize(stopOnEntry) {
-    this.on("exec", (payload) => {
-      log("exec", payload);
-    });
+    this.on("notify", this.#onNotify.bind(this));
+    this.on("status", this.#onStatus.bind(this));
+    this.on("exec", this.#onExec.bind(this));
 
-    this.on("running", (payload) => {
-      this.userRequestedInterrupt = false;
-      log("running", payload);
-    });
+    if (stopOnEntry) {
+      this.once("stopped", this.#onStopOnEntry.bind(this));
+    } else {
+      this.on("stopped", this.#onStopped.bind(this));
+    }
 
-    this.once("stopped", (payload) => {
-      this.on("stopped", (payload) => {
-        log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
-        if (payload.reason === "breakpoint-hit") {
-          const THREADID = payload.thread.id;
-          this.userRequestedInterrupt = false;
-          let stopEvent = new StoppedEvent("breakpoint", THREADID);
-          let body = {
-            reason: stopEvent.body.reason,
-            allThreadsStopped: this.allStopMode,
-            threadId: THREADID,
-          };
-          stopEvent.body = body;
-          this.sendEvent(stopEvent);
-        } else if (payload.reason === "exited-normally") {
-          this.sendEvent(new TerminatedEvent());
-        } else if (payload.reason === "signal-received") {
-          const THREADID = payload.thread.id;
-          // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-          if (this.userRequestedInterrupt) {
-            let stopEvent = new StoppedEvent("pause", THREADID);
-            let body = {
-              reason: stopEvent.body.reason,
-              allThreadsStopped: true,
-              threadId: THREADID,
-            };
-            stopEvent.body = body;
-            this.sendEvent(stopEvent);
-          }
-        } else {
-          console.log(`stopped for other reason: ${payload.reason}`);
-        }
-      });
-      if (stopOnEntry) {
-        const THREADID = payload.thread.id;
-        stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", THREADID));
-      } else {
-        this.emit("stopped", payload);
-      }
-    });
-
-    this.on("user-interrupt", () => {});
-
-    this.on("thread-created", (payload) => {
-      this.threadsCreated.push(payload.id);
-      this.#target.sendEvent(new ThreadEvent("started", payload.id));
-    });
-
-    this.on("thread-exited", async (pl) => {
-      this.threadsCreated.splice(this.threadsCreated.indexOf(pl.id), 1);
-      this.#target.sendEvent(new ThreadEvent("exited", pl.id));
-    });
-
-    this.on("status", (payload) => {
-      log("status", payload);
-    });
-
-    this.on("notify", (payload) => {
-      log("notify", payload);
-    });
+    this.on("running", this.#onRunning.bind(this));
+    this.on("thread-created", this.#onThreadCreated.bind(this));
+    this.on("thread-exited", this.#onThreadExited.bind(this));
+    this.on("thread-group-started", this.#onThreadGroupStarted.bind(this));
+    this.on("thread-group-exited", this.#onThreadGroupExited.bind(this));
+    this.on("new-objfile", this.#onNewObjfile.bind(this));
 
     this.on("breakPointValidated", (bp) => {
       this.sendEvent(
@@ -405,6 +353,307 @@ class GDB extends GDBBase {
       }
       return res;
     });
+  }
+
+  // Async record handlers
+  #onNotify(payload) {
+    log("notify", payload);
+    if (payload.state == "breakpoint-modified") {
+    }
+
+    switch (payload.state) {
+      case "running": {
+        this.#onNotifyRunning(payload);
+      }
+      case "stopped": {
+        this.#onNotifyStopped(payload);
+      }
+      case "thread-group-added": {
+        this.#onNotifyThreadGroupAdded(payload);
+        break;
+      }
+      case "thread-group-removed": {
+        this.#onNotifyThreadGroupRemoved(payload);
+        break;
+      }
+      case "thread-group-started": {
+        this.#onNotifyThreadGroupStarted(payload);
+        break;
+      }
+      case "thread-group-exited": {
+        this.#onNotifyThreadGroupExited(payload);
+        break;
+      }
+      case "thread-created": {
+        this.#onNotifyThreadCreated(payload);
+        break;
+      }
+      case "thread-exited": {
+        this.#onNotifyThreadExited(payload);
+        break;
+      }
+      case "thread-selected": {
+        this.#onNotifyThreadSelected(payload);
+        break;
+      }
+      case "library-loaded": {
+        this.#onNotifyLibraryLoaded(payload);
+        break;
+      }
+      case "library-unloaded": {
+        this.#onNotifyLibraryUnloaded(payload);
+        break;
+      }
+      case "breakpoint-created": {
+        this.#onNotifyBreakpointCreated(payload);
+        break;
+      }
+      case "breakpoint-modified": {
+        this.#onNotifyBreakpointModified(payload);
+        break;
+      }
+      case "breakpoint-deleted": {
+        this.#onNotifyBreakpointDeleted(payload);
+        break;
+      }
+    }
+  }
+
+  #onStatus(payload) {
+    log(getFunctionName(), payload);
+  }
+
+  #onExec(payload) {
+    log(getFunctionName(), payload);
+  }
+
+  #onStopped(payload) {
+    if (payload.reason === "breakpoint-hit") {
+      const THREADID = payload.thread.id;
+      this.userRequestedInterrupt = false;
+      let stopEvent = new StoppedEvent("breakpoint", THREADID);
+      let body = {
+        reason: stopEvent.body.reason,
+        allThreadsStopped: this.allStopMode,
+        threadId: THREADID,
+      };
+      stopEvent.body = body;
+      this.sendEvent(stopEvent);
+    } else if (payload.reason === "exited-normally") {
+      this.sendEvent(new TerminatedEvent());
+    } else if (payload.reason === "signal-received") {
+      const THREADID = payload.thread.id;
+      // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
+      if (this.userRequestedInterrupt) {
+        let stopEvent = new StoppedEvent("pause", THREADID);
+        let body = {
+          reason: stopEvent.body.reason,
+          allThreadsStopped: true,
+          threadId: THREADID,
+        };
+        stopEvent.body = body;
+        this.sendEvent(stopEvent);
+      }
+    } else {
+      console.log(`stopped for other reason: ${payload.reason}`);
+    }
+  }
+
+  #onStopOnEntry(payload) {
+    const THREADID = payload.thread.id;
+    this.sendEvent(new StoppedEvent("entry", THREADID));
+    this.on("stopped", this.#onStopped.bind(this));
+  }
+
+  #onRunning(payload) {
+    log(getFunctionName(), payload);
+    this.userRequestedInterrupt = false;
+  }
+
+  #onThreadCreated(payload) {
+    this.threadsCreated.push(payload.id);
+    this.#target.sendEvent(new ThreadEvent("started", payload.id));
+  }
+
+  #onThreadExited(payload) {
+    this.threadsCreated.splice(this.threadsCreated.indexOf(payload.id), 1);
+    this.#target.sendEvent(new ThreadEvent("exited", payload.id));
+  }
+
+  #onThreadGroupStarted(payload) {
+    log(getFunctionName(), payload);
+  }
+
+  #onThreadGroupExited(payload) {
+    log(getFunctionName(), payload);
+  }
+
+  #onNewObjfile(payload) {
+    log(getFunctionName(), payload);
+  }
+
+  // Raw GDB handlers for #onNotify
+
+  /**
+   * The target is now running.
+   *
+   * @param {{threadId: number}} payload
+   */
+  #onNotifyRunning(payload) {
+    log("running", payload);
+  }
+
+  /**
+   * The target has stopped.
+   *
+   * The reason field can have one of the following values:
+   * * breakpoint-hit
+   * * watchpoint-trigger
+   * * read-watchpoint-trigger
+   * * access-watchpoint-trigger
+   * * function-finished
+   * * location-reached
+   * * watchpoint-scope
+   * * end-stepping-range
+   * * exited-signalled
+   * * exited
+   * * exited-normally
+   * * signal-received
+   * * solib-event
+   * * fork
+   * * vfork
+   * * syscall-entry
+   * * syscall-entry
+   * * exec.
+   *
+   * @param {{ reason: string,
+   *           threadId: number,
+   *           stoppedThreads: (string | number[]),
+   *           core: number? }} payload
+   */
+  #onNotifyStopped(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread group was added.
+   *
+   * @param {{id: number}} payload
+   */
+  #onNotifyThreadGroupAdded(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread group was removed.
+   *
+   * @param {{id: number}} payload
+   */
+  #onNotifyThreadGroupRemoved(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread group became associated with a running program.
+   *
+   * @param {{id:number, pid: number}} payload
+   */
+  #onNotifyThreadGroupStarted(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread group is no longer associated with a running program.
+   *
+   * @param {{id: number, exitCode: number}} payload
+   */
+  #onNotifyThreadGroupExited(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread was created.
+   *
+   * @param {{id: number, groupId: number}} payload
+   */
+  #onNotifyThreadCreated(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * A thread has exited.
+   *
+   * @param {{id: number, groupId: number}} payload
+   */
+  #onNotifyThreadExited(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * Informs that the selected thread was changed
+   *
+   * @param {{id: number}} payload
+   */
+  #onNotifyThreadSelected(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * Reports that a new library file was loaded by the program.
+   *
+   * @param {*} payload
+   */
+  #onNotifyLibraryLoaded(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * Reports that a library was unloaded by the program.
+   *
+   * @param {*} payload
+   */
+  #onNotifyLibraryUnloaded(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * @typedef {{number: number,
+   *            type: string,
+   *            disp: string,
+   *            enabled: string,
+   *            addr: number,
+   *            func: string,
+   *            file: string,
+   *            fullname: string,
+   *            line: number
+   *            thread?: number}} bkpt
+   */
+
+  /**
+   * Reports that a breakpoint was created.
+   *
+   * @param {bkpt} payload
+   */
+  #onNotifyBreakpointCreated(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * Reports that a breakpoint was modified.
+   *
+   * @param {bkpt} payload
+   */
+  #onNotifyBreakpointModified(payload) {
+    log(getFunctionName());
+  }
+
+  /**
+   * Reports that a breakpoint was deleted.
+   *
+   * @param {bkpt} payload
+   */
+  #onNotifyBreakpointDeleted(payload) {
+    log(getFunctionName());
   }
 }
 
