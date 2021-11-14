@@ -586,8 +586,19 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  nextRequest(...args) {
-    return this.virtualDispatch(...args);
+  async nextRequest(response, args) {
+    let granularity = args.granularity ?? "line";
+    switch (granularity) {
+      case "line":
+        await this.gdb.stepOver();
+        break;
+      case "instruction":
+        await this.gdb.stepInstruction();
+        break;
+      case "statement":
+      default:
+    }
+    this.sendResponse(response);
   }
 
   stepInRequest(...args) {
