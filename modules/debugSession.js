@@ -45,6 +45,9 @@ class LaunchRequestArguments {
 
   /** @type { string[] } */
   debuggeeArgs;
+
+  /** @type {boolean} */
+  allStopMode;
 }
 
 class VariableHandler {
@@ -283,7 +286,8 @@ class DebugSession extends DebugAdapter.DebugSession {
       args.program,
       args.stopOnEntry,
       !args.noDebug,
-      args.trace
+      args.trace,
+      args.allStopMode
     );
   }
 
