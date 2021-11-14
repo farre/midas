@@ -274,7 +274,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       args.stopOnEntry,
       !args.noDebug,
       args.trace,
-      args.allStopMode
+      args.allStopMode ?? false
     );
   }
 
@@ -313,8 +313,11 @@ class DebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   continueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
+    response.body = {
+      allThreadsContinued: this.gdb.allStopMode,
+    };
     this.gdb
-      .continue(false)
+      .continue(this.gdb.allStopMode ? undefined : args.threadId, false)
       .then(() => {
         this.sendResponse(response);
       })
