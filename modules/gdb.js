@@ -152,7 +152,7 @@ class GDB extends GDBBase {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
       if (stopOnEntry && payload.thread) {
         stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", payload.thread));
+        this.sendEvent(new StoppedEvent("entry", payload.thread.id));
       } else {
         if (payload.reason == "breakpoint-hit") {
           const THREADID = payload.thread.id;
