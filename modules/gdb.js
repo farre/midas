@@ -150,28 +150,21 @@ class GDB extends GDBBase {
 
     this.on("stopped", (payload) => {
       log(`stopped(stopOnEntry = ${!!stopOnEntry})`, payload);
+      const THREADID = payload.thread.id;
       if (stopOnEntry && payload.thread) {
         stopOnEntry = false;
-        this.sendEvent(new StoppedEvent("entry", payload.thread.id));
+        this.sendEvent(new StoppedEvent("entry", THREADID));
       } else {
         if (payload.reason == "breakpoint-hit") {
-          const THREADID = payload.thread.id;
           this.userRequestedInterrupt = false;
           let stopEvent = new StoppedEvent("breakpoint", THREADID);
           let body = {
             reason: stopEvent.body.reason,
-            allThreadsStopped: true,
+            allThreadsStopped: this.allStopMode,
             threadId: THREADID,
           };
           stopEvent.body = body;
           this.sendEvent(stopEvent);
-          setImmediate(() =>
-            this.interrupt()
-              .then((r) => {})
-              .catch((err) => {
-                console.log(`failed to interrupt: ${err}`);
-              })
-          );
         } else {
           if (payload.reason == "exited-normally") {
             this.sendEvent(new TerminatedEvent());
