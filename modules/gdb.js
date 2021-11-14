@@ -378,57 +378,57 @@ class GDB extends GDBBase {
 
     switch (payload.state) {
       case "running": {
-        this.#onNotifyRunning(payload);
+        this.#onNotifyRunning(payload.data);
       }
       case "stopped": {
-        this.#onNotifyStopped(payload);
+        this.#onNotifyStopped(payload.data);
       }
       case "thread-group-added": {
-        this.#onNotifyThreadGroupAdded(payload);
+        this.#onNotifyThreadGroupAdded(payload.data);
         break;
       }
       case "thread-group-removed": {
-        this.#onNotifyThreadGroupRemoved(payload);
+        this.#onNotifyThreadGroupRemoved(payload.data);
         break;
       }
       case "thread-group-started": {
-        this.#onNotifyThreadGroupStarted(payload);
+        this.#onNotifyThreadGroupStarted(payload.data);
         break;
       }
       case "thread-group-exited": {
-        this.#onNotifyThreadGroupExited(payload);
+        this.#onNotifyThreadGroupExited(payload.data);
         break;
       }
       case "thread-created": {
-        this.#onNotifyThreadCreated(payload);
+        this.#onNotifyThreadCreated(payload.data);
         break;
       }
       case "thread-exited": {
-        this.#onNotifyThreadExited(payload);
+        this.#onNotifyThreadExited(payload.data);
         break;
       }
       case "thread-selected": {
-        this.#onNotifyThreadSelected(payload);
+        this.#onNotifyThreadSelected(payload.data);
         break;
       }
       case "library-loaded": {
-        this.#onNotifyLibraryLoaded(payload);
+        this.#onNotifyLibraryLoaded(payload.data);
         break;
       }
       case "library-unloaded": {
-        this.#onNotifyLibraryUnloaded(payload);
+        this.#onNotifyLibraryUnloaded(payload.data);
         break;
       }
       case "breakpoint-created": {
-        this.#onNotifyBreakpointCreated(payload);
+        this.#onNotifyBreakpointCreated(payload.data);
         break;
       }
       case "breakpoint-modified": {
-        this.#onNotifyBreakpointModified(payload);
+        this.#onNotifyBreakpointModified(payload.data);
         break;
       }
       case "breakpoint-deleted": {
-        this.#onNotifyBreakpointDeleted(payload);
+        this.#onNotifyBreakpointDeleted(payload.data);
         break;
       }
     }
