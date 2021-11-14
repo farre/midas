@@ -1,7 +1,6 @@
 "use strict";
 
 const assert = require("assert");
-const vscode = require("vscode");
 const { DebugClient } = require("vscode-debugadapter-testsupport");
 const { DebugSession } = require("../../modules/debugSession");
 const path = require("path");
@@ -22,12 +21,11 @@ setup(() => {
 
 suite("Extension Launch Test Suite", () => {
   let dc;
-  let ds;
 
   let port = 44444;
   setup(() => {
     let myport = port++;
-    ds = DebugSession.run(myport);
+    DebugSession.run(myport);
 
     dc = new DebugClient(
       "node",
@@ -45,7 +43,10 @@ suite("Extension Launch Test Suite", () => {
     test("should return supported features", async () => {
       let response = await dc.initializeRequest();
       response.body = response.body || {};
-      assert(response.body.supportsConfigurationDoneRequest, true);
+      assert(
+        response.body.supportsConfigurationDoneRequest,
+        "supports configuation done"
+      );
     });
   });
 
@@ -82,10 +83,9 @@ suite("Multi-threaded testing suite", () => {
   const PROGRAM = path.join(MANDELBROT_PROJECT, "build", "testapp");
   const PORT = 44444;
   let dc;
-  let ds;
 
   setup(async () => {
-    ds = DebugSession.run(PORT);
+    DebugSession.run(PORT);
 
     dc = new DebugClient(
       "node",
@@ -125,10 +125,9 @@ suite("Extension Breakpoints Test Suite", () => {
   const PROGRAM = path.join(TEST_PROJECT, "build", "testapp");
   const PORT = 44444;
   let dc;
-  let ds;
 
   setup(async () => {
-    ds = DebugSession.run(PORT);
+    DebugSession.run(PORT);
 
     dc = new DebugClient(
       "node",
