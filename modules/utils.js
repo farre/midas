@@ -21,6 +21,17 @@ async function buildTestFiles(testPath, compiler) {
   );
 }
 
+function getFunctionName() {
+  let name;
+  try {
+    throw new Error();
+  } catch (e) {
+    // Get the name of the calling function.
+    return e.stack.split("\n")[2].match(/^.+?[\.]([^ ]+)/)[1];
+  }
+}
+
 module.exports = {
   buildTestFiles,
+  getFunctionName,
 };
