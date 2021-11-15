@@ -36,6 +36,7 @@ class LaunchRequestArguments {
   trace;
   debuggeeArgs;
   allStopMode;
+  gdbPath;
 }
 
 class VariableHandler {
@@ -266,7 +267,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    this.gdb = new GDB(this, args.program, args.debuggeeArgs);
+    this.gdb = new GDB(this, args.program, args.gdbPath, args.debuggeeArgs);
     this.gdb.initialize(args.stopOnEntry);
 
     await this.gdb.start(
