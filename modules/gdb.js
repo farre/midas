@@ -126,12 +126,12 @@ class GDB extends GDBBase {
     else return this.reverseProceed(this.allStopMode ? undefined : threadId);
   }
 
-  async pauseExecution(threads) {
+  async pauseExecution(threadId) {
     this.userRequestedInterrupt = true;
-    if (!threads) {
+    if (!threadId) {
       return await this.execMI(`-exec-interrupt --all`);
     } else {
-      return await this.interrupt(threads);
+      return await this.interrupt(threadId);
     }
   }
 

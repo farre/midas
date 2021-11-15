@@ -344,7 +344,7 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async pauseRequest(response, args) {
-    await this.gdb.pauseExecution().then(() => {});
+    await this.gdb.pauseExecution(args.threadId).then(() => {});
   }
 
   async threadsRequest(response) {
