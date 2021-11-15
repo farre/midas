@@ -180,16 +180,35 @@ class GDB extends GDBBase {
     }
   }
 
-  async stepIn() {
-    await this.execMI(`-exec-step`);
+  async stepIn(threadId) {
+    if(!threadId)
+      await this.execMI(`-exec-step`);
+    else
+      await this.execMI(`-exec-step --thread ${threadId}`);
   }
 
-  async stepOver() {
-    await this.execMI(`-exec-next`);
+  async stepOver(threadId) {
+    if(!threadId) {
+      await this.execMI(`-exec-next`);
+    } else {
+      await this.execMI(`-exec-next --thread ${threadId}`);
+    }
   }
 
-  async stepInstruction() {
-    await this.execMI("-exec-next-instruction");
+  async stepInstruction(threadId) {
+    if(!threadId) {
+      await this.execMI(`-exec-next-instruction`);
+    } else {
+      await this.execMI(`-exec-next-instruction --thread ${threadId}`);
+    }
+  }
+
+  async finishExecution(threadId) {
+    if(!threadId) {
+      await this.execMI(`-exec-finish`);
+    } else {
+      await this.execMI(`-exec-finish --thread ${threadId}`);
+    }
   }
 
   // TODO(simon): List gdb functions we want / need to implement next
@@ -454,6 +473,9 @@ class GDB extends GDBBase {
         this.#onSignalReceived(payload.thread, payload);
         break;
       case "end-stepping-range":
+        this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
+        break;
+      case "function-finished":
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
       default:
