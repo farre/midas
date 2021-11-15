@@ -58,8 +58,7 @@
             ],
             "program": {
               "type": "string",
-              "description": "binary to debug",
-              "default": "${workspaceFolder}/test/cppworkspace/testmidas/build/testapp"
+              "description": "binary to debug"
             },
             "stopOnEntry": {
               "type": "boolean",
