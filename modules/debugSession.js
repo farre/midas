@@ -619,7 +619,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async stepOutRequest(response, args) {
-    this.gdb.finishExecution(args.thread);
+    this.gdb.finishExecution(args.threadId);
     this.sendResponse(response);
   }
 
