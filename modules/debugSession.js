@@ -602,7 +602,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async stepInRequest(response, args) {
-    switch(args.granularity ?? "line") {
+    switch (args.granularity ?? "line") {
       case "statement":
         // todo(simon): examine if we will be able to step into "statements" without language server insight into the code
         await this.gdb.stepIn(args.threadId);
