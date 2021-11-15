@@ -601,8 +601,19 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  stepInRequest(...args) {
-    return this.virtualDispatch(...args);
+  async stepInRequest(response, args) {
+    // todo(simon): examine if we will be able to step into "statements" without language server insight into the code
+    switch(args.granularity ?? "line") {
+      case "statement":
+        await this.gdb.stepIn();
+        break;
+      case "line":
+        await this.gdb.stepIn();
+        break;
+      case "instruction":
+        break;
+    }
+    this.sendResponse(response);
   }
 
   stepOutRequest(...args) {
