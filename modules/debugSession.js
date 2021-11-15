@@ -769,23 +769,41 @@ class DebugSession extends DebugAdapter.DebugSession {
 
 class ConfigurationProvider {
   // eslint-disable-next-line no-unused-vars
-  resolveDebugConfiguration(folder, config, token) {
+  async resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
+    if (!config || !config.type || config.type == undefined) {
+      vscode.window
+        .showErrorMessage(
+          "Cannot start debugging because no launch configuration has been provided."
+        )
+        .then((r) => {
+          return null;
+        });
+
+      return null;
+    }
+
     if (!config.type && !config.request && !config.name) {
-      config.type = "midas";
-      config.name = "Launch Debug";
-      config.request = "launch";
-      config.stopOnEntry = true;
-      config.trace = false;
-      config.allStopMode = false;
+      const editor = vscode.window.activeTextEditor;
+      if (
+        editor &&
+        (editor.document.languageId === "cpp" ||
+          editor.document.languageId === "c")
+      ) {
+        config.type = "midas";
+        config.name = "Launch Debug";
+        config.request = "launch";
+        config.stopOnEntry = true;
+        config.trace = false;
+        config.allStopMode = false;
+      }
     }
 
     if (!config.program) {
-      return vscode.window
+      await vscode.window
         .showInformationMessage("Cannot find a program to debug")
-        .then(() => {
-          return null; // abort launch
-        });
+        .then(() => {});
+      return null;
     }
     return config;
   }

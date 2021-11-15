@@ -14,23 +14,9 @@ function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider("midas", provider)
-  );
-  context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       "midas",
-      {
-        provideDebugConfigurations(folder) {
-          return [
-            {
-              name: "Start debug",
-              request: "launch",
-              type: "midas",
-              program: "${workspaceFolder}/binaryToDebug",
-            },
-          ];
-        },
-      },
+      provider,
       vscode.DebugConfigurationProviderTriggerKind.Dynamic
     )
   );

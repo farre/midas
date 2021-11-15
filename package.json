@@ -11,7 +11,7 @@
     "Debuggers"
   ],
   "activationEvents": [
-    "onDebug"
+    "*"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -92,7 +92,7 @@
             "type": "midas",
             "request": "launch",
             "name": "${1:Launch Debug}",
-            "program": "${workspaceFolder}/binary",
+            "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
             "allStopMode": false
