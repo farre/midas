@@ -12,31 +12,21 @@ const { ConfigurationProvider } = require("./debugSession");
  */
 function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
-
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider(
-      "midas",
-      provider,
-      vscode.DebugConfigurationProviderTriggerKind.Dynamic
-    )
+    vscode.debug.registerDebugConfigurationProvider("midas", provider)
   );
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       "midas",
       {
-        /**
-         * @param {vscode.WorkspaceFolder | undefined} folder
-         * @returns { vscode.ProviderResult<vscode.DebugConfiguration[]> }
-         */
         provideDebugConfigurations(folder) {
           return [
             {
-              name: "Launch",
+              name: "Start debug",
               request: "launch",
               type: "midas",
-              program: "${workspaceFolder}/build/testapp",
-              stopOnEntry: true,
+              program: "${workspaceFolder}/binaryToDebug",
             },
           ];
         },
@@ -68,9 +58,7 @@ class DebugAdapterFactory {
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
   createDebugAdapterDescriptor(session) {
-    return new vscode.DebugAdapterInlineImplementation(
-      new DebugSession("midas.log")
-    );
+    return new vscode.DebugAdapterInlineImplementation(new DebugSession(true));
   }
 }
 
