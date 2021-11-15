@@ -602,15 +602,18 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async stepInRequest(response, args) {
-    // todo(simon): examine if we will be able to step into "statements" without language server insight into the code
+
     switch(args.granularity ?? "line") {
       case "statement":
+        // todo(simon): examine if we will be able to step into "statements" without language server insight into the code
         await this.gdb.stepIn();
         break;
       case "line":
         await this.gdb.stepIn();
         break;
       case "instruction":
+        // todo(simon): introduce stepping down to assembly level, once disassemble-feature is completed
+        await this.gdb.stepIn();
         break;
     }
     this.sendResponse(response);
