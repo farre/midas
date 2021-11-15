@@ -23,7 +23,7 @@
     "no-unused-vars": "warn",
     "constructor-super": "warn",
     "valid-typeof": "warn",
-    "indent": ["error", { "SwitchCase": 2 }],
+    "indent": ["error", 2, { "SwitchCase": 1 }],
     "max-len": ["warn", 120]
   }
 }
