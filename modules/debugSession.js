@@ -590,10 +590,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     let granularity = args.granularity ?? "line";
     switch (granularity) {
       case "line":
-        await this.gdb.stepOver();
+        await this.gdb.stepOver(args.threadId);
         break;
       case "instruction":
-        await this.gdb.stepInstruction();
+        await this.gdb.stepInstruction(args.threadId);
         break;
       case "statement":
       default:
@@ -602,25 +602,25 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async stepInRequest(response, args) {
-
     switch(args.granularity ?? "line") {
       case "statement":
         // todo(simon): examine if we will be able to step into "statements" without language server insight into the code
-        await this.gdb.stepIn();
+        await this.gdb.stepIn(args.threadId);
         break;
       case "line":
-        await this.gdb.stepIn();
+        await this.gdb.stepIn(args.threadId);
         break;
       case "instruction":
         // todo(simon): introduce stepping down to assembly level, once disassemble-feature is completed
-        await this.gdb.stepIn();
+        await this.gdb.stepIn(args.threadId);
         break;
     }
     this.sendResponse(response);
   }
 
-  stepOutRequest(...args) {
-    return this.virtualDispatch(...args);
+  async stepOutRequest(response, args) {
+    this.gdb.finishExecution(args.thread);
+    this.sendResponse(response);
   }
 
   stepBackRequest(...args) {
