@@ -181,14 +181,12 @@ class GDB extends GDBBase {
   }
 
   async stepIn(threadId) {
-    if(!threadId)
-      await this.execMI(`-exec-step`);
-    else
-      await this.execMI(`-exec-step --thread ${threadId}`);
+    if (!threadId) await this.execMI(`-exec-step`);
+    else await this.execMI(`-exec-step --thread ${threadId}`);
   }
 
   async stepOver(threadId) {
-    if(!threadId) {
+    if (!threadId) {
       await this.execMI(`-exec-next`);
     } else {
       await this.execMI(`-exec-next --thread ${threadId}`);
@@ -196,7 +194,7 @@ class GDB extends GDBBase {
   }
 
   async stepInstruction(threadId) {
-    if(!threadId) {
+    if (!threadId) {
       await this.execMI(`-exec-next-instruction`);
     } else {
       await this.execMI(`-exec-next-instruction --thread ${threadId}`);
@@ -204,7 +202,7 @@ class GDB extends GDBBase {
   }
 
   async finishExecution(threadId) {
-    if(!threadId) {
+    if (!threadId) {
       await this.execMI(`-exec-finish`);
     } else {
       await this.execMI(`-exec-finish --thread ${threadId}`);
