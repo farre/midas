@@ -773,18 +773,18 @@ class ConfigurationProvider {
     // if launch.json is missing or empty
     if (!config.type && !config.request && !config.name) {
       config.type = "midas";
-      config.name = "Launch";
+      config.name = "Launch Debug";
       config.request = "launch";
-      config.program = "${workspaceFolder}/build/testapp";
       config.stopOnEntry = true;
       config.trace = false;
+      config.allStopMode = false;
     }
 
     if (!config.program) {
       return vscode.window
         .showInformationMessage("Cannot find a program to debug")
         .then(() => {
-          return undefined; // abort launch
+          return null; // abort launch
         });
     }
     return config;
