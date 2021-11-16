@@ -124,7 +124,7 @@ class GDB extends GDBBase {
 
   async continue(threadId, reverse = false) {
     if (!reverse) {
-      if (threadId) {
+      if (threadId && !this.allStopMode) {
         await this.execMI(`-thread-select ${threadId}`);
         return this.execMI(`-exec-continue`);
       } else {
@@ -140,7 +140,7 @@ class GDB extends GDBBase {
     if (!threadId) {
       return await this.execMI(`-exec-interrupt --all`);
     } else {
-      return await this.interrupt(threadId);
+      return await this.execMI(`-exec-interrupt --thread ${threadId}`);
     }
   }
 
@@ -287,8 +287,10 @@ class GDB extends GDBBase {
    *
    * @returns {Promise<Local[]>}
    */
-  async getStackLocals() {
-    const command = `-stack-list-variables --simple-values`;
+  async getStackLocals(threadId, frameLevel) {
+    const command = `-stack-list-variables --thread ${threadId} --frame ${
+      frameLevel ?? 0
+    } --simple-values`;
     return this.execMI(command).then((res) => {
       return res.variables.map((variable) => {
         return {
@@ -466,15 +468,14 @@ class GDB extends GDBBase {
   }
 
   #onStatus(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   #onExec(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   #onStopped(payload) {
-    log(getFunctionName(), payload);
     switch (payload.reason) {
       case "breakpoint-hit":
         this.#onBreakpointHit(payload.thread);
@@ -503,7 +504,7 @@ class GDB extends GDBBase {
   }
 
   #onRunning(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
     this.userRequestedInterrupt = false;
   }
 
@@ -518,7 +519,7 @@ class GDB extends GDBBase {
   }
 
   #onThreadGroupStarted(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   #onThreadGroupExited(payload) {
@@ -526,7 +527,7 @@ class GDB extends GDBBase {
   }
 
   #onNewObjfile(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   // Raw GDB handlers for #onNotify
@@ -569,7 +570,7 @@ class GDB extends GDBBase {
    *           core: number? }} payload
    */
   #onNotifyStopped(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -578,7 +579,7 @@ class GDB extends GDBBase {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupAdded(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -587,7 +588,7 @@ class GDB extends GDBBase {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupRemoved(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -596,7 +597,7 @@ class GDB extends GDBBase {
    * @param {{id:number, pid: number}} payload
    */
   #onNotifyThreadGroupStarted(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -605,7 +606,7 @@ class GDB extends GDBBase {
    * @param {{id: number, exitCode: number}} payload
    */
   #onNotifyThreadGroupExited(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -614,7 +615,7 @@ class GDB extends GDBBase {
    * @param { { id: number, groupId: number }} payload
    */
   #onNotifyThreadCreated(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
     this.#target.sendEvent(new ThreadEvent("started", payload.id));
   }
 
@@ -642,7 +643,7 @@ class GDB extends GDBBase {
    * @param {*} payload
    */
   #onNotifyLibraryLoaded(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -651,7 +652,7 @@ class GDB extends GDBBase {
    * @param {*} payload
    */
   #onNotifyLibraryUnloaded(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -673,7 +674,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointCreated(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -682,7 +683,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointModified(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   /**
@@ -691,7 +692,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointDeleted(payload) {
-    log(getFunctionName(), payload);
+    // log(getFunctionName(), payload);
   }
 
   #onBreakpointHit(thread) {

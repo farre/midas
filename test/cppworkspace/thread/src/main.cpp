@@ -36,7 +36,7 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 }
 
 // lets pretend this looks up cpus
-auto ncpus() { return std::thread::hardware_concurrency(); }
+auto ncpus() { return std::thread::hardware_concurrency() / 4; }
 
 void process_range(Surface surface, int y_start, int y_to) {
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);

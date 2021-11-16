@@ -14,13 +14,26 @@ const net = require("net");
 // eslint-disable-next-line no-unused-vars
 const { Server } = require("http");
 const { VariableObject } = require("./gdbtypes");
-// eslint-disable-next-line no-unused-vars
-const { Message } = require("vscode-debugadapter/lib/messages");
 
-const STACK_ID_START = 1000;
-const VAR_ID_START = 1000 * 1000;
+const { VariableHandler, STACK_ID_START } = require("./variablesHandler");
+// eslint-disable-next-line no-unused-vars
 
 let server;
+
+/**
+ * Creates a Scope object. Calling vscode-debugadapter's Scope constructor, does not provide the implementation
+ * of debug protocol scope that we need.
+ * @param { number } variableReference
+ * @returns { { name: string, variablesReference: number, expensive: boolean, presentationHint: string }}
+ */
+const createLocalScope = (variableReference) => {
+  return {
+    name: "locals",
+    variablesReference: variableReference,
+    expensive: false,
+    presentationHint: "locals",
+  };
+};
 
 /**
  * @extends DebugProtocol.LaunchRequestArguments
@@ -36,102 +49,6 @@ class LaunchRequestArguments {
   trace;
   debuggeeArgs;
   allStopMode;
-}
-
-class VariableHandler {
-  /** @type { DebugAdapter.Handles<VariableObject> } */
-  #variableHandles;
-  /** @type { { [name: string]: number } } */
-  #nameToIdMapping;
-
-  /** @type { number[] } */
-  #ids;
-
-  constructor() {
-    this.#variableHandles = new DebugAdapter.Handles(VAR_ID_START);
-    this.#nameToIdMapping = {};
-  }
-
-  /**
-   *
-   * @param { VariableObject } variable
-   * @returns
-   */
-  create(variable) {
-    let var_id = this.#variableHandles.create(variable);
-    this.#nameToIdMapping[variable.name] = var_id;
-    this.#ids.push(var_id);
-    return var_id;
-  }
-
-  /**
-   *
-   * @param {string} name
-   * @param {string} expression
-   * @param {string} childrenCount
-   * @param {string} value
-   * @param {string} type
-   * @param {string} has_more
-   * @returns
-   */
-  createNew(name, expression, childrenCount, value, type, has_more) {
-    let vob = new VariableObject(
-      name,
-      expression,
-      childrenCount,
-      value,
-      type,
-      has_more,
-      0
-    );
-    let vid = this.#variableHandles.create(vob);
-    this.#variableHandles.get(vid).variableReference = vid;
-    return vid;
-  }
-
-  /**
-   * @param {string} name
-   * @returns {VariableObject | undefined}
-   */
-  getByName(name) {
-    if (this.#nameToIdMapping.hasOwnProperty(name))
-      return this.#variableHandles.get(this.#nameToIdMapping[name]);
-    else return undefined;
-  }
-
-  /**
-   * @param {number} id
-   * @returns {VariableObject | undefined}
-   */
-  getById(id) {
-    return this.#variableHandles.get(id);
-  }
-
-  /**
-   * @param {string} name
-   * @returns {boolean}
-   */
-  hasName(name) {
-    return this.#nameToIdMapping.hasOwnProperty(name);
-  }
-
-  /**
-   *
-   * @param {number} id
-   * @returns {boolean}
-   */
-  hasID(id) {
-    for (const vid of this.#ids) {
-      if (vid == id) return true;
-    }
-    return false;
-  }
-
-  reset() {
-    this.#ids = [];
-    this.#nameToIdMapping = {};
-    this.#variableHandles = new DebugAdapter.Handles(VAR_ID_START);
-  }
 }
 
 class DebugSession extends DebugAdapter.DebugSession {
@@ -368,29 +285,41 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   /**
-   * "Borrowed" from unknown sources
+   * Creates a frame id based on the thread id and level
    * @param {number} threadId
    * @param {number} level
    * @returns {number}
    */
-  threadToFrameIdMagic(threadId, level) {
+  threadFrameIdentifier(threadId, level) {
+    console.log(
+      `thread ${threadId} Level: ${level} -> Frame ID: ${
+        (level << 16) | threadId
+      }`
+    );
     return (level << 16) | threadId;
   }
 
   /**
    * @param {number} frameId
-   * @returns {[number, number]}
+   * @returns { { threadId: number, frameLevel: number }}
    */
-  frameIdToThreadAndLevelMagic(frameId) {
-    return [frameId & 0xffff, frameId >> 16];
+  threadAndFrameLevelFromFrameID(frameId) {
+    return {
+      threadId: frameId & 0xffff,
+      frameLevel: frameId >> 16,
+    };
   }
 
   stackTraceRequest(response, args) {
     this.gdb.getStack(args.levels, args.threadId).then((stack) => {
       let res = stack.map((frame) => {
         let source = new DebugAdapter.Source(frame.file, frame.fullname);
+        let stackFrameId = this.threadFrameIdentifier(
+          args.threadId,
+          frame.level
+        );
         return new DebugAdapter.StackFrame(
-          this.threadToFrameIdMagic(args.threadId, frame.level),
+          stackFrameId,
           `${frame.func} @ 0x${frame.addr}`,
           source,
           frame.line,
@@ -405,11 +334,22 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async variablesRequest(response, args) {
-    /**
-     *  All primitive types shall have DebugProtocol.Variable.variableReference = 0
-     *  All structured types, should have a unique variableReference,
-     *  which shall be used to retrieve children of that variable
-     */
+    // expands on the idea behind threadAndFrameLevelFromFrameID
+    // now we don't have to keep any state around to know "what" we're dealing with
+    // we just compute it from the args.variableReference
+    const computeThreadAndFrameFromVarRef = (variableReference) => {
+      if (args.variablesReference < 10000) {
+        return {
+          threadId: args.variablesReference - 1000,
+          frameLevel: 0,
+        };
+      } else {
+        return this.threadAndFrameLevelFromFrameID(
+          args.variablesReference - 1000
+        );
+      }
+    };
+
     const isStructuredType = (valueString) => valueString === "{...}";
     let vObj = this.variableHandler.getById(args.variablesReference);
     // if this true; means we're drilling down on a type
@@ -452,11 +392,15 @@ class DebugSession extends DebugAdapter.DebugSession {
       // we're drilling down on a scope.
       // todo(simon): we need to make it so this also clears out the Variable Objects that GDB has in it's book keeping
       this.variableHandler.reset();
-      let stack_locals = this.gdb.getStackLocals();
+      let v = await this.gdb.clearVariableObjects();
+      let { threadId, frameLevel } = computeThreadAndFrameFromVarRef(
+        args.variableReference
+      );
+      let stack_locals = this.gdb.getStackLocals(threadId, frameLevel);
       let variables = [];
-      await Promise.all([this.gdb.clearVariableObjects(), stack_locals]).then(
+      await stack_locals.then(
         // eslint-disable-next-line no-unused-vars
-        ([_, locals]) => {
+        (locals) => {
           for (let arg of locals) {
             if (arg.value === null) {
               let varRef = this.variableHandler.createNew(
@@ -486,12 +430,12 @@ class DebugSession extends DebugAdapter.DebugSession {
               });
             }
           }
+          response.body = {
+            variables: variables,
+          };
+          this.sendResponse(response);
         }
       );
-      response.body = {
-        variables: variables,
-      };
-      this.sendResponse(response);
     }
   }
 
@@ -499,13 +443,11 @@ class DebugSession extends DebugAdapter.DebugSession {
     const scopes = [];
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
     // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
-    scopes.push(
-      new DebugAdapter.Scope(
-        "Local",
-        STACK_ID_START + args.frameId || 0,
-        false // false = means scope is inexpensive to get
-      )
-    );
+
+    let locals_scope = createLocalScope(STACK_ID_START + args.frameId);
+
+    scopes.push(locals_scope);
+
     response.body = {
       scopes: scopes,
     };
