@@ -123,8 +123,11 @@ class GDB extends GDBBase {
   }
 
   async continue(threadId, reverse = false) {
-    if (!reverse) return this.proceed(this.allStopMode ? undefined : threadId);
-    else return this.reverseProceed(this.allStopMode ? undefined : threadId);
+    if (!reverse) {
+      return this.proceed(this.allStopMode ? undefined : threadId);
+    } else {
+      return this.reverseProceed(this.allStopMode ? undefined : threadId);
+    }
   }
 
   async pauseExecution(threadId) {
@@ -352,14 +355,27 @@ class GDB extends GDBBase {
    * @returns {Promise<VariableObjectChild[]>}
    */
   async getVariableListChildren(variableObjectName) {
+    const isVisibilityModifier = (expr) =>
+      expr === "public" || expr === "private" || expr === "protected";
     let mods = await this.execMI(
-      `-var-list-children --all-values ${variableObjectName}`
+      `-var-list-children --all-values "${variableObjectName}"`
     );
 
     let requests = [];
     for (const r of mods.children) {
-      const membersCommands = `-var-list-children --all-values ${r.value.name}`;
-      requests.push(this.execMI(membersCommands));
+      const membersCommands = `-var-list-children --all-values "${r.value.name}"`;
+      let members = await this.execMI(membersCommands);
+      const expr = members.children[0].value.exp;
+      if (expr) {
+        if (isVisibilityModifier(expr)) {
+          let sub = await this.execMI(
+            `-var-list-children --all-values "${r.value.name}.${expr}"`
+          );
+          requests.push(sub);
+        } else {
+          requests.push(members);
+        }
+      }
     }
 
     const makeVarObjChild = (res) => {
@@ -373,20 +389,13 @@ class GDB extends GDBBase {
       };
     };
 
-    return Promise.all([
-      ...requests,
-      //p_privateMembers_res,
-      //p_publicMembers_,
-      //p_protectedMembers,
-    ]).then((values) => {
-      let res = [];
-      for (let arr of values) {
-        for (let v of arr.children) {
-          res.push(makeVarObjChild(v.value));
-        }
+    let res = [];
+    for (let arr of requests) {
+      for (let v of arr.children) {
+        res.push(makeVarObjChild(v.value));
       }
-      return res;
-    });
+    }
+    return res;
   }
 
   // Async record handlers
