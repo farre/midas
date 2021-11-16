@@ -709,9 +709,19 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   /**
    * Override this hook to implement custom requests.
+   * command: string, response: DebugProtocol.Response, args: any, request?: DebugProtocol.Request
    */
-  customRequest(...args) {
-    return this.virtualDispatch(...args);
+  async customRequest(command, response, args) {
+    switch (command) {
+      case "continueAll":
+        this.gdb.continue(undefined);
+        break;
+      case "stopAll":
+        this.gdb.pauseExecution(undefined);
+        break;
+      default:
+        vscode.window.showInformationMessage(`Unknown request: ${command}`);
+    }
   }
 
   /**
@@ -787,6 +797,11 @@ class ConfigurationProvider {
           return undefined; // abort launch
         });
     }
+    vscode.commands.executeCommand(
+      "setContext",
+      "midas.allStopModeSet",
+      config.allStopMode
+    );
     return config;
   }
 }

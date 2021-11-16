@@ -124,7 +124,12 @@ class GDB extends GDBBase {
 
   async continue(threadId, reverse = false) {
     if (!reverse) {
-      return this.proceed(this.allStopMode ? undefined : threadId);
+      if (threadId) {
+        await this.execMI(`-thread-select ${threadId}`);
+        return this.execMI(`-exec-continue`);
+      } else {
+        return this.execMI(`-exec-continue --all`);
+      }
     } else {
       return this.reverseProceed(this.allStopMode ? undefined : threadId);
     }

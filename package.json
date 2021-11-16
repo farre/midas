@@ -10,7 +10,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onDebug"
+    "*"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -45,8 +45,34 @@
       {
         "command": "midas.stop-debug-session",
         "title": "stop debugging"
+      },
+      {
+        "command": "midas.session-continue-all",
+        "title": "Continue all threads",
+        "shortTitle": "Continue All",
+        "icon":"$(debug-continue)"
+      },
+      {
+        "command": "midas.session-stop-all",
+        "title": "Pause all threads",
+        "shortTitle": "Pause All",
+        "icon":"$(debug-pause)"
       }
     ],
+    "menus": {
+      "debug/toolBar": [
+        {
+          "command": "midas.session-continue-all",
+          "group": "midas",
+          "when": "!midas.allStopModeSet"
+        },
+        {
+          "command": "midas.session-stop-all",
+          "group": "midas",
+          "when": "!midas.allStopModeSet"
+        }
+      ]
+    },
     "debuggers": [
       {
         "type": "midas",

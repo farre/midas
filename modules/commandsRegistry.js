@@ -38,7 +38,23 @@ function getVSCodeCommands() {
   let stopDebugging = registerCommand("midas.stop-debug-session", () =>
     unimplemented("stop-debug-session")
   );
-  return [start, stop, getExecutable, startDebugging, stopDebugging];
+  let continueAll = registerCommand("midas.session-continue-all", () => {
+    vscode.debug.activeDebugSession.customRequest("continueAll");
+  });
+
+  let stopAll = registerCommand("midas.session-stop-all", () => {
+    vscode.debug.activeDebugSession.customRequest("stopAll");
+  });
+
+  return [
+    start,
+    stop,
+    getExecutable,
+    startDebugging,
+    stopDebugging,
+    continueAll,
+    stopAll,
+  ];
 }
 
 module.exports = {

@@ -12,7 +12,7 @@ const { ConfigurationProvider } = require("./debugSession");
  */
 function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
-
+  context.workspaceState.update("allStopModeSet", false);
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
@@ -53,6 +53,7 @@ function activateExtension(context, descriptorFactory) {
   if (!descriptorFactory) {
     descriptorFactory = new DebugAdapterFactory();
   }
+
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
       "midas",
