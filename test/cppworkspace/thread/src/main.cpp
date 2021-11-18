@@ -1,9 +1,11 @@
 #include <iostream>
 #include <vector>
+#include <string>
 #include <thread>
 #include <chrono>
 #include <mutex>
 #include <iomanip>
+#include <cstdlib>
 
 std::mutex g_stdio_mutex;
 
@@ -34,7 +36,10 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 }
 
 // lets pretend this looks up cpus
-auto ncpus() { return std::thread::hardware_concurrency(); }
+auto ncpus_to_use() {
+  const auto threads = std::thread::hardware_concurrency();
+  return threads == 4 ? threads : threads / 4;
+}
 
 void process_range(Surface surface, int y_start, int y_to) {
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
@@ -69,8 +74,33 @@ void process_range(Surface surface, int y_start, int y_to) {
 
 }
 
+void vecOfString() {
+  std::vector<std::string> env_variables;
+  env_variables.reserve(10);
+
+  const auto push_env_var_if = [&](auto env) {
+    if(auto var = std::getenv(env); var) {
+      env_variables.emplace_back(var);
+    }
+  };
+
+  push_env_var_if("PATH");
+  push_env_var_if("PWD");
+  push_env_var_if("USER");
+  push_env_var_if("USERNAME");
+  push_env_var_if("DISPLAY");
+  push_env_var_if("PATH");
+  push_env_var_if("SHELL");
+  push_env_var_if("HOME");
+
+
+  for(const auto& var : env_variables) {
+    std::cout << var << std::endl;
+  }
+}
+
 void process_tasks_and_run(int screen_width, int screen_height) {
-  const auto jobs = ncpus() - 1;
+  const auto jobs = ncpus_to_use() - 1;
   const auto job_size = screen_height / jobs;
   std::vector<std::thread> tasks;
   tasks.reserve(jobs);
@@ -83,16 +113,8 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 }
 
 int main(int argc, const char **argv) {
-  const auto asTestSuite = argc > 1;
-  // so that we can test pausing execution, for instance.
-
-  if(asTestSuite) {
-    process_tasks_and_run(640, 480);
-  } else {
-    process_tasks_and_run(3840, 2160);
-  }
-
-
+  vecOfString();
+  process_tasks_and_run(3840, 2160);
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
   static constexpr auto bar = "saying barfoo is something nobody does";
