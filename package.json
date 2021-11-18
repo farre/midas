@@ -43,9 +43,33 @@
       {
         "command": "midas.stop-debug-session",
         "title": "stop debugging"
+      },
+      {
+        "command": "midas.session-continue-all",
+        "title": "Continue all threads",
+        "shortTitle": "Continue All",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "midas.session-pause-all",
+        "title": "Pause all threads",
+        "shortTitle": "Pause all",
+        "icon": "$(debug-pause)"
       }
     ],
 
+    "menus": {
+      "debug/toolBar": [{
+        "command": "midas.session-continue-all",
+        "group": "midas",
+        "when": "!midas.allStopModeSet"
+      },
+      {
+        "command": "midas.session-pause-all",
+        "group": "midas",
+        "when": "!midas.allStopModeSet"
+      }]
+    },
     "debuggers": [
       {
         "type": "midas",
