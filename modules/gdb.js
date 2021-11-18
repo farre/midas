@@ -60,10 +60,10 @@ class GDB extends GDBBase {
   threadsCreated = [];
   userRequestedInterrupt = false;
   allStopMode;
-  constructor(target, binary, args = undefined) {
+  constructor(target, binary, gdbPath, args = undefined) {
     super(
       spawn(
-        "gdb",
+        gdbPath,
         !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]
       )
     );

@@ -21,29 +21,6 @@ function activateExtension(context, descriptorFactory) {
       vscode.DebugConfigurationProviderTriggerKind.Dynamic
     )
   );
-  context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider(
-      "midas",
-      {
-        /**
-         * @param {vscode.WorkspaceFolder | undefined} folder
-         * @returns { vscode.ProviderResult<vscode.DebugConfiguration[]> }
-         */
-        provideDebugConfigurations(folder) {
-          return [
-            {
-              name: "Launch",
-              request: "launch",
-              type: "midas",
-              program: "${workspaceFolder}/build/testapp",
-              stopOnEntry: true,
-            },
-          ];
-        },
-      },
-      vscode.DebugConfigurationProviderTriggerKind.Dynamic
-    )
-  );
   // TODO(simon): when we've implemented the most bare bones debugger
   //  meaning, we can start gdb, launch a program and stop on entry
   //  we need to implement some "frontend" functionality,
@@ -69,9 +46,7 @@ class DebugAdapterFactory {
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
   createDebugAdapterDescriptor(session) {
-    return new vscode.DebugAdapterInlineImplementation(
-      new DebugSession("midas.log")
-    );
+    return new vscode.DebugAdapterInlineImplementation(new DebugSession(true));
   }
 }
 

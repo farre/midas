@@ -8,7 +8,7 @@
     "vscode": "^1.61.0"
   },
   "categories": [
-    "Other"
+    "Debuggers"
   ],
   "activationEvents": [
     "*"
@@ -17,13 +17,10 @@
   "contributes": {
     "breakpoints": [
       {
-        "language": "cpp"
-      },
-      {
         "language": "c"
       },
       {
-        "language": "c++"
+        "language": "cpp"
       }
     ],
     "commands": [
@@ -77,7 +74,8 @@
     "debuggers": [
       {
         "type": "midas",
-        "label": "midas",
+        "label": "C/C++ Midas GDB",
+        "languages": ["c", "cpp", "cuda-cpp"],
         "configurationAttributes": {
           "launch": {
             "required": [
@@ -85,8 +83,7 @@
             ],
             "program": {
               "type": "string",
-              "description": "binary to debug",
-              "default": "${workspaceFolder}/test/cppworkspace/testmidas/build/testapp"
+              "description": "binary to debug"
             },
             "stopOnEntry": {
               "type": "boolean",
@@ -107,6 +104,11 @@
               "type": "boolean",
               "description": "Whether or not GDB should run in all stop mode",
               "default": false
+            },
+            "gdbPath": {
+              "type": "string",
+              "description": "Path to gdb executable or command",
+              "default": "gdb"
             }
           }
         },
@@ -114,8 +116,8 @@
           {
             "type": "midas",
             "request": "launch",
-            "name": "Foo foo",
-            "program": "${workspaceFolder}/build/testapp",
+            "name": "${1:Launch Debug}",
+            "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
             "allStopMode": false
@@ -128,8 +130,8 @@
             "body": {
               "type": "midas",
               "request": "launch",
-              "name": "Foo foo",
-              "program": "^\"\\${workspaceFolder}/\\${command:midas.get-binary}\"",
+              "name": "${1:Launch Debug}",
+              "program": "^\"\\${workspaceFolder}/${2:binary}\"",
               "stopOnEntry": true,
               "trace": false,
               "allStopMode": false
