@@ -393,7 +393,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       let { threadId, frameLevel } = computeThreadAndFrameFromVarRef(
         args.variableReference
       );
-      await this.gdb.getStackLocals().then((locals) => {
+      await this.gdb.getStackLocals(threadId, frameLevel).then((locals) => {
         let variables = [];
         for (let arg of locals) {
           if (arg.value === null) {
