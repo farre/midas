@@ -468,11 +468,11 @@ class GDB extends GDBBase {
   }
 
   #onStatus(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   #onExec(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   #onStopped(payload) {
@@ -504,7 +504,7 @@ class GDB extends GDBBase {
   }
 
   #onRunning(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
     this.userRequestedInterrupt = false;
   }
 
@@ -519,7 +519,7 @@ class GDB extends GDBBase {
   }
 
   #onThreadGroupStarted(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   #onThreadGroupExited(payload) {
@@ -527,7 +527,7 @@ class GDB extends GDBBase {
   }
 
   #onNewObjfile(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   // Raw GDB handlers for #onNotify
@@ -570,7 +570,7 @@ class GDB extends GDBBase {
    *           core: number? }} payload
    */
   #onNotifyStopped(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -579,7 +579,7 @@ class GDB extends GDBBase {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupAdded(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -588,7 +588,7 @@ class GDB extends GDBBase {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupRemoved(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -597,7 +597,7 @@ class GDB extends GDBBase {
    * @param {{id:number, pid: number}} payload
    */
   #onNotifyThreadGroupStarted(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -606,7 +606,7 @@ class GDB extends GDBBase {
    * @param {{id: number, exitCode: number}} payload
    */
   #onNotifyThreadGroupExited(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -615,7 +615,7 @@ class GDB extends GDBBase {
    * @param { { id: number, groupId: number }} payload
    */
   #onNotifyThreadCreated(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
     this.#target.sendEvent(new ThreadEvent("started", payload.id));
   }
 
@@ -643,7 +643,7 @@ class GDB extends GDBBase {
    * @param {*} payload
    */
   #onNotifyLibraryLoaded(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -652,7 +652,7 @@ class GDB extends GDBBase {
    * @param {*} payload
    */
   #onNotifyLibraryUnloaded(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -674,7 +674,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointCreated(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -683,7 +683,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointModified(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   /**
@@ -692,7 +692,7 @@ class GDB extends GDBBase {
    * @param {bkpt} payload
    */
   #onNotifyBreakpointDeleted(payload) {
-    // log(getFunctionName(), payload);
+    log(getFunctionName(), payload);
   }
 
   #onBreakpointHit(thread) {
