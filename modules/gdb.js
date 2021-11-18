@@ -122,18 +122,39 @@ class GDB extends GDBBase {
     this.sendEvent(new InitializedEvent());
   }
 
+  // todo(simon): calling this function with no threadId should in future releases fail
+  //  if continue of all is desired, call continueAll() instead
   async continue(threadId, reverse = false) {
-    if (!reverse) return this.proceed(this.allStopMode ? undefined : threadId);
-    else return this.reverseProceed(this.allStopMode ? undefined : threadId);
+    if (!reverse) {
+      if (threadId && !this.allStopMode) {
+        await this.execMI(`-thread-select ${threadId}`);
+        return this.execMI(`-exec-continue`);
+      } else {
+        return this.continueAll();
+      }
+    } else {
+      // todo(simon): this needs a custom implementation, like in the above if branch
+      //  especially when it comes to rr integration
+      return this.reverseProceed(this.allStopMode ? undefined : threadId);
+    }
   }
 
+  async continueAll() {
+    return this.execMI(`-exec-continue --all`);
+  }
+  // todo(simon): calling this function with no threadId should in future releases fail
+  //  if pause of all is desired, call pauseAll() instead
   async pauseExecution(threadId) {
     this.userRequestedInterrupt = true;
     if (!threadId) {
       return await this.execMI(`-exec-interrupt --all`);
     } else {
-      return await this.interrupt(threadId);
+      return await this.execMI(`-exec-interrupt --thread ${threadId}`);
     }
+  }
+
+  async pauseAll() {
+    return await this.execMI(`-exec-interrupt --all`);
   }
 
   /**
@@ -279,8 +300,10 @@ class GDB extends GDBBase {
    *
    * @returns {Promise<Local[]>}
    */
-  async getStackLocals() {
-    const command = `-stack-list-variables --simple-values`;
+  async getStackLocals(threadId, frameLevel) {
+    const command = `-stack-list-variables --thread ${threadId} --frame ${
+      frameLevel ?? 0
+    } --simple-values`;
     return this.execMI(command).then((res) => {
       return res.variables.map((variable) => {
         return {
@@ -352,14 +375,35 @@ class GDB extends GDBBase {
    * @returns {Promise<VariableObjectChild[]>}
    */
   async getVariableListChildren(variableObjectName) {
+    const isVisibilityModifier = (expr) => {
+      return expr === "public" || expr === "private" || expr === "protected";
+    };
     let mods = await this.execMI(
-      `-var-list-children --all-values ${variableObjectName}`
+      `-var-list-children --all-values "${variableObjectName}"`
     );
 
     let requests = [];
     for (const r of mods.children) {
-      const membersCommands = `-var-list-children --all-values ${r.value.name}`;
-      requests.push(this.execMI(membersCommands));
+      const membersCommands = `-var-list-children --all-values "${r.value.name}"`;
+      let members = await this.execMI(membersCommands);
+      /*
+       * why members.children[0] here? Well, if *any* of the first
+       * children of members, is either "protected", "private" or "public"
+       * means we will see *no* other thing, we first must drill down into that sub scope of this
+       * structure. Therefore we don't have to check [1] or [2] or any else. If *any* of them is
+       * a visibility modifier, we have to drill down.
+       */
+      const expr = members.children[0].value.exp;
+      if (expr) {
+        if (isVisibilityModifier(expr)) {
+          let sub = await this.execMI(
+            `-var-list-children --all-values "${r.value.name}.${expr}"`
+          );
+          requests.push(sub);
+        } else {
+          requests.push(members);
+        }
+      }
     }
 
     const makeVarObjChild = (res) => {
@@ -373,20 +417,13 @@ class GDB extends GDBBase {
       };
     };
 
-    return Promise.all([
-      ...requests,
-      //p_privateMembers_res,
-      //p_publicMembers_,
-      //p_protectedMembers,
-    ]).then((values) => {
-      let res = [];
-      for (let arr of values) {
-        for (let v of arr.children) {
-          res.push(makeVarObjChild(v.value));
-        }
+    let res = [];
+    for (let arr of requests) {
+      for (let v of arr.children) {
+        res.push(makeVarObjChild(v.value));
       }
-      return res;
-    });
+    }
+    return res;
   }
 
   // Async record handlers
