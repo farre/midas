@@ -125,6 +125,8 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
 
+    response.body.supportsRestartRequest = true;
+
     response.body.exceptionBreakpointFilters = [
       {
         filter: "namedException",
@@ -227,21 +229,16 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   // eslint-disable-next-line no-unused-vars
-  continueRequest(response, args) {
+  async continueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
     response.body = {
       allThreadsContinued: this.gdb.allStopMode,
     };
-    this.gdb
-      .continue(this.gdb.allStopMode ? undefined : args.threadId, false)
-      .then(() => {
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        vscode.window.showErrorMessage(
-          `Failed to continue with debuggee request: ${err}`
-        );
-      });
+    await this.gdb.continue(
+      this.gdb.allStopMode ? undefined : args.threadId,
+      false
+    );
+    this.sendResponse(response);
   }
 
   async setFunctionBreakPointsRequest(response, args) {
@@ -510,8 +507,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  restartRequest(...args) {
-    return this.virtualDispatch(...args);
+  async restartRequest(response, { arguments: args }) {
+    const { program, stopOnEntry } = args;
+    await this.gdb.restart(program, stopOnEntry);
+    this.sendResponse(response);
   }
 
   setExceptionBreakPointsRequest(...args) {

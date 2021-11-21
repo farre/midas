@@ -148,11 +148,12 @@ suite("Extension Breakpoints Test Suite", () => {
   });
 
   suite("breakpoints with restart", () => {
-    teardown(() => {
-      return Promise.all([
-        dc.restartRequest({ program: PROGRAM, stopOnEntry: true }),
-        dc.waitForEvent("stopped"),
-      ]);
+    teardown(async () => {
+      await dc.restartRequest({
+        // @ts-ignore
+        arguments: { program: PROGRAM, stopOnEntry: true },
+      });
+      await dc.waitForEvent("stopped");
     });
 
     test("should hit breakpoint", async () => {
@@ -172,6 +173,7 @@ suite("Extension Breakpoints Test Suite", () => {
       const source = { path: path.join(TEST_PROJECT, "src", name), name };
       const line = 20;
       const threadId = 1;
+      await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
       return Promise.all([
         dc.continueRequest({ threadId }),
         dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
