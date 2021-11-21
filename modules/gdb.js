@@ -37,7 +37,6 @@ let GDBBase = gdbjs.GDB;
  * @constructor
  */
 class GDB extends GDBBase {
-  stoppedAtEntry;
   /** Maps file paths -> Breakpoints
    * @type { Map<string, gdbTypes.Breakpoint[]> } */
   #lineBreakpoints;
@@ -60,7 +59,6 @@ class GDB extends GDBBase {
         !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]
       )
     );
-    this.stoppedAtEntry = false;
     this.#lineBreakpoints = new Map();
     this.#fnBreakpoints = new Map();
     this.#target = target;
@@ -75,6 +73,14 @@ class GDB extends GDBBase {
       await this.enableAsync();
     }
 
+    if (stopOnEntry) {
+      await this.execMI("-exec-run --start");
+    } else {
+      await this.run();
+    }
+  }
+
+  async restart(program, stopOnEntry) {
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -123,14 +129,14 @@ class GDB extends GDBBase {
     if (!reverse) {
       if (threadId && !this.allStopMode) {
         await this.execMI(`-thread-select ${threadId}`);
-        return this.execMI(`-exec-continue`);
+        await this.execMI(`-exec-continue`);
       } else {
-        return this.continueAll();
+        await this.continueAll();
       }
     } else {
       // todo(simon): this needs a custom implementation, like in the above if branch
       //  especially when it comes to rr integration
-      return this.reverseProceed(this.allStopMode ? undefined : threadId);
+      await this.reverseProceed(this.allStopMode ? undefined : threadId);
     }
   }
 
