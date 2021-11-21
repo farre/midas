@@ -1,15 +1,7 @@
 "use strict";
-// pull in EventEmitter, which DebugInterface extends
-// it is through this, we dispatch communication between VSCode and GDB/MI
 const gdbjs = require("gdb-js");
-// eslint-disable-next-line no-unused-vars
-const regeneratorRuntime = require("regenerator-runtime");
-const gdbTypes = require("./gdbtypes");
-const { spawn } = require("./spawner");
-// eslint-disable-next-line no-unused-vars
-const { EventEmitter } = require("events");
-// eslint-disable-next-line no-unused-vars
-const { DebugProtocol } = require("vscode-debugprotocol");
+require("regenerator-runtime");
+
 const {
   InitializedEvent,
   StoppedEvent,
@@ -18,7 +10,8 @@ const {
   ThreadEvent,
 } = require("vscode-debugadapter");
 
-const { getFunctionName } = require("./utils");
+const gdbTypes = require("./gdbtypes");
+const { getFunctionName, spawn } = require("./utils");
 
 const WatchPointType = {
   ACCESS: "-a",
@@ -78,7 +71,9 @@ class GDB extends GDBBase {
     this.allStopMode = allStopMode;
     await this.init();
     await this.execMI(`-gdb-set mi-async on`);
-    if (!allStopMode) await this.enableAsync();
+    if (!allStopMode) {
+      await this.enableAsync();
+    }
 
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
@@ -163,13 +158,12 @@ class GDB extends GDBBase {
    * @returns { Promise<gdbTypes.Breakpoint> }
    */
   async setBreakPointAtLine(path, line) {
-    return this.addBreak(path, line).then((breakpoint) => {
-      let bp = new gdbTypes.Breakpoint(breakpoint.id, breakpoint.line);
-      let ref = this.#lineBreakpoints.get(breakpoint.file) ?? [];
-      ref.push(bp);
-      this.#lineBreakpoints.set(breakpoint.file, ref);
-      return bp;
-    });
+    const breakpoint = await this.addBreak(path, line);
+    let bp = new gdbTypes.Breakpoint(breakpoint.id, breakpoint.line);
+    let ref = this.#lineBreakpoints.get(breakpoint.file) ?? [];
+    ref.push(bp);
+    this.#lineBreakpoints.set(breakpoint.file, ref);
+    return bp;
   }
 
   clearFunctionBreakpoints() {
@@ -185,10 +179,9 @@ class GDB extends GDBBase {
 
   // eslint-disable-next-line no-unused-vars
   async setFunctionBreakpoint(name, condition, hitCondition) {
-    return this.execMI(`-break-insert ${name}`).then((res) => {
-      this.#fnBreakpoints.set(name, res.bkpt.number);
-      return res.bkpt.number;
-    });
+    const { bkpt } = await this.execMI(`-break-insert ${name}`);
+    this.#fnBreakpoints.set(name, bkpt.number);
+    return bkpt.number;
   }
 
   async clearBreakPointsInFile(path) {
@@ -203,8 +196,11 @@ class GDB extends GDBBase {
   }
 
   async stepIn(threadId) {
-    if (!threadId) await this.execMI(`-exec-step`);
-    else await this.execMI(`-exec-step --thread ${threadId}`);
+    if (!threadId) {
+      await this.execMI(`-exec-step`);
+    } else {
+      await this.execMI(`-exec-step --thread ${threadId}`);
+    }
   }
 
   async stepOver(threadId) {
@@ -258,8 +254,8 @@ class GDB extends GDBBase {
     let command = `-stack-list-frames ${
       threadId != 0 ? `--thread ${threadId}` : ""
     } 0 ${levels}`;
-    let result = await this.execMI(command);
-    return result.stack.map((frame) => {
+    let { stack } = await this.execMI(command);
+    return stack.map((frame) => {
       // eslint-disable-next-line no-unused-vars
       const { addr, arch, file, fullname, func, level, line } = frame.value;
       return new gdbTypes.StackFrame(file, fullname, line, func, level, addr);
@@ -272,24 +268,12 @@ class GDB extends GDBBase {
    */
   async getThreads() {
     const command = "-thread-info";
-    return await this.execMI(command)
-      .then((res) => {
-        let result = res.threads.map((threadInfo) => {
-          const {
-            core,
-            frame,
-            id,
-            name,
-            state,
-            "target-id": target_id,
-          } = threadInfo;
-          return new gdbTypes.Thread(id, core, name, state, target_id, frame);
-        });
-        return result;
-      })
-      .catch((err) => {
-        console.log(err);
-      });
+    const { threads } = await this.execMI(command);
+    let result = threads.map(
+      ({ core, frame, id, name, state, "target-id": target_id }) =>
+        new gdbTypes.Thread(id, core, name, state, target_id, frame)
+    );
+    return result;
   }
 
   /**
@@ -304,15 +288,8 @@ class GDB extends GDBBase {
     const command = `-stack-list-variables --thread ${threadId} --frame ${
       frameLevel ?? 0
     } --simple-values`;
-    return this.execMI(command).then((res) => {
-      return res.variables.map((variable) => {
-        return {
-          name: variable.name,
-          type: variable.type,
-          value: variable.value ? variable.value : null,
-        };
-      });
-    });
+    const { variables } = this.execMI(command);
+    return variables.map(({ name, type, value }) => ({ name, type, value }));
   }
 
   /**
@@ -340,12 +317,11 @@ class GDB extends GDBBase {
    * @returns {Promise<gdbTypes.VariableCompact[]>}
    */
   async getStackVariables(thread, frame) {
-    return this.execMI(
+    const { variables } = this.execMI(
       `stack-list-variables --thread ${thread} --frame ${frame} --simple-values`
-    ).then((cmd_result) => {
-      cmd_result.variables.map((v) => {
-        return new gdbTypes.VariableCompact(v.name, v.value, v.type);
-      });
+    );
+    return variables.map(({ name, value, type }) => {
+      return new gdbTypes.VariableCompact(name, value, type);
     });
   }
 
@@ -357,9 +333,8 @@ class GDB extends GDBBase {
    * @param { number } thread
    * @returns { Promise<object[]> }
    */
-  async getContext(thread) {
-    let a = await this.context(thread ? thread : undefined);
-    return a;
+  getContext(thread) {
+    return this.context(thread ? thread : undefined);
   }
 
   /**
@@ -729,6 +704,7 @@ class GDB extends GDBBase {
     this.sendEvent(stopEvent);
   }
 
+  // eslint-disable-next-line no-unused-vars
   #onSignalReceived(thread, code) {
     const THREADID = thread.id;
     // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
