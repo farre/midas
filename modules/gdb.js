@@ -288,7 +288,7 @@ class GDB extends GDBBase {
     const command = `-stack-list-variables --thread ${threadId} --frame ${
       frameLevel ?? 0
     } --simple-values`;
-    const { variables } = this.execMI(command);
+    const { variables } = await this.execMI(command);
     return variables.map(({ name, type, value }) => ({ name, type, value }));
   }
 
