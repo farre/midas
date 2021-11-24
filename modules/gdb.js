@@ -2,12 +2,16 @@
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 
+const path = require("path");
 const {
   InitializedEvent,
   StoppedEvent,
   BreakpointEvent,
   TerminatedEvent,
   ThreadEvent,
+
+  StackFrame,
+  Source,
 } = require("vscode-debugadapter");
 
 const gdbTypes = require("./gdbtypes");
@@ -49,7 +53,10 @@ class GDB extends GDBBase {
   variableObjectsRecorded = [];
 
   #target;
-  threadsCreated = [];
+
+  #program = "";
+
+  #threads = new Map();
   userRequestedInterrupt = false;
   allStopMode;
   constructor(target, binary, gdbPath, args = undefined) {
@@ -65,12 +72,15 @@ class GDB extends GDBBase {
   }
 
   async start(program, stopOnEntry, debug, doTrace, allStopMode) {
+    this.#program = path.basename(program);
     trace = doTrace;
     this.allStopMode = allStopMode;
     await this.init();
-    await this.execMI(`-gdb-set mi-async on`);
+
     if (!allStopMode) {
       await this.enableAsync();
+    } else {
+      await this.execMI(`-gdb-set mi-async on`);
     }
 
     if (stopOnEntry) {
@@ -128,8 +138,7 @@ class GDB extends GDBBase {
   async continue(threadId, reverse = false) {
     if (!reverse) {
       if (threadId && !this.allStopMode) {
-        await this.execMI(`-thread-select ${threadId}`);
-        await this.execMI(`-exec-continue`);
+        await this.proceed(this.#threads.get(threadId));
       } else {
         await this.continueAll();
       }
@@ -141,7 +150,7 @@ class GDB extends GDBBase {
   }
 
   async continueAll() {
-    return this.execMI(`-exec-continue --all`);
+    return this.proceed();
   }
   // todo(simon): calling this function with no threadId should in future releases fail
   //  if pause of all is desired, call pauseAll() instead
@@ -268,18 +277,8 @@ class GDB extends GDBBase {
     });
   }
 
-  /**
-   *
-   * @returns {Promise<gdbTypes.Thread[]>}
-   */
-  async getThreads() {
-    const command = "-thread-info";
-    const { threads } = await this.execMI(command);
-    let result = threads.map(
-      ({ core, frame, id, name, state, "target-id": target_id }) =>
-        new gdbTypes.Thread(id, core, name, state, target_id, frame)
-    );
-    return result;
+  threads() {
+    return Array.from(this.#threads.values());
   }
 
   /**
@@ -511,13 +510,14 @@ class GDB extends GDBBase {
     this.userRequestedInterrupt = false;
   }
 
-  #onThreadCreated(payload) {
-    this.threadsCreated.push(payload.id);
-    this.#target.sendEvent(new ThreadEvent("started", payload.id));
+  #onThreadCreated(thread) {
+    thread.name = this.#program;
+    this.#threads.set(thread.id, thread);
+    this.#target.sendEvent(new ThreadEvent("started", thread.id));
   }
 
   #onThreadExited(payload) {
-    this.threadsCreated.splice(this.threadsCreated.indexOf(payload.id), 1);
+    this.#threads.delete(payload.id);
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
 
@@ -540,9 +540,7 @@ class GDB extends GDBBase {
    *
    * @param {{threadId: number}} payload
    */
-  #onNotifyRunning(payload) {
-    log("running", payload);
-  }
+  #onNotifyRunning(payload) {}
 
   /**
    * The target has stopped.
@@ -618,8 +616,7 @@ class GDB extends GDBBase {
    * @param { { id: number, groupId: number }} payload
    */
   #onNotifyThreadCreated(payload) {
-    log(getFunctionName(), payload);
-    this.#target.sendEvent(new ThreadEvent("started", payload.id));
+    // this does nothing, handled by onThreadCreated
   }
 
   /**

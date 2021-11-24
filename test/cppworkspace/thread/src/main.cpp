@@ -37,8 +37,7 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 
 // lets pretend this looks up cpus
 auto ncpus_to_use() {
-  const auto threads = std::thread::hardware_concurrency();
-  return threads == 4 ? threads : threads / 4;
+  return 4;
 }
 
 void process_range(Surface surface, int y_start, int y_to) {
@@ -100,7 +99,7 @@ void vecOfString() {
 }
 
 void process_tasks_and_run(int screen_width, int screen_height) {
-  const auto jobs = ncpus_to_use() - 1;
+  const auto jobs = ncpus_to_use();
   const auto job_size = screen_height / jobs;
   std::vector<std::thread> tasks;
   tasks.reserve(jobs);
@@ -114,7 +113,7 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 
 int main(int argc, const char **argv) {
   vecOfString();
-  process_tasks_and_run(3840, 2160);
+  process_tasks_and_run(100, 100);
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
   static constexpr auto bar = "saying barfoo is something nobody does";
