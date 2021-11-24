@@ -112,12 +112,37 @@ suite("Multi-threaded testing suite", () => {
     dc.stop();
   });
 
-  test("should hit breakpoint NPCU-1 amount of times", (done) => {
+  test("should hit breakpoint NPCU-1 amount of times", async () => {
     const name = "main.cpp";
     const source = { path: path.join(MANDELBROT_PROJECT, "src", name), name };
-    const line = 59;
-    const NCPU = require("os").cpus().length;
-    done(new Error("Not implemented test"));
+    const line = 63;
+    const numThreads = 4;
+    await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
+    const {
+      body: { threads },
+    } = await dc.threadsRequest();
+    assert(threads.length == 1, `there should only be one thread`);
+
+    const started = new Set();
+    dc.on("thread", ({ body: { threadId, reason } }) => {
+      if (reason === "started") {
+        started.add(threadId);
+      }
+    });
+
+    const breakpoints = new Set();
+    dc.on("stopped", async ({ body: { reason, threadId } }) => {
+      assert.strictEqual(reason, "breakpoint");
+      breakpoints.add(threadId);
+      await dc.continueRequest({ threadId });
+    });
+
+    dc.continueRequest({ threadId: threads[0].threadId });
+
+    await dc.waitForEvent("terminated");
+    assert.strictEqual(started.size, numThreads);
+    assert.strictEqual(breakpoints.size, numThreads);
+    assert.deepStrictEqual(breakpoints, started);
   });
 });
 

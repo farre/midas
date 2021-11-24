@@ -33,23 +33,6 @@ const createLocalScope = (variableReference) => {
   };
 };
 
-/**
- * @extends DebugProtocol.LaunchRequestArguments
- */
-// eslint-disable-next-line no-unused-vars
-class LaunchRequestArguments {
-  /**If noDebug is true the launch request should launch the program without enabling debugging.
-   * @type {boolean | undefined} noDebug */
-  noDebug;
-  __restart;
-  program;
-  stopOnEntry;
-  trace;
-  debuggeeArgs;
-  allStopMode;
-  gdbPath;
-}
-
 class DebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
@@ -127,6 +110,9 @@ class DebugSession extends DebugAdapter.DebugSession {
 
     response.body.supportsRestartRequest = true;
 
+    // Enable this when we upgrade to DAP 1.51.0
+    // response.body.supportsSingleThreadExecutionRequests = true;
+
     response.body.exceptionBreakpointFilters = [
       {
         filter: "namedException",
@@ -169,9 +155,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.configIsDone.notify();
   }
 
-  /**
-   * @param {LaunchRequestArguments} args
-   */
   // eslint-disable-next-line no-unused-vars
   async launchRequest(response, args, request) {
     DebugAdapter.logger.setup(
@@ -261,23 +244,10 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async threadsRequest(response) {
-    await this.gdb
-      .getThreads()
-      .then((res) => {
-        response.body = {
-          threads: res.map(
-            (thread) =>
-              new DebugAdapter.Thread(
-                thread.id,
-                `thread #${thread.id} (${thread.target_id})`
-              )
-          ),
-        };
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        this.sendErrorResponse(response, 17, `Could not get threads: ${err}`);
-      });
+    response.body = {
+      threads: await this.gdb.threads(),
+    };
+    this.sendResponse(response);
   }
 
   /**
