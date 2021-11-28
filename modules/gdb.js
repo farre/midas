@@ -14,14 +14,9 @@ const {
   Source,
 } = require("vscode-debugadapter");
 
+const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
-
-const WatchPointType = {
-  ACCESS: "-a",
-  READ: "-r",
-  WRITE: "",
-};
 
 let trace = true;
 function log(location, payload) {
@@ -40,7 +35,7 @@ let GDBBase = gdbjs.GDB;
 /**
  * @constructor
  */
-class GDB extends GDBBase {
+class GDB extends GDBMixin(GDBBase) {
   /** Maps file paths -> Breakpoints
    * @type { Map<string, gdbTypes.Breakpoint[]> } */
   #lineBreakpoints;
@@ -149,24 +144,6 @@ class GDB extends GDBBase {
     }
   }
 
-  async continueAll() {
-    return this.proceed();
-  }
-  // todo(simon): calling this function with no threadId should in future releases fail
-  //  if pause of all is desired, call pauseAll() instead
-  async pauseExecution(threadId) {
-    this.userRequestedInterrupt = true;
-    if (!threadId) {
-      return await this.execMI(`-exec-interrupt --all`);
-    } else {
-      return await this.execMI(`-exec-interrupt --thread ${threadId}`);
-    }
-  }
-
-  async pauseAll() {
-    return await this.execMI(`-exec-interrupt --all`);
-  }
-
   /**
    * @param {string} path
    * @param {number} line
@@ -210,52 +187,7 @@ class GDB extends GDBBase {
     }
   }
 
-  async stepIn(threadId) {
-    if (!threadId) {
-      await this.execMI(`-exec-step`);
-    } else {
-      await this.execMI(`-exec-step --thread ${threadId}`);
-    }
-  }
-
-  async stepOver(threadId) {
-    if (!threadId) {
-      await this.execMI(`-exec-next`);
-    } else {
-      await this.execMI(`-exec-next --thread ${threadId}`);
-    }
-  }
-
-  async stepInstruction(threadId) {
-    if (!threadId) {
-      await this.execMI(`-exec-next-instruction`);
-    } else {
-      await this.execMI(`-exec-next-instruction --thread ${threadId}`);
-    }
-  }
-
-  async finishExecution(threadId) {
-    if (!threadId) {
-      await this.execMI(`-exec-finish`);
-    } else {
-      await this.execMI(`-exec-finish --thread ${threadId}`);
-    }
-  }
-
   // TODO(simon): List gdb functions we want / need to implement next
-
-  #setWatchPoint(location, wpType) {
-    return this.execMI(`-break-watch ${wpType} ${location}`);
-  }
-  setReadWatchPoint(location) {
-    return this.#setWatchPoint(location, WatchPointType.READ);
-  }
-  setWriteWatchPoint(location) {
-    return this.#setWatchPoint(location, WatchPointType.WRITE);
-  }
-  setAccessWatchPoint(location) {
-    return this.#setWatchPoint(location, WatchPointType.ACCESS);
-  }
 
   // async listBreakpoints(location) {}
 
@@ -317,13 +249,14 @@ class GDB extends GDBBase {
   }
   /**
    *
-   * @param {number} thread
+   * @param {number} threadId
    * @param {number} frame
    * @returns {Promise<gdbTypes.VariableCompact[]>}
    */
-  async getStackVariables(thread, frame) {
+  async getStackVariables(threadId, frame) {
     const { variables } = this.execMI(
-      `stack-list-variables --thread ${thread} --frame ${frame} --simple-values`
+      `stack-list-variables --frame ${frame} --simple-values`,
+      threadId
     );
     return variables.map(({ name, value, type }) => {
       return new gdbTypes.VariableCompact(name, value, type);
