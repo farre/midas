@@ -363,7 +363,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       await this.gdb.getStackLocals(threadId, frameLevel).then((locals) => {
         let variables = [];
         for (let arg of locals) {
-          if (arg.value === null) {
+          if (!arg.value) {
             let varRef = this.variableHandler.createNew(
               `vo_${arg.name}_${args.variablesReference}`,
               arg.name,
