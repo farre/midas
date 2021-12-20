@@ -62,7 +62,7 @@ class ExecutionState {
   /** @type {Map<number, {threadId: number, frameLevel: number, variables: MidasVariable[] }>} */
   stackFrameLocals = new Map();
   // eslint-disable-next-line max-len
-  /** @type {Map<number, {threadId: number, frameLevel: number, variableObjectName: string, variables: MidasVariable[] }>} */
+  /** @type {Map<number, {threadId: number, frameLevel: number, variableObjectName: string, memberVariables: MidasVariable[] }>} */
   structs = new Map();
 }
 
