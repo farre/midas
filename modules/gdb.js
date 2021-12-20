@@ -38,6 +38,10 @@ class MidasVariable extends Variable {
     super(name, value, ref);
     this.voName = variableObjectName;
     this.isStruct = isStructureType;
+    if (isStructureType) {
+      this.presentationHint = { kind: "class" };
+      this.evaluateName = this.voName;
+    }
   }
 }
 
