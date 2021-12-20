@@ -81,7 +81,10 @@ class DebugSession extends DebugAdapter.DebugSession {
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
     // make VS Code use 'evaluate' when hovering over source
-    response.body.supportsEvaluateForHovers = true;
+    // We disable this. This is terrible for performance. But not only that, it asks our extension to evaluate keywords (like auto, const etc).
+    // VSCode, please, sincerely, fuck off.
+    // response.body.supportsEvaluateForHovers = true;
+
     response.body.supportsReadMemoryRequest;
     // make VS Code show a 'step back' button
     response.body.supportsStepBack = true;
