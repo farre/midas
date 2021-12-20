@@ -5,7 +5,7 @@ const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
 const { DebugProtocol } = require("vscode-debugprotocol");
-const { GDB } = require("./gdb");
+const { GDB, MidasVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 // eslint-disable-next-line no-unused-vars
 const { Thread } = require("gdb-js");
@@ -274,128 +274,252 @@ class DebugSession extends DebugAdapter.DebugSession {
     };
   }
 
-  stackTraceRequest(response, args) {
-    this.gdb.getStack(args.levels, args.threadId).then((stack) => {
-      const res = stack.map((frame) => {
-        const source = new DebugAdapter.Source(frame.file, frame.fullname);
-        const stackFrameIdentifier = this.threadFrameIdentifier(
-          args.threadId,
-          frame.level
-        );
-        return new DebugAdapter.StackFrame(
-          stackFrameIdentifier,
-          `${frame.func} @ 0x${frame.addr}`,
-          source,
-          frame.line,
-          0
-        );
-      });
-      response.body = {
-        stackFrames: res,
-      };
-      this.sendResponse(response);
-    });
+  async stackTraceRequest(response, args) {
+    let exec_ctx = this.gdb.executionStates.get(args.threadId);
+    if (exec_ctx.executingFrameAddress == null) {
+      let miResult = await this.gdb.execMI(
+        `-data-evaluate-expression $rbp`,
+        args.threadId
+      );
+      exec_ctx.executingFrameAddress = miResult.value;
+      await this.gdb
+        .getStack(args.levels, args.threadId)
+        .then(async (stack) => {
+          const res = stack.map((frame, index) => {
+            const source = new DebugAdapter.Source(frame.file, frame.fullname);
+            const stackFrameIdentifier = this.gdb.nextFrameRef;
+
+            exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
+              threadId: args.threadId,
+              frameLevel: index,
+              variables: [],
+            });
+
+            this.gdb.varRefContexts.set(stackFrameIdentifier, {
+              threadId: args.threadId,
+              frameLevel: index,
+            });
+
+            return new DebugAdapter.StackFrame(
+              stackFrameIdentifier,
+              `${frame.func} @ 0x${frame.addr}`,
+              source,
+              frame.line,
+              0
+            );
+          });
+          response.body = {
+            stackFrames: res,
+          };
+          exec_ctx.stack = res;
+          this.sendResponse(response);
+        });
+    } else {
+      let miResult = await this.gdb.execMI(
+        `-data-evaluate-expression $rbp`,
+        args.threadId
+      );
+      if (miResult.value != exec_ctx.executingFrameAddress) {
+        // invalidate execution state, time to rebuild it
+        // TODO: check if we've just chopped off the top of the stack, if so, we don't need to rebuild the entire thing, just the [stack.top() - 1]
+        exec_ctx.clearState();
+        exec_ctx.executingFrameAddress = miResult.value;
+        await this.gdb
+          .getStack(args.levels, args.threadId)
+          .then(async (stack) => {
+            const res = stack.map((frame, index) => {
+              const source = new DebugAdapter.Source(
+                frame.file,
+                frame.fullname
+              );
+              const stackFrameIdentifier = this.gdb.nextFrameRef;
+
+              exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
+                threadId: args.threadId,
+                frameLevel: index,
+                variables: [],
+              });
+
+              this.gdb.varRefContexts.set(stackFrameIdentifier, {
+                threadId: args.threadId,
+                frameLevel: index,
+              });
+              return new DebugAdapter.StackFrame(
+                stackFrameIdentifier,
+                `${frame.func} @ 0x${frame.addr}`,
+                source,
+                frame.line,
+                0
+              );
+            });
+            response.body = {
+              stackFrames: res,
+            };
+            exec_ctx.stack = res;
+            this.sendResponse(response);
+          });
+      } else {
+        response.body = {
+          stackFrames: exec_ctx.stack,
+        };
+        this.sendResponse(response);
+      }
+    }
   }
 
-  async variablesRequest(response, args) {
-    // expands on the idea behind threadAndFrameLevelFromFrameID
-    // now we don't have to keep any state around to know "what" we're dealing with
-    // we just compute it from the args.variableReference
-    const computeThreadAndFrameFromVarRef = (variableReference) => {
-      if (args.variablesReference < 10000) {
-        return {
-          threadId: args.variablesReference - 1000,
-          frameLevel: 0,
-        };
-      } else {
-        return this.threadAndFrameLevelFromFrameID(
-          args.variablesReference - 1000
-        );
-      }
+  async variablesRequest(response, { variablesReference }) {
+    // unfortunately, due to the convoluted nature of GDB MI's approach, we discard the changelist
+    // and instead read the values with -var-evaluate-expression calls.
+    await this.gdb.execMI(`-var-update *`);
+    const isVisibilityModifier = (expr) => {
+      return expr === "public" || expr === "private" || expr === "protected";
     };
+    let { threadId, frameLevel } =
+      this.gdb.varRefContexts.get(variablesReference);
+    let executionContext = this.gdb.executionStates.get(threadId);
+    let stackFrameLocal =
+      executionContext.stackFrameLocals.get(variablesReference);
+    // let stackFrameLocal = this.gdb.stackFrameLocals.get(variablesReference);
+    if (stackFrameLocal) {
+      // we are a stack frame
+      if (stackFrameLocal.variables.length == 0) {
+        // we need to build the stack frame
+        await this.gdb
+          .getStackLocals(threadId, frameLevel)
+          .then(async (result) => {
+            for (const { name, type, value } of result) {
+              let nextRef = this.gdb.nextVarRef;
+              this.gdb.varRefContexts.set(nextRef, { threadId, frameLevel });
+              let vscodeRef = 0;
+              const voname = `vr_${nextRef}`;
 
-    const isStructuredType = (valueString) => valueString === "{...}";
-    let vObj = this.variableHandler.getById(args.variablesReference);
-    // if this true; means we're drilling down on a type
-    if (vObj) {
-      // means we're trying to update a variable that has children
-      let children = await this.gdb.getVariableListChildren(vObj.name);
-      let variables = [];
-      for (let child of children) {
-        if (isStructuredType(child.value)) {
-          // eslint-disable-next-line max-len
-          // means we need to create a variableReference for this child, so that VScode can know we can drill down into this value
-          let variableRef = this.variableHandler.createNew(
-            child.variableObjectName,
-            child.expression,
-            child.numChild,
-            "struct",
-            child.type,
-            "0"
-          );
-          variables.push({
-            name: child.expression,
-            type: child.type,
-            value: child.value,
-            variablesReference: variableRef,
+              let cmd = `-var-create ${voname} * ${name}`;
+              if (!value) {
+                vscodeRef = nextRef;
+                executionContext.structs.set(nextRef, {
+                  variableObjectName: voname,
+                  threadId: threadId,
+                  frameLevel: frameLevel,
+                  variables: [],
+                });
+              }
+              stackFrameLocal.variables.push(
+                new MidasVariable(
+                  name,
+                  value ?? type,
+                  vscodeRef,
+                  voname,
+                  value ? false : true
+                )
+              );
+              await this.gdb.execMI(cmd, threadId);
+            }
+            response.body = {
+              variables: stackFrameLocal.variables,
+            };
+            this.sendResponse(response);
           });
-        } else {
-          variables.push({
-            name: child.expression,
-            type: child.type,
-            value: child.value,
-            variablesReference: 0,
-          });
-        }
-      }
-      response.body = {
-        variables: variables,
-      };
-      this.sendResponse(response);
-    } else {
-      // we're drilling down on a scope.
-      // todo(simon): we need to make it so this also clears out the Variable Objects that GDB has in it's book keeping
-      this.variableHandler.reset();
-      let v = await this.gdb.clearVariableObjects();
-      let { threadId, frameLevel } = computeThreadAndFrameFromVarRef(
-        args.variableReference
-      );
-      await this.gdb.getStackLocals(threadId, frameLevel).then((locals) => {
-        let variables = [];
-        for (let arg of locals) {
-          if (!arg.value) {
-            let varRef = this.variableHandler.createNew(
-              `vo_${arg.name}_${args.variablesReference}`,
-              arg.name,
-              "0",
-              arg.value,
-              arg.type,
-              "0"
-            );
-            this.gdb.createVarObject(
-              arg.name,
-              `vo_${arg.name}_${args.variablesReference}`
-            );
-            variables.push({
-              name: arg.name,
-              type: arg.type,
-              value: "struct",
-              variablesReference: varRef,
-            });
-          } else {
-            variables.push({
-              name: arg.name,
-              type: arg.type,
-              value: arg.value,
-              variablesReference: 0,
-            });
+      } else {
+        // we need to update the stack frame
+        for (const v of stackFrameLocal.variables) {
+          if (!v.isStruct) {
+            let r = (
+              await this.gdb.execMI(`-var-evaluate-expression ${v.voName}`)
+            ).value;
+            if (r) {
+              v.value = r;
+            } else {
+              v.value = "error reading value";
+            }
           }
         }
         response.body = {
-          variables: variables,
+          variables: stackFrameLocal.variables,
         };
         this.sendResponse(response);
-      });
+      }
+    } else {
+      // we are a struct scope, produce this struct's members
+      let struct = executionContext.structs.get(variablesReference);
+      // let struct = this.gdb.structs.get(variablesReference);
+      if (struct.variables.length == 0) {
+        // we haven't cached it's members
+        let structAccessModifierList = await this.gdb.execMI(
+          `-var-list-children --all-values "${struct.variableObjectName}"`,
+          struct.threadId
+        );
+        let requests = [];
+        for (const accessModifier of structAccessModifierList.children) {
+          const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
+          let members = await this.gdb.execMI(membersCommands, struct.threadId);
+          const expr = members.children[0].value.exp;
+          if (expr) {
+            if (isVisibilityModifier(expr)) {
+              let sub = await this.gdb.execMI(
+                `-var-list-children --all-values "${accessModifier.value.name}.${expr}"`
+              );
+              requests.push(sub);
+            } else {
+              requests.push(members);
+            }
+          }
+        }
+        for (let arr of requests) {
+          for (let v of arr.children) {
+            let nextRef = 0;
+            let display = "";
+            let isStruct = false;
+            if (!v.value.value || v.value.value == "{...}") {
+              nextRef = this.gdb.nextVarRef;
+              this.gdb.varRefContexts.set(nextRef, {
+                threadId: threadId,
+                frameLevel: struct.frameLevel,
+              });
+              executionContext.structs.set(nextRef, {
+                variableObjectName: v.value.name,
+                threadId: struct.threadId,
+                frameLevel: struct.frameLevel,
+                variables: [],
+              });
+              display = v.value.type;
+              isStruct = true;
+            } else {
+              display = v.value.value;
+              isStruct = false;
+            }
+            struct.variables.push(
+              new MidasVariable(
+                v.value.exp,
+                display,
+                nextRef,
+                v.value.name,
+                isStruct
+              )
+            );
+          }
+        }
+        response.body = {
+          variables: struct.variables,
+        };
+      } else {
+        // TODO(simon): we have, now update those members
+        for (let v of struct.variables) {
+          if (!v.isStruct) {
+            let r = (
+              await this.gdb.execMI(`-var-evaluate-expression ${v.voName}`)
+            ).value;
+            if (r) {
+              v.value = r;
+            } else {
+              v.value = "error reading value";
+            }
+          }
+        }
+        response.body = {
+          variables: struct.variables,
+        };
+      }
+      this.sendResponse(response);
     }
   }
 
@@ -403,7 +527,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     const scopes = [];
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
     // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
-    let locals_scope = createLocalScope(STACK_ID_START + args.frameId);
+    let locals_scope = createLocalScope(args.frameId);
     scopes.push(locals_scope);
     response.body = {
       scopes: scopes,

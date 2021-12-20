@@ -9,9 +9,9 @@ const {
   BreakpointEvent,
   TerminatedEvent,
   ThreadEvent,
-
   StackFrame,
   Source,
+  Variable,
 } = require("vscode-debugadapter");
 
 const { GDBMixin } = require("./gdb-mixin");
@@ -32,6 +32,39 @@ function log(location, payload) {
 /** @constructor */
 let GDBBase = gdbjs.GDB;
 
+class MidasVariable extends Variable {
+  constructor(name, value, ref, variableObjectName, isStructureType) {
+    super(name, value, ref);
+    this.voName = variableObjectName;
+    this.isStruct = isStructureType;
+  }
+}
+
+class ExecutionState {
+  threadId;
+  clearStateFn;
+
+  constructor(threadId, clearState) {
+    this.threadId = threadId;
+    this.clearStateFn = clearState;
+  }
+
+  clearState() {
+    this.executingFrameAddress = null;
+    this.stack = [];
+    this.clearStateFn(this);
+  }
+
+  executingFrameAddress = null;
+  /** @type {import("vscode-debugadapter").StackFrame[]} */
+  stack = [];
+  /** @type {Map<number, {threadId: number, frameLevel: number, variables: MidasVariable[] }>} */
+  stackFrameLocals = new Map();
+  // eslint-disable-next-line max-len
+  /** @type {Map<number, {threadId: number, frameLevel: number, variableObjectName: string, variables: MidasVariable[] }>} */
+  structs = new Map();
+}
+
 /**
  * @constructor
  */
@@ -44,12 +77,19 @@ class GDB extends GDBMixin(GDBBase) {
   #fnBreakpoints;
 
   #loadedLibraries;
-
   variableObjectsRecorded = [];
 
-  #target;
+  #nextVarRef = 1000 * 1000;
+  #nextFrameRef = 1000;
 
+  #target;
   #program = "";
+
+  /** @type { Map<number, ExecutionState> } */
+  executionStates = new Map();
+
+  /** @type {Map<number, { threadId: number, frameLevel: number } >} */
+  varRefContexts = new Map();
 
   #threads = new Map();
   userRequestedInterrupt = false;
@@ -64,6 +104,14 @@ class GDB extends GDBMixin(GDBBase) {
     this.#lineBreakpoints = new Map();
     this.#fnBreakpoints = new Map();
     this.#target = target;
+  }
+
+  get nextVarRef() {
+    return this.#nextFrameRef++;
+  }
+
+  get nextFrameRef() {
+    return this.#nextFrameRef++;
   }
 
   async start(program, stopOnEntry, debug, doTrace, allStopMode) {
@@ -446,6 +494,18 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadCreated(thread) {
     thread.name = this.#program;
     this.#threads.set(thread.id, thread);
+    this.executionStates.set(
+      thread.id,
+      new ExecutionState(thread.id, async (execstate) => {
+        for (const frame of execstate.stackFrameLocals.values()) {
+          for (const v of frame.variables) {
+            await this.execMI(`-var-delete ${v.voName}`, execstate.threadId);
+          }
+        }
+        execstate.stackFrameLocals.clear();
+        execstate.structs.clear();
+      })
+    );
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
   }
 
@@ -659,4 +719,5 @@ class GDB extends GDBMixin(GDBBase) {
 
 module.exports = {
   GDB,
+  MidasVariable,
 };
