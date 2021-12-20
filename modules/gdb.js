@@ -32,6 +32,7 @@ function log(location, payload) {
 /** @constructor */
 let GDBBase = gdbjs.GDB;
 
+// A bridge between GDB Variable Objects and VSCode "Variable" from the vscode-debugadapter module
 class MidasVariable extends Variable {
   constructor(name, value, ref, variableObjectName, isStructureType) {
     super(name, value, ref);
@@ -714,6 +715,22 @@ class GDB extends GDBMixin(GDBBase) {
       };
       stopEvent.body = body;
       this.sendEvent(stopEvent);
+    }
+  }
+
+  /**
+   * @param {MidasVariable[]} variables - a reference to an array of variables that are to be changed
+   */
+  async updateMidasVariables(threadId, variables) {
+    for (const v of variables) {
+      if (!v.isStruct) {
+        let r = (
+          await this.execMI(`-var-evaluate-expression ${v.voName}`, threadId)
+        ).value;
+        if (r) {
+          v.value = r;
+        }
+      }
     }
   }
 }
