@@ -49,10 +49,10 @@ class ExecutionState {
     this.clearStateFn = clearState;
   }
 
-  clearState() {
+  async clearState() {
     this.executingFrameAddress = null;
     this.stack = [];
-    this.clearStateFn(this);
+    await this.clearStateFn(this);
   }
 
   executingFrameAddress = null;
@@ -504,6 +504,7 @@ class GDB extends GDBMixin(GDBBase) {
         }
         execstate.stackFrameLocals.clear();
         execstate.structs.clear();
+        execstate.stack = [];
       })
     );
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
