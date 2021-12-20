@@ -288,7 +288,9 @@ class DebugSession extends DebugAdapter.DebugSession {
           const res = stack.map((frame, index) => {
             const source = new DebugAdapter.Source(frame.file, frame.fullname);
             const stackFrameIdentifier = this.gdb.nextFrameRef;
-
+            console.log(
+              `setting stack frame local ref: ${stackFrameIdentifier}`
+            );
             exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
               threadId: args.threadId,
               frameLevel: index,
@@ -322,7 +324,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       if (miResult.value != exec_ctx.executingFrameAddress) {
         // invalidate execution state, time to rebuild it
         // TODO: check if we've just chopped off the top of the stack, if so, we don't need to rebuild the entire thing, just the [stack.top() - 1]
-        exec_ctx.clearState();
+        await exec_ctx.clearState();
         exec_ctx.executingFrameAddress = miResult.value;
         await this.gdb
           .getStack(args.levels, args.threadId)
@@ -333,7 +335,9 @@ class DebugSession extends DebugAdapter.DebugSession {
                 frame.fullname
               );
               const stackFrameIdentifier = this.gdb.nextFrameRef;
-
+              console.log(
+                `setting stack frame local ref: ${stackFrameIdentifier}`
+              );
               exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
                 threadId: args.threadId,
                 frameLevel: index,
@@ -356,9 +360,15 @@ class DebugSession extends DebugAdapter.DebugSession {
               stackFrames: res,
             };
             exec_ctx.stack = res;
-            this.sendResponse(response);
+            this.gdb.executionStates.set(args.threadId, exec_ctx);
           });
+        this.sendResponse(response);
       } else {
+        let { frame } = await this.gdb.execMI(
+          `-stack-info-frame`,
+          exec_ctx.threadId
+        );
+        exec_ctx.stack[0].line = +frame.line;
         response.body = {
           stackFrames: exec_ctx.stack,
         };
@@ -396,6 +406,7 @@ class DebugSession extends DebugAdapter.DebugSession {
               let cmd = `-var-create ${voname} * ${name}`;
               if (!value) {
                 vscodeRef = nextRef;
+                console.log(`setting var ref for structs: ${nextRef}`);
                 executionContext.structs.set(nextRef, {
                   variableObjectName: voname,
                   threadId: threadId,
@@ -440,7 +451,9 @@ class DebugSession extends DebugAdapter.DebugSession {
       }
     } else {
       // we are a struct scope, produce this struct's members
+      console.log(`var ref: ${variablesReference}`);
       let struct = executionContext.structs.get(variablesReference);
+
       // let struct = this.gdb.structs.get(variablesReference);
       if (struct.variables.length == 0) {
         // we haven't cached it's members
@@ -475,6 +488,7 @@ class DebugSession extends DebugAdapter.DebugSession {
                 threadId: threadId,
                 frameLevel: struct.frameLevel,
               });
+              console.log(`setting var ref for structs: ${nextRef}`);
               executionContext.structs.set(nextRef, {
                 variableObjectName: v.value.name,
                 threadId: struct.threadId,
