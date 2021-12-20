@@ -380,6 +380,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   async variablesRequest(response, { variablesReference }) {
     // unfortunately, due to the convoluted nature of GDB MI's approach, we discard the changelist
     // and instead read the values with -var-evaluate-expression calls.
+    // However, we must call this, otherwise the var objs do not get updated in the backend
     await this.gdb.execMI(`-var-update *`);
     const isVisibilityModifier = (expr) => {
       return expr === "public" || expr === "private" || expr === "protected";
@@ -432,29 +433,20 @@ class DebugSession extends DebugAdapter.DebugSession {
           });
       } else {
         // we need to update the stack frame
-        for (const v of stackFrameLocal.variables) {
-          if (!v.isStruct) {
-            let r = (
-              await this.gdb.execMI(`-var-evaluate-expression ${v.voName}`)
-            ).value;
-            if (r) {
-              v.value = r;
-            } else {
-              v.value = "error reading value";
-            }
-          }
-        }
-        response.body = {
-          variables: stackFrameLocal.variables,
-        };
-        this.sendResponse(response);
+        this.gdb
+          .updateMidasVariables(
+            stackFrameLocal.threadId,
+            stackFrameLocal.variables
+          )
+          .then((_) => {
+            response.body = {
+              variables: stackFrameLocal.variables,
+            };
+            this.sendResponse(response);
+          });
       }
     } else {
-      // we are a struct scope, produce this struct's members
-      console.log(`var ref: ${variablesReference}`);
       let struct = executionContext.structs.get(variablesReference);
-
-      // let struct = this.gdb.structs.get(variablesReference);
       if (struct.variables.length == 0) {
         // we haven't cached it's members
         let structAccessModifierList = await this.gdb.execMI(
@@ -488,7 +480,6 @@ class DebugSession extends DebugAdapter.DebugSession {
                 threadId: threadId,
                 frameLevel: struct.frameLevel,
               });
-              console.log(`setting var ref for structs: ${nextRef}`);
               executionContext.structs.set(nextRef, {
                 variableObjectName: v.value.name,
                 threadId: struct.threadId,
@@ -515,25 +506,17 @@ class DebugSession extends DebugAdapter.DebugSession {
         response.body = {
           variables: struct.variables,
         };
+        this.sendResponse(response);
       } else {
-        // TODO(simon): we have, now update those members
-        for (let v of struct.variables) {
-          if (!v.isStruct) {
-            let r = (
-              await this.gdb.execMI(`-var-evaluate-expression ${v.voName}`)
-            ).value;
-            if (r) {
-              v.value = r;
-            } else {
-              v.value = "error reading value";
-            }
-          }
-        }
-        response.body = {
-          variables: struct.variables,
-        };
+        this.gdb
+          .updateMidasVariables(struct.threadId, struct.variables)
+          .then((_) => {
+            response.body = {
+              variables: struct.variables,
+            };
+            this.sendResponse(response);
+          });
       }
-      this.sendResponse(response);
     }
   }
 
