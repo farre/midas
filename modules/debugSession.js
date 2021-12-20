@@ -407,12 +407,11 @@ class DebugSession extends DebugAdapter.DebugSession {
               let cmd = `-var-create ${voname} * ${name}`;
               if (!value) {
                 vscodeRef = nextRef;
-                console.log(`setting var ref for structs: ${nextRef}`);
                 executionContext.structs.set(nextRef, {
                   variableObjectName: voname,
                   threadId: threadId,
                   frameLevel: frameLevel,
-                  variables: [],
+                  memberVariables: [],
                 });
               }
               stackFrameLocal.variables.push(
@@ -434,10 +433,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       } else {
         // we need to update the stack frame
         this.gdb
-          .updateMidasVariables(
-            stackFrameLocal.threadId,
-            stackFrameLocal.variables
-          )
+          .updateMidasVariables(threadId, stackFrameLocal.variables)
           .then((_) => {
             response.body = {
               variables: stackFrameLocal.variables,
@@ -447,7 +443,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       }
     } else {
       let struct = executionContext.structs.get(variablesReference);
-      if (struct.variables.length == 0) {
+      if (struct.memberVariables.length == 0) {
         // we haven't cached it's members
         let structAccessModifierList = await this.gdb.execMI(
           `-var-list-children --all-values "${struct.variableObjectName}"`,
@@ -459,60 +455,51 @@ class DebugSession extends DebugAdapter.DebugSession {
           let members = await this.gdb.execMI(membersCommands, struct.threadId);
           const expr = members.children[0].value.exp;
           if (expr) {
-            if (isVisibilityModifier(expr)) {
-              let sub = await this.gdb.execMI(
-                `-var-list-children --all-values "${accessModifier.value.name}.${expr}"`
-              );
-              requests.push(sub);
-            } else {
-              requests.push(members);
-            }
+            requests.push(members);
           }
         }
-        for (let arr of requests) {
-          for (let v of arr.children) {
-            let nextRef = 0;
-            let display = "";
-            let isStruct = false;
-            if (!v.value.value || v.value.value == "{...}") {
-              nextRef = this.gdb.nextVarRef;
-              this.gdb.varRefContexts.set(nextRef, {
-                threadId: threadId,
-                frameLevel: struct.frameLevel,
-              });
-              executionContext.structs.set(nextRef, {
-                variableObjectName: v.value.name,
-                threadId: struct.threadId,
-                frameLevel: struct.frameLevel,
-                variables: [],
-              });
-              display = v.value.type;
-              isStruct = true;
-            } else {
-              display = v.value.value;
-              isStruct = false;
-            }
-            struct.variables.push(
-              new MidasVariable(
-                v.value.exp,
-                display,
-                nextRef,
-                v.value.name,
-                isStruct
-              )
-            );
+        for (let v of requests.flatMap((i) => i.children)) {
+          let nextRef = 0;
+          let display = "";
+          let isStruct = false;
+          if (!v.value.value || v.value.value == "{...}") {
+            nextRef = this.gdb.nextVarRef;
+            this.gdb.varRefContexts.set(nextRef, {
+              threadId: threadId,
+              frameLevel: struct.frameLevel,
+            });
+            executionContext.structs.set(nextRef, {
+              variableObjectName: v.value.name,
+              threadId: struct.threadId,
+              frameLevel: struct.frameLevel,
+              memberVariables: [],
+            });
+            display = v.value.type;
+            isStruct = true;
+          } else {
+            display = v.value.value;
+            isStruct = false;
           }
+          struct.memberVariables.push(
+            new MidasVariable(
+              v.value.exp,
+              display,
+              nextRef,
+              v.value.name,
+              isStruct
+            )
+          );
         }
         response.body = {
-          variables: struct.variables,
+          variables: struct.memberVariables,
         };
         this.sendResponse(response);
       } else {
         this.gdb
-          .updateMidasVariables(struct.threadId, struct.variables)
+          .updateMidasVariables(threadId, struct.memberVariables)
           .then((_) => {
             response.body = {
-              variables: struct.variables,
+              variables: struct.memberVariables,
             };
             this.sendResponse(response);
           });
