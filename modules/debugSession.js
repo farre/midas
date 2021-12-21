@@ -275,90 +275,21 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   async stackTraceRequest(response, args) {
     let exec_ctx = this.gdb.executionStates.get(args.threadId);
-    if (exec_ctx.executingFrameAddress == null) {
-      let miResult = await this.gdb.execMI(
-        `-data-evaluate-expression $rbp`,
-        args.threadId
-      );
-      exec_ctx.executingFrameAddress = miResult.value;
-      await this.gdb
-        .getStack(args.levels, args.threadId)
-        .then(async (stack) => {
-          const res = stack.map((frame, index) => {
-            const source = new DebugAdapter.Source(frame.file, frame.fullname);
-            const stackFrameIdentifier = this.gdb.nextFrameRef;
-            exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
-              threadId: args.threadId,
-              frameLevel: index,
-              variables: [],
-            });
-
-            this.gdb.varRefContexts.set(stackFrameIdentifier, {
-              threadId: args.threadId,
-              frameLevel: index,
-            });
-
-            return new DebugAdapter.StackFrame(
-              stackFrameIdentifier,
-              `${frame.func} @ 0x${frame.addr}`,
-              source,
-              frame.line,
-              0
-            );
-          });
-          exec_ctx.stack = res;
-          response.body = {
-            stackFrames: exec_ctx.stack,
-          };
-          this.sendResponse(response);
-        });
+    if (exec_ctx.stack.length == 0) {
+      response.body = {
+        stackFrames: await this.gdb.getTrackedStack(args.levels, args.threadId),
+      };
+      this.sendResponse(response);
     } else {
-      let miResult = await this.gdb.execMI(
-        `-data-evaluate-expression $rbp`,
-        args.threadId
-      );
-      if (miResult.value != exec_ctx.executingFrameAddress) {
-        // invalidate execution state, time to rebuild it
-        // eslint-disable-next-line max-len
-        // TODO: check if we've just chopped off the top of the stack, if so, we don't need to rebuild the entire thing, just the [stack.top() - 1]
+      let frameInfo = await this.gdb.stackInfoFrame();
+      if (+frameInfo.addr != exec_ctx.stack[0].frameAddress) {
         await exec_ctx.clearState();
-        exec_ctx.executingFrameAddress = miResult.value;
-        await this.gdb
-          .getStack(args.levels, args.threadId)
-          .then(async (stack) => {
-            const res = stack.map((frame, index) => {
-              const source = new DebugAdapter.Source(
-                frame.file,
-                frame.fullname
-              );
-              const stackFrameIdentifier = this.gdb.nextFrameRef;
-              console.log(
-                `setting stack frame local ref: ${stackFrameIdentifier}`
-              );
-              exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
-                threadId: args.threadId,
-                frameLevel: index,
-                variables: [],
-              });
-
-              this.gdb.varRefContexts.set(stackFrameIdentifier, {
-                threadId: args.threadId,
-                frameLevel: index,
-              });
-              return new DebugAdapter.StackFrame(
-                stackFrameIdentifier,
-                `${frame.func} @ 0x${frame.addr}`,
-                source,
-                frame.line,
-                0
-              );
-            });
-            response.body = {
-              stackFrames: res,
-            };
-            exec_ctx.stack = res;
-            this.gdb.executionStates.set(args.threadId, exec_ctx);
-          });
+        response.body = {
+          stackFrames: await this.gdb.getTrackedStack(
+            args.levels,
+            args.threadId
+          ),
+        };
         this.sendResponse(response);
       } else {
         response.body = {
@@ -560,8 +491,52 @@ class DebugSession extends DebugAdapter.DebugSession {
     super[name](...args);
   }
 
-  setVariableRequest(...args) {
-    return this.virtualDispatch(...args);
+  async setVariableRequest(response, args) {
+    let { threadId, frameLevel } = this.gdb.varRefContexts.get(
+      args.variablesReference
+    );
+    let executionContext = this.gdb.executionStates.get(threadId);
+    let stackFrame = executionContext.stackFrameLocals.get(
+      args.variablesReference
+    );
+    if (stackFrame) {
+      for (const v of stackFrame.variables) {
+        if (v.name == args.name) {
+          let res = await this.gdb.execMI(
+            `-var-assign ${v.voName} "${args.value}"`,
+            threadId
+          );
+          if (res.value) {
+            v.value = res.value;
+            response.body = {
+              value: res.value,
+              variablesReference: v.variablesReference,
+            };
+          }
+          this.sendResponse(response);
+          return;
+        }
+      }
+    } else {
+      let struct = executionContext.structs.get(args.variablesReference);
+      for (const v of struct.memberVariables) {
+        if (v.name == args.name) {
+          let res = await this.gdb.execMI(
+            `-var-assign ${v.voName} "${args.value}"`,
+            threadId
+          );
+          if (res.value) {
+            v.value = res.value;
+            response.body = {
+              value: res.value,
+              variablesReference: v.variablesReference,
+            };
+          }
+          this.sendResponse(response);
+          return;
+        }
+      }
+    }
   }
 
   runInTerminalRequest(...args) {
