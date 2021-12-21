@@ -311,7 +311,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     let executionContext = this.gdb.executionStates.get(threadId);
     let stackFrameLocal =
       executionContext.stackFrameLocals.get(variablesReference);
-    // let stackFrameLocal = this.gdb.stackFrameLocals.get(variablesReference);
     if (stackFrameLocal) {
       // we are a stack frame
       if (stackFrameLocal.variables.length == 0) {
@@ -330,7 +329,6 @@ class DebugSession extends DebugAdapter.DebugSession {
                 vscodeRef = nextRef;
                 executionContext.structs.set(nextRef, {
                   variableObjectName: voname,
-                  threadId: threadId,
                   frameLevel: frameLevel,
                   memberVariables: [],
                 });
@@ -355,7 +353,7 @@ class DebugSession extends DebugAdapter.DebugSession {
         // we need to update the stack frame
         this.gdb
           .updateMidasVariables(threadId, stackFrameLocal.variables)
-          .then((_) => {
+          .then(() => {
             response.body = {
               variables: stackFrameLocal.variables,
             };
@@ -368,12 +366,12 @@ class DebugSession extends DebugAdapter.DebugSession {
         // we haven't cached it's members
         let structAccessModifierList = await this.gdb.execMI(
           `-var-list-children --all-values "${struct.variableObjectName}"`,
-          struct.threadId
+          threadId
         );
         let requests = [];
         for (const accessModifier of structAccessModifierList.children) {
           const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
-          let members = await this.gdb.execMI(membersCommands, struct.threadId);
+          let members = await this.gdb.execMI(membersCommands, threadId);
           const expr = members.children[0].value.exp;
           if (expr) {
             requests.push(members);
@@ -391,7 +389,6 @@ class DebugSession extends DebugAdapter.DebugSession {
             });
             executionContext.structs.set(nextRef, {
               variableObjectName: v.value.name,
-              threadId: struct.threadId,
               frameLevel: struct.frameLevel,
               memberVariables: [],
             });

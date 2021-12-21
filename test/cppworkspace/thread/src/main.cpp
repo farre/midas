@@ -18,6 +18,14 @@ struct Surface {
     double max;
   } x, y;
 };
+
+auto broke_free(auto a, auto b) {
+  if(a != 4.0) {
+    auto foo = a + 1;
+  }
+  return (a + b) > 4.0;
+}
+
 using Iterations = int;
 Iterations mandelbrot(double real, double imag, int limit = 100) {
 	double re = real;
@@ -27,7 +35,7 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 		double r2 = re * re;
 		double i2 = im * im;
 
-		if (r2 + i2 > 4.0) return Iterations { i };
+		if (broke_free(r2, i2)) return Iterations { i };
 
 		im = 2.0 * re * im + imag;
 		re = r2 - i2 + real;
@@ -39,6 +47,8 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 auto ncpus_to_use() {
   return 4;
 }
+
+
 
 void process_range(Surface surface, int y_start, int y_to) {
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
@@ -113,7 +123,7 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 
 int main(int argc, const char **argv) {
   vecOfString();
-  process_tasks_and_run(100, 100);
+  process_tasks_and_run(1200, 760);
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
   static constexpr auto bar = "saying barfoo is something nobody does";
