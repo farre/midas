@@ -11,7 +11,6 @@ const {
   TerminatedEvent,
   ThreadEvent,
   Variable,
-  Source,
   StackFrame,
 } = require("vscode-debugadapter");
 
@@ -278,7 +277,6 @@ class GDB extends GDBMixin(GDBBase) {
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
         exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
-          threadId: threadId,
           frameLevel: index,
           variables: [],
         });
@@ -534,6 +532,7 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param {{threadId: number}} payload
    */
+  // eslint-disable-next-line no-unused-vars
   #onNotifyRunning(payload) {}
 
   /**
@@ -740,7 +739,7 @@ class GDB extends GDBMixin(GDBBase) {
     return this.execMI(`-stack-info-frame`)
       .then((r) => r.frame)
       .catch((e) => {
-        console.log(`failed to get frame info`);
+        console.log(`failed to get frame info: ${e}`);
         return null;
       });
   }
