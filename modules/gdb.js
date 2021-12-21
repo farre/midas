@@ -76,10 +76,10 @@ class ExecutionState {
 
   /** @type {MidasStackFrame[]} */
   stack = [];
-  /** @type {Map<number, {threadId: number, frameLevel: number, variables: MidasVariable[] }>} */
+  /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
   stackFrameLocals = new Map();
   // eslint-disable-next-line max-len
-  /** @type {Map<number, {threadId: number, frameLevel: number, variableObjectName: string, memberVariables: MidasVariable[] }>} */
+  /** @type {Map<number, {frameLevel: number, variableObjectName: string, memberVariables: MidasVariable[] }>} */
   structs = new Map();
 }
 
@@ -456,12 +456,13 @@ class GDB extends GDBMixin(GDBBase) {
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
       }
+      case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
         let exec_ctx = this.executionStates.get(payload.thread.id);
         let top = exec_ctx.stack[0];
         let stackLocals = exec_ctx.stackFrameLocals.get(top.id);
         for (const v of stackLocals.variables) {
-          this.execMI(`-var-delete ${v.voName}`, stackLocals.threadId);
+          this.execMI(`-var-delete ${v.voName}`, exec_ctx.threadId);
           this.varRefContexts.delete(v.variablesReference);
         }
         exec_ctx.stackFrameLocals.delete(top.id);

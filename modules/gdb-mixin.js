@@ -47,7 +47,11 @@ function GDBMixin(GDBBase) {
     }
 
     async finishExecution(threadId) {
-      await this.execMI(`-exec-finish`, threadId);
+      await this.execMI(`-exec-finish`, threadId).catch((e) => {
+        // means we hit an error, probably in the outermost frame, which GDB complains
+        // about we not being able to finish out from
+        this.proceed(threadId);
+      });
     }
 
     async continueAll() {
