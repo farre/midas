@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 "use strict";
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
@@ -10,6 +11,8 @@ const {
   TerminatedEvent,
   ThreadEvent,
   Variable,
+  Source,
+  StackFrame,
 } = require("vscode-debugadapter");
 
 const { GDBMixin } = require("./gdb-mixin");
@@ -43,6 +46,20 @@ class MidasVariable extends Variable {
   }
 }
 
+class MidasStackFrame extends StackFrame {
+  /**
+   *
+   * @param {number} variablesReference
+   * @param {string} name
+   * @param {import("vscode-debugadapter").Source} src
+   * @param {number} ln
+   * @param {?number} col
+   */
+  constructor(variablesReference, name, src, ln, col, frameAddress) {
+    super(variablesReference, name, src, ln, col);
+  }
+}
+
 class ExecutionState {
   threadId;
   clearStateFn;
@@ -53,13 +70,11 @@ class ExecutionState {
   }
 
   async clearState() {
-    this.executingFrameAddress = null;
     this.stack = [];
     await this.clearStateFn(this);
   }
 
-  executingFrameAddress = null;
-  /** @type {import("vscode-debugadapter").StackFrame[]} */
+  /** @type {MidasStackFrame[]} */
   stack = [];
   /** @type {Map<number, {threadId: number, frameLevel: number, variables: MidasVariable[] }>} */
   stackFrameLocals = new Map();
@@ -245,7 +260,7 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param {number} levels
    * @param {number} [threadId]
-   * @returns {Promise<gdbTypes.StackFrame[]>}
+   * @returns {Promise<{ addr: string, arch: string, file: string, fullname:string, func:string, level:string, line:string }[]>}
    */
   async getStack(levels, threadId) {
     let command = `-stack-list-frames ${
@@ -253,10 +268,43 @@ class GDB extends GDBMixin(GDBBase) {
     } 0 ${levels}`;
     let { stack } = await this.execMI(command);
     return stack.map((frame) => {
-      // eslint-disable-next-line no-unused-vars
-      const { addr, arch, file, fullname, func, level, line } = frame.value;
-      return new gdbTypes.StackFrame(file, fullname, line, func, level, addr);
+      return frame.value;
     });
+  }
+
+  async getTrackedStack(levels, threadId) {
+    let exec_ctx = this.executionStates.get(threadId);
+    exec_ctx.stack = await this.getStack(levels, threadId).then((r) =>
+      r.map((frame, index) => {
+        const stackFrameIdentifier = this.nextFrameRef;
+        exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
+          threadId: threadId,
+          frameLevel: index,
+          variables: [],
+        });
+
+        this.varRefContexts.set(stackFrameIdentifier, {
+          threadId: threadId,
+          frameLevel: index,
+        });
+
+        let r = new (require("vscode-debugadapter").StackFrame)(
+          stackFrameIdentifier,
+          `${frame.func} @ 0x${frame.addr}`,
+          new (require("vscode-debugadapter").Source)(
+            frame.file,
+            frame.fullname
+          ),
+          +frame.line,
+          0
+        );
+        // we can't extend StackFrame for some reason. It is doing something magical behind the scenes. We have to brute-force
+        // rape the type, and tack this on by ourselves. Embarrassing.
+        r.frameAddress = +frame.addr;
+        return r;
+      })
+    );
+    return exec_ctx.stack;
   }
 
   threads() {
@@ -658,9 +706,22 @@ class GDB extends GDBMixin(GDBBase) {
       }
     }
   }
+
+  /** Returns info about current stack frame.
+   * @returns {Promise<{level: string, addr: string, func: string, file: string, fullname: string, line: string, arch: string}>}
+   */
+  async stackInfoFrame() {
+    return this.execMI(`-stack-info-frame`)
+      .then((r) => r.frame)
+      .catch((e) => {
+        console.log(`failed to get frame info`);
+        return null;
+      });
+  }
 }
 
 module.exports = {
   GDB,
   MidasVariable,
+  MidasStackFrame,
 };
