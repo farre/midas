@@ -427,28 +427,53 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onStopped(payload) {
     log(getFunctionName(), payload);
+    let reason;
+    try {
+      reason = payload.reason.join(",");
+    } catch {
+      reason = payload.reason;
+    }
 
-    switch (payload.reason) {
-      case "breakpoint-hit":
+    switch (reason) {
+      case "breakpoint-hit": {
         this.#onBreakpointHit(payload.thread);
         let exec_ctx = this.executionStates.get(payload.thread.id);
         if (exec_ctx.stack.length > 0)
           exec_ctx.stack[0].line = payload.thread.frame.line;
         break;
-      case "exited-normally":
+      }
+      case "exited-normally": {
         this.sendEvent(new TerminatedEvent());
         break;
-      case "signal-received":
+      }
+      case "signal-received": {
         this.#onSignalReceived(payload.thread, payload);
         break;
-      case "end-stepping-range":
+      }
+      case "end-stepping-range": {
         this.executionStates.get(payload.thread.id).stack[0].line =
           payload.thread.frame.line;
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
-      case "function-finished,breakpoint-hit":
+      }
+      case "function-finished,breakpoint-hit": {
+        let exec_ctx = this.executionStates.get(payload.thread.id);
+        let top = exec_ctx.stack[0];
+        let stackLocals = exec_ctx.stackFrameLocals.get(top.id);
+        for (const v of stackLocals.variables) {
+          this.execMI(`-var-delete ${v.voName}`, stackLocals.threadId);
+          this.varRefContexts.delete(v.variablesReference);
+        }
+        exec_ctx.stackFrameLocals.delete(top.id);
+        this.varRefContexts.delete(top.id);
+        exec_ctx.stack = exec_ctx.stack.splice(1);
+        for (let s of exec_ctx.stack) {
+          this.varRefContexts.get(s.id).frameLevel -= 1;
+        }
+
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
+      }
       default:
         console.log(`stopped for other reason: ${payload.reason}`);
     }
