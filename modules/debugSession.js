@@ -13,8 +13,7 @@ const fs = require("fs");
 const net = require("net");
 // eslint-disable-next-line no-unused-vars
 const { Server } = require("http");
-const { VariableObject } = require("./gdbtypes");
-const { VariableHandler, STACK_ID_START } = require("./variablesHandler");
+const { VariableHandler } = require("./variablesHandler");
 
 let server;
 
@@ -80,9 +79,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body = response.body || {};
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
-    // make VS Code use 'evaluate' when hovering over source
-    // We disable this. This is terrible for performance. But not only that, it asks our extension to evaluate keywords (like auto, const etc).
-    // VSCode, please, sincerely, fuck off.
     // response.body.supportsEvaluateForHovers = true;
 
     response.body.supportsReadMemoryRequest;
@@ -291,9 +287,6 @@ class DebugSession extends DebugAdapter.DebugSession {
           const res = stack.map((frame, index) => {
             const source = new DebugAdapter.Source(frame.file, frame.fullname);
             const stackFrameIdentifier = this.gdb.nextFrameRef;
-            console.log(
-              `setting stack frame local ref: ${stackFrameIdentifier}`
-            );
             exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
               threadId: args.threadId,
               frameLevel: index,
@@ -313,10 +306,10 @@ class DebugSession extends DebugAdapter.DebugSession {
               0
             );
           });
-          response.body = {
-            stackFrames: res,
-          };
           exec_ctx.stack = res;
+          response.body = {
+            stackFrames: exec_ctx.stack,
+          };
           this.sendResponse(response);
         });
     } else {
@@ -326,6 +319,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       );
       if (miResult.value != exec_ctx.executingFrameAddress) {
         // invalidate execution state, time to rebuild it
+        // eslint-disable-next-line max-len
         // TODO: check if we've just chopped off the top of the stack, if so, we don't need to rebuild the entire thing, just the [stack.top() - 1]
         await exec_ctx.clearState();
         exec_ctx.executingFrameAddress = miResult.value;
@@ -367,11 +361,6 @@ class DebugSession extends DebugAdapter.DebugSession {
           });
         this.sendResponse(response);
       } else {
-        let { frame } = await this.gdb.execMI(
-          `-stack-info-frame`,
-          exec_ctx.threadId
-        );
-        exec_ctx.stack[0].line = +frame.line;
         response.body = {
           stackFrames: exec_ctx.stack,
         };
@@ -385,9 +374,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     // and instead read the values with -var-evaluate-expression calls.
     // However, we must call this, otherwise the var objs do not get updated in the backend
     await this.gdb.execMI(`-var-update *`);
-    const isVisibilityModifier = (expr) => {
-      return expr === "public" || expr === "private" || expr === "protected";
-    };
     let { threadId, frameLevel } =
       this.gdb.varRefContexts.get(variablesReference);
     let executionContext = this.gdb.executionStates.get(threadId);
@@ -514,6 +500,18 @@ class DebugSession extends DebugAdapter.DebugSession {
     const scopes = [];
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
     // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
+    let registers = {
+      name: "Register",
+      variablesReference: 0,
+      expensive: false,
+      presentationHint: "locals",
+    };
+    let parameters = {
+      name: "Parameters",
+      variablesReference: 0,
+      expensive: false,
+      presentationHint: "locals",
+    };
     let locals_scope = createLocalScope(args.frameId);
     scopes.push(locals_scope);
     response.body = {

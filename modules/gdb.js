@@ -9,8 +9,6 @@ const {
   BreakpointEvent,
   TerminatedEvent,
   ThreadEvent,
-  StackFrame,
-  Source,
   Variable,
 } = require("vscode-debugadapter");
 
@@ -82,7 +80,6 @@ class GDB extends GDBMixin(GDBBase) {
   #fnBreakpoints;
 
   #loadedLibraries;
-  variableObjectsRecorded = [];
 
   #nextVarRef = 1000 * 1000;
   #nextFrameRef = 1000;
@@ -284,24 +281,6 @@ class GDB extends GDBMixin(GDBBase) {
 
   /**
    *
-   * @param {string} sourceCodeVariableName
-   * @param {string} variableObjectName
-   */
-  async createVarObject(sourceCodeVariableName, variableObjectName) {
-    const cmd = `-var-create ${variableObjectName} * ${sourceCodeVariableName}`;
-    let v = await this.execMI(cmd);
-    // we only ever keep track of parent variable objects; GDB deletes children for us
-    this.variableObjectsRecorded.push(v.name);
-    return v;
-  }
-
-  async clearVariableObjects() {
-    return this.variableObjectsRecorded.map(async (name) => {
-      this.execMI(`-var-delete ${name}`);
-    });
-  }
-  /**
-   *
    * @param {number} threadId
    * @param {number} frame
    * @returns {Promise<gdbTypes.VariableCompact[]>}
@@ -326,70 +305,6 @@ class GDB extends GDBMixin(GDBBase) {
    */
   getContext(thread) {
     return this.context(thread ? thread : undefined);
-  }
-
-  /**
-   * @typedef { {
-   *  variableObjectName: string,
-   *  expression: string,
-   *  value: string,
-   *  type: string,
-   *  threadID: string
-   *  numChild: string }
-   * } VariableObjectChild
-   * @param {string} variableObjectName
-   * @returns {Promise<VariableObjectChild[]>}
-   */
-  async getVariableListChildren(variableObjectName) {
-    const isVisibilityModifier = (expr) => {
-      return expr === "public" || expr === "private" || expr === "protected";
-    };
-    let mods = await this.execMI(
-      `-var-list-children --all-values "${variableObjectName}"`
-    );
-
-    let requests = [];
-    for (const r of mods.children) {
-      const membersCommands = `-var-list-children --all-values "${r.value.name}"`;
-      let members = await this.execMI(membersCommands);
-      /*
-       * why members.children[0] here? Well, if *any* of the first
-       * children of members, is either "protected", "private" or "public"
-       * means we will see *no* other thing, we first must drill down into that sub scope of this
-       * structure. Therefore we don't have to check [1] or [2] or any else. If *any* of them is
-       * a visibility modifier, we have to drill down.
-       */
-      const expr = members.children[0].value.exp;
-      if (expr) {
-        if (isVisibilityModifier(expr)) {
-          let sub = await this.execMI(
-            `-var-list-children --all-values "${r.value.name}.${expr}"`
-          );
-          requests.push(sub);
-        } else {
-          requests.push(members);
-        }
-      }
-    }
-
-    const makeVarObjChild = (res) => {
-      return {
-        variableObjectName: res.name,
-        expression: res.exp,
-        value: res.value,
-        type: res.type,
-        threadID: res["thread-id"],
-        numChild: res.numchild,
-      };
-    };
-
-    let res = [];
-    for (let arr of requests) {
-      for (let v of arr.children) {
-        res.push(makeVarObjChild(v.value));
-      }
-    }
-    return res;
   }
 
   // Async record handlers
@@ -464,9 +379,13 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onStopped(payload) {
     log(getFunctionName(), payload);
+
     switch (payload.reason) {
       case "breakpoint-hit":
         this.#onBreakpointHit(payload.thread);
+        let exec_ctx = this.executionStates.get(payload.thread.id);
+        if (exec_ctx.stack.length > 0)
+          exec_ctx.stack[0].line = payload.thread.frame.line;
         break;
       case "exited-normally":
         this.sendEvent(new TerminatedEvent());
@@ -475,9 +394,11 @@ class GDB extends GDBMixin(GDBBase) {
         this.#onSignalReceived(payload.thread, payload);
         break;
       case "end-stepping-range":
+        this.executionStates.get(payload.thread.id).stack[0].line =
+          payload.thread.frame.line;
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
-      case "function-finished":
+      case "function-finished,breakpoint-hit":
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
       default:
