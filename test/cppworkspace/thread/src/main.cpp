@@ -8,6 +8,9 @@
 #include <cstdlib>
 
 std::mutex g_stdio_mutex;
+struct Foo {
+  double x, y;
+};
 
 struct Surface {
   int width;
@@ -19,7 +22,8 @@ struct Surface {
   } x, y;
 };
 
-auto broke_free(auto a, auto b) {
+auto broke_free(auto a, auto b, Foo test) {
+  Foo bar = test;
   if(a != 4.0) {
     auto foo = a + 1;
   }
@@ -35,7 +39,7 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 		double r2 = re * re;
 		double i2 = im * im;
 
-		if (broke_free(r2, i2)) return Iterations { i };
+		if (broke_free(r2, i2, Foo{.x = r2, .y = i2})) return Iterations { i };
 
 		im = 2.0 * re * im + imag;
 		re = r2 - i2 + real;
@@ -57,6 +61,7 @@ void process_range(Surface surface, int y_start, int y_to) {
   auto escaped = 0;
   auto contained = 0;
   auto total = 0;
+  const auto one_third = ((y_to - y_start) / 3) + y_start;
   const auto two_thirds = ((y_to - y_start) / 3) * 2 + y_start;
   bool hitOnce = false;
   for(auto x = 0; x < surface.width; x++) {
@@ -68,6 +73,10 @@ void process_range(Surface surface, int y_start, int y_to) {
         escaped++;
       }
       total++;
+      if(y == one_third) {
+        auto some_break_point_here2 = []{};
+        some_break_point_here2();
+      }
       if(y == two_thirds && !hitOnce) {
         hitOnce = true;
         auto some_break_point_here = []{};
@@ -123,7 +132,9 @@ void process_tasks_and_run(int screen_width, int screen_height) {
 
 int main(int argc, const char **argv) {
   vecOfString();
-  process_tasks_and_run(1200, 760);
+  auto w = 200;
+  auto h = 200;
+  process_tasks_and_run(w, h);
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
   static constexpr auto bar = "saying barfoo is something nobody does";
