@@ -24,6 +24,6 @@
     "constructor-super": "warn",
     "valid-typeof": "warn",
     "indent": ["error", 2, { "SwitchCase": 1 }],
-    "max-len": ["warn", 120]
+    "max-len": ["warn", 150]
   }
 }
