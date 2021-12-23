@@ -24,9 +24,7 @@ function log(location, payload) {
     return;
   }
 
-  console.log(
-    `Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`
-  );
+  console.log(`Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
 }
 
 /** @constructor */
@@ -59,6 +57,12 @@ class MidasStackFrame extends StackFrame {
   }
 }
 
+const ContextType = {
+  REGISTER: 0,
+  STACKFRAME: 1,
+  STRUCT: 2,
+};
+
 class ExecutionState {
   threadId;
   clearStateFn;
@@ -77,6 +81,8 @@ class ExecutionState {
   stack = [];
   /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
   stackFrameLocals = new Map();
+  /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
+  stackFrameRegisterContents = new Map();
   // eslint-disable-next-line max-len
   /** @type {Map<number, {frameLevel: number, variableObjectName: string, memberVariables: MidasVariable[] }>} */
   structs = new Map();
@@ -93,6 +99,8 @@ class GDB extends GDBMixin(GDBBase) {
    * @type { Map<string, number> } */
   #fnBreakpoints;
 
+  registerFile = [];
+
   #loadedLibraries;
 
   #nextVarRef = 1000 * 1000;
@@ -102,7 +110,7 @@ class GDB extends GDBMixin(GDBBase) {
   #program = "";
 
   /** @type { Map<number, ExecutionState> } */
-  executionStates = new Map();
+  executionContexts = new Map();
 
   /** @type {Map<number, { threadId: number, frameLevel: number } >} */
   varRefContexts = new Map();
@@ -111,12 +119,7 @@ class GDB extends GDBMixin(GDBBase) {
   userRequestedInterrupt = false;
   allStopMode;
   constructor(target, binary, gdbPath, args = undefined) {
-    super(
-      spawn(
-        gdbPath,
-        !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]
-      )
-    );
+    super(spawn(gdbPath, !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]));
     this.#lineBreakpoints = new Map();
     this.#fnBreakpoints = new Map();
     this.#target = target;
@@ -141,7 +144,10 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       await this.execMI(`-gdb-set mi-async on`);
     }
-
+    let miResult = await this.execMI(`-data-list-register-names`);
+    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
+    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
+    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -241,9 +247,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async clearBreakPointsInFile(path) {
-    let breakpointIds = (this.#lineBreakpoints.get(path) ?? []).map(
-      (bkpt) => bkpt.id
-    );
+    let breakpointIds = (this.#lineBreakpoints.get(path) ?? []).map((bkpt) => bkpt.id);
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
@@ -262,37 +266,32 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns {Promise<{ addr: string, arch: string, file: string, fullname:string, func:string, level:string, line:string }[]>}
    */
   async getStack(levels, threadId) {
-    let command = `-stack-list-frames ${
-      threadId != 0 ? `--thread ${threadId}` : ""
-    } 0 ${levels}`;
+    let command = `-stack-list-frames ${threadId != 0 ? `--thread ${threadId}` : ""} 0 ${levels}`;
     let { stack } = await this.execMI(command);
     return stack.map((frame) => {
       return frame.value;
     });
   }
 
-  async getTrackedStack(levels, threadId) {
-    let exec_ctx = this.executionStates.get(threadId);
-    exec_ctx.stack = await this.getStack(levels, threadId).then((r) =>
+  async getTrackedStack(exec_ctx, levels) {
+    exec_ctx.stack = await this.getStack(levels, exec_ctx.threadId).then((r) =>
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
         exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
           frameLevel: index,
           variables: [],
+          registers: [],
         });
 
         this.varRefContexts.set(stackFrameIdentifier, {
-          threadId: threadId,
+          threadId: exec_ctx.threadId,
           frameLevel: index,
         });
 
         let r = new (require("vscode-debugadapter").StackFrame)(
           stackFrameIdentifier,
           `${frame.func} @ 0x${frame.addr}`,
-          new (require("vscode-debugadapter").Source)(
-            frame.file,
-            frame.fullname
-          ),
+          new (require("vscode-debugadapter").Source)(frame.file, frame.fullname),
           +frame.line,
           0
         );
@@ -318,9 +317,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns {Promise<Local[]>}
    */
   async getStackLocals(threadId, frameLevel) {
-    const command = `-stack-list-variables --thread ${threadId} --frame ${
-      frameLevel ?? 0
-    } --simple-values`;
+    const command = `-stack-list-variables --thread ${threadId} --frame ${frameLevel ?? 0} --simple-values`;
     const { variables } = await this.execMI(command);
     return variables.map(({ name, type, value }) => ({ name, type, value }));
   }
@@ -332,10 +329,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns {Promise<gdbTypes.VariableCompact[]>}
    */
   async getStackVariables(threadId, frame) {
-    const { variables } = this.execMI(
-      `stack-list-variables --frame ${frame} --simple-values`,
-      threadId
-    );
+    const { variables } = this.execMI(`stack-list-variables --frame ${frame} --simple-values`, threadId);
     return variables.map(({ name, value, type }) => {
       return new gdbTypes.VariableCompact(name, value, type);
     });
@@ -435,9 +429,8 @@ class GDB extends GDBMixin(GDBBase) {
     switch (reason) {
       case "breakpoint-hit": {
         this.#onBreakpointHit(payload.thread);
-        let exec_ctx = this.executionStates.get(payload.thread.id);
-        if (exec_ctx.stack.length > 0)
-          exec_ctx.stack[0].line = payload.thread.frame.line;
+        let exec_ctx = this.executionContexts.get(payload.thread.id);
+        if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = payload.thread.frame.line;
         break;
       }
       case "exited-normally": {
@@ -449,20 +442,20 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "end-stepping-range": {
-        this.executionStates.get(payload.thread.id).stack[0].line =
-          payload.thread.frame.line;
+        this.executionContexts.get(payload.thread.id).stack[0].line = payload.thread.frame.line;
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
-        let exec_ctx = this.executionStates.get(payload.thread.id);
+        let exec_ctx = this.executionContexts.get(payload.thread.id);
         let top = exec_ctx.stack[0];
         let stackLocals = exec_ctx.stackFrameLocals.get(top.id);
         for (const v of stackLocals.variables) {
           this.execMI(`-var-delete ${v.voName}`, exec_ctx.threadId);
           this.varRefContexts.delete(v.variablesReference);
         }
+
         exec_ctx.stackFrameLocals.delete(top.id);
         this.varRefContexts.delete(top.id);
         exec_ctx.stack = exec_ctx.stack.splice(1);
@@ -492,7 +485,7 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadCreated(thread) {
     thread.name = this.#program;
     this.#threads.set(thread.id, thread);
-    this.executionStates.set(
+    this.executionContexts.set(
       thread.id,
       new ExecutionState(thread.id, async (execstate) => {
         for (const frame of execstate.stackFrameLocals.values()) {
@@ -722,9 +715,7 @@ class GDB extends GDBMixin(GDBBase) {
   async updateMidasVariables(threadId, variables) {
     for (const v of variables) {
       if (!v.isStruct) {
-        let r = (
-          await this.execMI(`-var-evaluate-expression ${v.voName}`, threadId)
-        ).value;
+        let r = (await this.execMI(`-var-evaluate-expression ${v.voName}`, threadId)).value;
         if (r) {
           v.value = r;
         }
@@ -742,6 +733,16 @@ class GDB extends GDBMixin(GDBBase) {
         console.log(`failed to get frame info: ${e}`);
         return null;
       });
+  }
+
+  generateVariableReference({ threadId, frameLevel }) {
+    let nextRef = this.nextVarRef;
+    this.varRefContexts.set(nextRef, { threadId, frameLevel });
+    return nextRef;
+  }
+
+  selectStackFrame(frameLevel, threadId) {
+    return this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
   }
 }
 
