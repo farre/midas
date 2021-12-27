@@ -31,7 +31,8 @@ public:
   constexpr ~Number() = default;
 
   constexpr static Number<N> sum(Number<N> a, Number<N> b) {
-    return Number{a.value + b.value};
+    auto result = Number{a.value + b.value};
+    return result;
   }
 
   constexpr friend auto &operator<<(std::ostream &os, const Number &number) {
