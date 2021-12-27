@@ -301,6 +301,14 @@ class GDB extends GDBMixin(GDBBase) {
         return r;
       })
     );
+    let level = 0;
+    for (let s of exec_ctx.stack) {
+      const frameAddress = +(await this.readStackFrameStart(level++, exec_ctx.threadId));
+      s.frameAddress = frameAddress;
+    }
+    // we must select top most stack frame again, since we've rolled through the stack, updating the stack frame addresses
+    // or rather where they're origin address is, in memory
+    await this.execMI(`-stack-select-frame 0`);
     return exec_ctx.stack;
   }
 
@@ -743,6 +751,15 @@ class GDB extends GDBMixin(GDBBase) {
 
   selectStackFrame(frameLevel, threadId) {
     return this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
+  }
+
+  readRBP(threadId) {
+    return this.execMI(`-data-evaluate-expression $rbp`, threadId).then((r) => r.value);
+  }
+
+  async readStackFrameStart(frameLevel, threadId) {
+    await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
+    return this.readRBP(threadId);
   }
 }
 

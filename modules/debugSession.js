@@ -265,9 +265,9 @@ class DebugSession extends DebugAdapter.DebugSession {
       };
       this.sendResponse(response);
     } else {
-      let frameInfo = await this.gdb.stackInfoFrame();
+      let frameInfo = await this.gdb.readRBP(exec_ctx.threadId);
       // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
-      if (+frameInfo.addr != exec_ctx.stack[0].frameAddress) {
+      if (+frameInfo != exec_ctx.stack[0].frameAddress) {
         await exec_ctx.clearState();
         response.body = {
           stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.levels),
@@ -307,9 +307,8 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async handleStackFrameLocalsVariablesRequest(response, executionContext, stackFrameLocal) {
-    // we are a stack frame
+    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     if (stackFrameLocal.variables.length == 0) {
-      // we need to build the stack frame
       let result = await this.gdb.getStackLocals(executionContext.threadId, stackFrameLocal.frameLevel);
       for (const { name, type, value } of result) {
         let nextRef = this.gdb.generateVariableReference({
@@ -345,6 +344,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async handleStackFrameRegisterVariablesRequest(response, executionContext, stackFrameRegisters) {
+    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     await this.gdb.selectStackFrame(stackFrameRegisters.frameLevel, executionContext.threadId);
     let miResult = await this.gdb.execMI(`-data-list-register-values N ${this.gdb.generalPurposeRegCommandString}`);
     response.body = {
@@ -355,6 +355,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
   async handleStructVariablesRequest(response, executionContext, struct) {
+    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     if (struct.memberVariables.length == 0) {
       // we haven't cached it's members
       let structAccessModifierList = await this.gdb.execMI(
