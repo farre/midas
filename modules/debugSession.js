@@ -7,30 +7,11 @@ const vscode = require("vscode");
 const { DebugProtocol } = require("vscode-debugprotocol");
 const { GDB, MidasVariable } = require("./gdb");
 const { Subject } = require("await-notify");
-// eslint-disable-next-line no-unused-vars
-const { Thread, Variable } = require("gdb-js");
 const fs = require("fs");
 const net = require("net");
-// eslint-disable-next-line no-unused-vars
 const { Server } = require("http");
-const { VariableHandler } = require("./variablesHandler");
 
 let server;
-
-/**
- * Creates a Scope object. Calling vscode-debugadapter's Scope constructor, does not provide the implementation
- * of debug protocol scope that we need.
- * @param { number } variableReference
- * @returns { { name: string, variablesReference: number, expensive: boolean, presentationHint: string }}
- */
-const createLocalScope = (variableReference) => {
-  return {
-    name: "locals",
-    variablesReference: variableReference,
-    expensive: false,
-    presentationHint: "locals",
-  };
-};
 
 class DebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
@@ -41,9 +22,6 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   /** @type { Subject } */
   configIsDone;
-
-  /** @type { VariableHandler } */
-  variableHandler;
 
   _reportProgress;
   useInvalidetedEvent;
@@ -56,7 +34,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.variableHandler = new VariableHandler();
 
     this.on("error", (event) => {
       console.log(event.body);
@@ -287,7 +264,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     // and instead read the values with -var-evaluate-expression calls.
     // However, we must call this, otherwise the var objs do not get updated in the backend
     await this.gdb.execMI(`-var-update *`);
-    let { threadId, frameLevel } = this.gdb.varRefContexts.get(variablesReference);
+    const threadId = this.gdb.varRefContexts.get(variablesReference).threadId;
     let executionContext = this.gdb.executionContexts.get(threadId);
     let stackFrameLocal = executionContext.stackFrameLocals.get(variablesReference);
     if (stackFrameLocal) {
@@ -400,7 +377,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       };
       this.sendResponse(response);
     } else {
-      this.gdb.updateMidasVariables(executionContext.threadId, struct.memberVariables).then((_) => {
+      this.gdb.updateMidasVariables(executionContext.threadId, struct.memberVariables).then(() => {
         response.body = {
           variables: struct.memberVariables,
         };
@@ -487,7 +464,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async setVariableRequest(response, args) {
-    let { threadId, frameLevel } = this.gdb.varRefContexts.get(args.variablesReference);
+    const threadId = this.gdb.varRefContexts.get(args.variablesReference).threadId;
     let executionContext = this.gdb.executionContexts.get(threadId);
     let stackFrame = executionContext.stackFrameLocals.get(args.variablesReference);
     if (stackFrame) {
@@ -751,7 +728,7 @@ class ConfigurationProvider {
   async resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config || !config.type || config.type == undefined) {
-      vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then((r) => {
+      vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then(() => {
         return null;
       });
 

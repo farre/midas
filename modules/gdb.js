@@ -255,10 +255,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  // TODO(simon): List gdb functions we want / need to implement next
-
-  // async listBreakpoints(location) {}
-
   /**
    *
    * @param {number} levels
@@ -273,14 +269,20 @@ class GDB extends GDBMixin(GDBBase) {
     });
   }
 
+  /**
+   * @param { ExecutionState } exec_ctx
+   * @param { number } levels
+   * @returns
+   */
   async getTrackedStack(exec_ctx, levels) {
+    // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
+    //  This is ugly and bad, this needs refactoring.
     exec_ctx.stack = await this.getStack(levels, exec_ctx.threadId).then((r) =>
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
         exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
           frameLevel: index,
           variables: [],
-          registers: [],
         });
 
         this.varRefContexts.set(stackFrameIdentifier, {
