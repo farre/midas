@@ -266,8 +266,8 @@ class DebugSession extends DebugAdapter.DebugSession {
       this.sendResponse(response);
     } else {
       let frameInfo = await this.gdb.readRBP(exec_ctx.threadId);
-      // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
       if (+frameInfo != exec_ctx.stack[0].frameAddress) {
+        // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
         await exec_ctx.clearState();
         response.body = {
           stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.levels),
