@@ -248,7 +248,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       let frameInfo = await this.gdb.readRBP(exec_ctx.threadId);
       if (+frameInfo != exec_ctx.stack[0].frameAddress) {
         // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
-        await exec_ctx.clearState();
+        await exec_ctx.clear(this.gdb);
         response.body = {
           stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.levels),
         };
@@ -268,6 +268,14 @@ class DebugSession extends DebugAdapter.DebugSession {
     // However, we must call this, otherwise the var objs do not get updated in the backend
     const { variablesReference } = args;
     await this.gdb.execMI(`-var-update *`);
+
+    let handler = this.gdb.references.get(variablesReference);
+    if (handler) {
+      const prepared_response = await handler.handleRequest(response, this.gdb);
+      this.sendResponse(prepared_response);
+      return;
+    }
+
     let evaluatableVar = this.gdb.evaluatableStructuredVars.get(variablesReference);
     if (evaluatableVar) {
       await this.handleStructFromEvaluatableRequest(response, evaluatableVar);
@@ -276,19 +284,10 @@ class DebugSession extends DebugAdapter.DebugSession {
 
     const threadId = this.gdb.varRefContexts.get(variablesReference).threadId;
     let executionContext = this.gdb.executionContexts.get(threadId);
-    let stackFrameLocal = executionContext.stackFrameLocals.get(variablesReference);
-    if (stackFrameLocal) {
-      await this.handleStackFrameLocalsVariablesRequest(response, executionContext, stackFrameLocal);
-      return;
-    }
+
     let registers = executionContext.stackFrameRegisterContents.get(variablesReference);
     if (registers) {
       this.handleStackFrameRegisterVariablesRequest(response, executionContext, registers);
-      return;
-    }
-    let struct = executionContext.structs.get(variablesReference);
-    if (struct) {
-      await this.handleStructVariablesRequest(response, executionContext, struct);
       return;
     }
   }
@@ -520,49 +519,9 @@ class DebugSession extends DebugAdapter.DebugSession {
     super[name](...args);
   }
 
-  async setVariableRequest(response, args) {
-    const ctx = this.gdb.varRefContexts.get(args.variablesReference);
-    if (!ctx) {
-      // for now, we disallow setting value of watch variables.
-      // todo(simon): fix this.
-      this.sendResponse(response);
-      return;
-    }
-    const threadId = ctx.threadId;
-    let executionContext = this.gdb.executionContexts.get(threadId);
-    let stackFrame = executionContext.stackFrameLocals.get(args.variablesReference);
-    if (stackFrame) {
-      for (const v of stackFrame.variables) {
-        if (v.name == args.name) {
-          let res = await this.gdb.execMI(`-var-assign ${v.voName} "${args.value}"`, threadId);
-          if (res.value) {
-            v.value = res.value;
-            response.body = {
-              value: res.value,
-              variablesReference: v.variablesReference,
-            };
-          }
-          this.sendResponse(response);
-          return;
-        }
-      }
-    } else {
-      let struct = executionContext.structs.get(args.variablesReference);
-      for (const v of struct.memberVariables) {
-        if (v.name == args.name) {
-          let res = await this.gdb.execMI(`-var-assign ${v.voName} "${args.value}"`, threadId);
-          if (res.value) {
-            v.value = res.value;
-            response.body = {
-              value: res.value,
-              variablesReference: v.variablesReference,
-            };
-          }
-          this.sendResponse(response);
-          return;
-        }
-      }
-    }
+  async setVariableRequest(response, { variablesReference }) {
+    let reference = this.gdb.references.get(variablesReference);
+    this.sendResponse(response);
   }
 
   runInTerminalRequest(...args) {

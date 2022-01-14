@@ -17,6 +17,8 @@ const {
 const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
+const { LocalsReference, StructsReference } = require("./variablesrequest/mod");
+const { ExecutionState } = require("./executionState");
 
 let trace = true;
 function log(location, payload) {
@@ -57,37 +59,6 @@ class MidasStackFrame extends StackFrame {
   }
 }
 
-const ContextType = {
-  REGISTER: 0,
-  STACKFRAME: 1,
-  STRUCT: 2,
-};
-
-class ExecutionState {
-  threadId;
-  clearStateFn;
-
-  constructor(threadId, clearState) {
-    this.threadId = threadId;
-    this.clearStateFn = clearState;
-  }
-
-  async clearState() {
-    this.stack = [];
-    await this.clearStateFn(this);
-  }
-
-  /** @type {MidasStackFrame[]} */
-  stack = [];
-  /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
-  stackFrameLocals = new Map();
-  /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
-  stackFrameRegisterContents = new Map();
-  // eslint-disable-next-line max-len
-  /** @type {Map<number, {frameLevel: number, variableObjectName: string, memberVariables: MidasVariable[] }>} */
-  structs = new Map();
-}
-
 /**
  * @constructor
  */
@@ -109,8 +80,12 @@ class GDB extends GDBMixin(GDBBase) {
   #target;
   #program = "";
 
-  /** @type { Map<number, ExecutionState> } */
+  /** @typedef {number} ThreadId */
+  /** @type { Map<ThreadId, ExecutionState> } */
   executionContexts = new Map();
+
+  /** @type { Map<number, import("./variablesrequest/reference").VariablesReference >} */
+  references = new Map();
 
   /** @type {Map<number, { threadId: number, frameLevel: number } >} */
   varRefContexts = new Map();
@@ -132,6 +107,14 @@ class GDB extends GDBMixin(GDBBase) {
     this.#lineBreakpoints = new Map();
     this.#fnBreakpoints = new Map();
     this.#target = target;
+  }
+
+  /**
+   * @param {ThreadId} threadId
+   * @returns { ExecutionState }
+   */
+  getExecutionContext(threadId) {
+    return this.executionContexts.get(threadId);
   }
 
   get nextVarRef() {
@@ -289,10 +272,8 @@ class GDB extends GDBMixin(GDBBase) {
     exec_ctx.stack = await this.getStack(levels, exec_ctx.threadId).then((r) =>
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
-        exec_ctx.stackFrameLocals.set(stackFrameIdentifier, {
-          frameLevel: index,
-          variables: [],
-        });
+        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
+        exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, isChild: false });
 
         this.varRefContexts.set(stackFrameIdentifier, {
           threadId: exec_ctx.threadId,
@@ -467,21 +448,6 @@ class GDB extends GDBMixin(GDBBase) {
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
-        let exec_ctx = this.executionContexts.get(payload.thread.id);
-        let top = exec_ctx.stack[0];
-        let stackLocals = exec_ctx.stackFrameLocals.get(top.id);
-        for (const v of stackLocals.variables) {
-          this.execMI(`-var-delete ${v.voName}`, exec_ctx.threadId);
-          this.varRefContexts.delete(v.variablesReference);
-        }
-
-        exec_ctx.stackFrameLocals.delete(top.id);
-        this.varRefContexts.delete(top.id);
-        exec_ctx.stack = exec_ctx.stack.splice(1);
-        for (let s of exec_ctx.stack) {
-          this.varRefContexts.get(s.id).frameLevel -= 1;
-        }
-
         this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
         break;
       }
@@ -504,19 +470,7 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadCreated(thread) {
     thread.name = this.#program;
     this.#threads.set(thread.id, thread);
-    this.executionContexts.set(
-      thread.id,
-      new ExecutionState(thread.id, async (execstate) => {
-        for (const frame of execstate.stackFrameLocals.values()) {
-          for (const v of frame.variables) {
-            await this.execMI(`-var-delete ${v.voName}`, execstate.threadId);
-          }
-        }
-        execstate.stackFrameLocals.clear();
-        execstate.structs.clear();
-        execstate.stack = [];
-      })
-    );
+    this.executionContexts.set(thread.id, new ExecutionState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
   }
 
@@ -773,9 +727,13 @@ class GDB extends GDBMixin(GDBBase) {
     return this.execMI(`-data-evaluate-expression $rbp`, threadId).then((r) => r.value);
   }
 
+  readProgramCounter(threadId) {
+    return this.execMI(`-data-evaluate-expression $pc`, threadId).then((r) => r.value);
+  }
+
   async readStackFrameStart(frameLevel, threadId) {
     await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
-    return this.readRBP(threadId);
+    return this.readProgramCounter(threadId);
   }
 
   async evaluateExpression(expr, frameId) {
@@ -816,8 +774,6 @@ class GDB extends GDBMixin(GDBBase) {
   }
 }
 
-module.exports = {
-  GDB,
-  MidasVariable,
-  MidasStackFrame,
-};
+exports.GDB = GDB;
+exports.MidasVariable = MidasVariable;
+exports.MidasStackFrame = MidasStackFrame;
