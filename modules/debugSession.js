@@ -466,12 +466,12 @@ class DebugSession extends DebugAdapter.DebugSession {
 
     // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
     // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
-    let parameters = {
-      name: "Parameters",
-      variablesReference: 0,
-      expensive: false,
-      presentationHint: "arguments",
-    };
+    // let parameters = {
+    //   name: "Parameters",
+    //   variablesReference: 0,
+    //   expensive: false,
+    //   presentationHint: "arguments",
+    // };
 
     scopes.push(locals_scope, registers);
     response.body = {
