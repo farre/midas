@@ -521,7 +521,14 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   async setVariableRequest(response, args) {
-    const threadId = this.gdb.varRefContexts.get(args.variablesReference).threadId;
+    const ctx = this.gdb.varRefContexts.get(args.variablesReference);
+    if (!ctx) {
+      // for now, we disallow setting value of watch variables.
+      // todo(simon): fix this.
+      this.sendResponse(response);
+      return;
+    }
+    const threadId = ctx.threadId;
     let executionContext = this.gdb.executionContexts.get(threadId);
     let stackFrame = executionContext.stackFrameLocals.get(args.variablesReference);
     if (stackFrame) {
