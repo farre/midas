@@ -57,6 +57,8 @@ auto ncpus_to_use() {
 void process_range(Surface surface, int y_start, int y_to) {
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
   const auto dy = (surface.y.max - surface.y.min) / static_cast<double>(surface.height - 1);
+  auto copy = surface;
+  // to test watch variables, set breakpoint on limit, and breakpoint on line 86, add watch variable copy.x (or copy.y). Then run and when stopped and select different threads
   int limit = 1200;
   auto escaped = 0;
   auto contained = 0;
@@ -74,6 +76,13 @@ void process_range(Surface surface, int y_start, int y_to) {
       }
       total++;
       if(y == one_third) {
+        // this is for testing that watch variables work, and get updated, when different threads are selected.
+        // to test: set a watch variable for copy.x or copy.y and see if it updates accordingly
+        copy.x.max = y;
+        copy.y.max = y;
+        copy.x.min = y;
+        copy.y.min = y;
+
         auto some_break_point_here2 = []{};
         some_break_point_here2();
       }
@@ -130,10 +139,18 @@ void process_tasks_and_run(int screen_width, int screen_height) {
   for(auto& t : tasks) t.join();
 }
 
+auto test_evaluate_variables_when_passing_through_scopes() {
+  std::cout << "in main, w and h are ints" << std::endl;
+  float w = 3.14;
+  float h = 66.6;
+  std::cout << w << ", " << h << std::endl;
+}
+
 int main(int argc, const char **argv) {
   vecOfString();
   auto w = 200;
   auto h = 200;
+  test_evaluate_variables_when_passing_through_scopes();
   process_tasks_and_run(w, h);
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
