@@ -17,7 +17,7 @@ const {
 const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
-const { LocalsReference, StructsReference } = require("./variablesrequest/mod");
+const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
 
 let trace = true;
@@ -118,7 +118,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   get nextVarRef() {
-    return this.#nextFrameRef++;
+    return this.#nextVarRef++;
   }
 
   get nextFrameRef() {

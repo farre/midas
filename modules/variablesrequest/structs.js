@@ -1,4 +1,4 @@
-const MidasVariable = require("../gdb").MidasVariable;
+const GDB = require("../gdb");
 const { VariablesReference } = require("./reference");
 
 /**
@@ -56,7 +56,7 @@ class StructsReference extends VariablesReference {
           displayValue = v.value.value;
           isStruct = false;
         }
-        this.#memberVariables.push(new MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
+        this.#memberVariables.push(new GDB.MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
       }
       response.body = {
         variables: this.#memberVariables,
