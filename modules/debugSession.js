@@ -1,10 +1,10 @@
 "use strict";
 
-const DebugAdapter = require("vscode-debugadapter");
+const DebugAdapter = require("@vscode/debugadapter");
 const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
-const { DebugProtocol } = require("vscode-debugprotocol");
+const { DebugProtocol } = require("@vscode/debugprotocol");
 const { GDB, MidasVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
@@ -83,6 +83,9 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body.supportsGotoTargetsRequest = true;
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
+
+    // leave uncommented. Because it does nothing. Perhaps implement it for them?
+    // response.body.supportsValueFormattingOptions = true;
 
     response.body.supportsRestartRequest = true;
 
@@ -259,11 +262,18 @@ class DebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  async variablesRequest(response, { variablesReference }) {
+  async variablesRequest(response, args) {
     // unfortunately, due to the convoluted nature of GDB MI's approach, we discard the changelist
     // and instead read the values with -var-evaluate-expression calls.
     // However, we must call this, otherwise the var objs do not get updated in the backend
+    const { variablesReference } = args;
     await this.gdb.execMI(`-var-update *`);
+    let evaluatableVar = this.gdb.evaluatableStructuredVars.get(variablesReference);
+    if (evaluatableVar) {
+      await this.handleStructFromEvaluatableRequest(response, evaluatableVar);
+      return;
+    }
+
     const threadId = this.gdb.varRefContexts.get(variablesReference).threadId;
     let executionContext = this.gdb.executionContexts.get(threadId);
     let stackFrameLocal = executionContext.stackFrameLocals.get(variablesReference);
@@ -331,6 +341,58 @@ class DebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
+
+  async handleStructFromEvaluatableRequest(response, struct) {
+    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
+    if (struct.memberVariables.length == 0) {
+      // we haven't cached it's members
+      let structAccessModifierList = await this.gdb.execMI(`-var-list-children --all-values "${struct.variableObjectName}"`);
+      let requests = [];
+      for (const accessModifier of structAccessModifierList.children) {
+        const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
+        let members = await this.gdb.execMI(membersCommands);
+        const expr = members.children[0].value.exp;
+        if (expr) {
+          requests.push(members);
+        }
+      }
+      for (let v of requests.flatMap((i) => i.children)) {
+        let nextRef = 0;
+        let displayValue = "";
+        let isStruct = false;
+        if (!v.value.value || v.value.value == "{...}") {
+          let nextRef = this.gdb.nextVarRef;
+          this.gdb.evaluatableStructuredVars.set(nextRef, {
+            variableObjectName: v.value.name,
+            memberVariables: [],
+          });
+          displayValue = v.value.type;
+          isStruct = true;
+        } else {
+          displayValue = v.value.value;
+          isStruct = false;
+        }
+        struct.memberVariables.push(new MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
+      }
+      response.body = {
+        variables: struct.memberVariables,
+      };
+      this.sendResponse(response);
+    } else {
+      for (const member of struct.memberVariables) {
+        if (!member.isStruct) {
+          let r = (await this.gdb.execMI(`-var-evaluate-expression ${member.voName}`)).value;
+          if (r) {
+            member.value = r;
+          }
+        }
+      }
+      response.body = {
+        variables: struct.memberVariables,
+      };
+      this.sendResponse(response);
+    }
+  }
   async handleStructVariablesRequest(response, executionContext, struct) {
     // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     if (struct.memberVariables.length == 0) {
@@ -353,12 +415,7 @@ class DebugSession extends DebugAdapter.DebugSession {
         let displayValue = "";
         let isStruct = false;
         if (!v.value.value || v.value.value == "{...}") {
-          this.gdb.generateVariableReference({ threadId: executionContext.threadId, frameLevel: struct.frameLevel });
-          nextRef = this.gdb.nextVarRef;
-          this.gdb.varRefContexts.set(nextRef, {
-            threadId: executionContext.threadId,
-            frameLevel: struct.frameLevel,
-          });
+          nextRef = this.gdb.generateVariableReference({ threadId: executionContext.threadId, frameLevel: struct.frameLevel });
           executionContext.structs.set(nextRef, {
             variableObjectName: v.value.name,
             frameLevel: struct.frameLevel,
@@ -574,7 +631,13 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  reverseContinueRequest(...args) {
+  async reverseContinueRequest(response, args) {
+    // todo(simon): for rr this needs to be implemented differently
+    response.body = {
+      allThreadsContinued: this.gdb.allStopMode,
+    };
+    await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, true);
+    this.sendResponse(response);
     return this.virtualDispatch(...args);
   }
 
@@ -598,8 +661,37 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  evaluateRequest(...args) {
-    return this.virtualDispatch(...args);
+  async evaluateRequest(response, args, request) {
+    response.body = {
+      result: null,
+      type: "some type",
+      presentationHint: {
+        kind: "class",
+      },
+      variablesReference: 0,
+    };
+
+    if (args.context == "watch") {
+      await this.gdb
+        .evaluateExpression(args.expression, args.frameId)
+        // .execMI(`-data-evaluate-expression ${args.expression}`)
+        .then((data) => {
+          if (data) {
+            if (data.variablesReference != 0) {
+              response.body.variablesReference = data.variablesReference;
+              response.body.result = "{ ... }";
+            } else {
+              response.body.result = data.value;
+            }
+          }
+          this.sendResponse(response);
+        })
+        .catch((err) => {
+          response.success = false;
+          response.message = "could not be evaluated";
+          this.sendResponse(response);
+        });
+    }
   }
 
   stepInTargetsRequest(...args) {

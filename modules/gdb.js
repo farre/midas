@@ -12,7 +12,7 @@ const {
   ThreadEvent,
   Variable,
   StackFrame,
-} = require("vscode-debugadapter");
+} = require("@vscode/debugadapter");
 
 const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
@@ -48,7 +48,7 @@ class MidasStackFrame extends StackFrame {
    *
    * @param {number} variablesReference
    * @param {string} name
-   * @param {import("vscode-debugadapter").Source} src
+   * @param {import("@vscode/debugadapter").Source} src
    * @param {number} ln
    * @param {?number} col
    */
@@ -115,9 +115,18 @@ class GDB extends GDBMixin(GDBBase) {
   /** @type {Map<number, { threadId: number, frameLevel: number } >} */
   varRefContexts = new Map();
 
+  /** @typedef {number} VariablesReference */
+  /** @type {Map<string, VariablesReference>} */
+
+  evaluatable = new Map();
+  /** @type {Map<number, { variableObjectName: string, memberVariables: MidasVariable[] }>} */
+  evaluatableStructuredVars = new Map();
+  threadIdToEvaluatableState = new Map();
   #threads = new Map();
+
   userRequestedInterrupt = false;
   allStopMode;
+
   constructor(target, binary, gdbPath, args = undefined) {
     super(spawn(gdbPath, !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]));
     this.#lineBreakpoints = new Map();
@@ -290,10 +299,10 @@ class GDB extends GDBMixin(GDBBase) {
           frameLevel: index,
         });
 
-        let r = new (require("vscode-debugadapter").StackFrame)(
+        let r = new (require("@vscode/debugadapter").StackFrame)(
           stackFrameIdentifier,
           `${frame.func} @ 0x${frame.addr}`,
-          new (require("vscode-debugadapter").Source)(frame.file, frame.fullname),
+          new (require("@vscode/debugadapter").Source)(frame.file, frame.fullname),
           +frame.line,
           0
         );
@@ -751,6 +760,11 @@ class GDB extends GDBMixin(GDBBase) {
     return nextRef;
   }
 
+  generateEvalsVarRef() {
+    let nextRef = this.nextVarRef;
+    return nextRef;
+  }
+
   selectStackFrame(frameLevel, threadId) {
     return this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
   }
@@ -762,6 +776,43 @@ class GDB extends GDBMixin(GDBBase) {
   async readStackFrameStart(frameLevel, threadId) {
     await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
     return this.readRBP(threadId);
+  }
+
+  async evaluateExpression(expr, frameId) {
+    let { threadId } = this.varRefContexts.get(frameId);
+    let executionContext = this.executionContexts.get(threadId);
+    const voName = `${expr}.${frameId}`;
+    if (this.evaluatable.has(voName)) {
+      return await this.execMI(`-var-evaluate-expression ${voName}`, executionContext.threadId).then((res) => {
+        let ref = this.evaluatable.get(voName);
+        return {
+          variablesReference: ref,
+          value: res.value,
+        };
+      });
+    } else {
+      return await this.execMI(`-var-create ${voName} @ ${expr}`, executionContext.threadId).then((res) => {
+        if (res.numchild > 0) {
+          let nextRef = this.nextVarRef;
+          this.evaluatable.set(voName, nextRef);
+          let result = {
+            variablesReference: nextRef,
+            value: "",
+          };
+          this.evaluatableStructuredVars.set(nextRef, {
+            variableObjectName: voName,
+            memberVariables: [],
+          });
+          return result;
+        } else {
+          this.evaluatable.set(voName, 0);
+          return {
+            variablesReference: 0,
+            value: res.value,
+          };
+        }
+      });
+    }
   }
 }
 
