@@ -746,7 +746,7 @@ class GDB extends GDBMixin(GDBBase) {
           this.evaluatable.set(voName, nextRef);
           let result = {
             variablesReference: nextRef,
-            value: "",
+            value: res.type,
           };
           this.evaluatableStructuredVars.set(nextRef, {
             variableObjectName: voName,

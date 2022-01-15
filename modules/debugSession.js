@@ -516,12 +516,8 @@ class DebugSession extends DebugAdapter.DebugSession {
         .evaluateExpression(args.expression, args.frameId)
         .then((data) => {
           if (data) {
-            if (data.variablesReference != 0) {
-              response.body.variablesReference = data.variablesReference;
-              response.body.result = "{ ... }";
-            } else {
-              response.body.result = data.value;
-            }
+            response.body.variablesReference = data.variablesReference;
+            response.body.result = data.value;
           }
           this.sendResponse(response);
         })
