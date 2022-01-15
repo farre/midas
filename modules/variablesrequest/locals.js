@@ -40,7 +40,7 @@ class LocalsReference extends VariablesReference {
         if (!value && numchild > 0) {
           vscodeRef = nextRef;
           gdb_.references.set(nextRef, new StructsReference(nextRef, this.threadId, this.frameLevel, voname));
-          gdb_.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, isChild: false });
+          gdb_.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
         } else if (!value && numchild == 0) {
           await gdb_.execMI(`-var-delete ${voname}`, this.threadId);
           gdb_.varRefContexts.delete(nextRef);
