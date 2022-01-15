@@ -213,30 +213,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  /**
-   * Creates a frame ID for VSCode based on the `threadId` and the `level` of the
-   * provided stackframe.
-   * @param {number} threadId
-   * @param {number} level
-   * @returns {number}
-   */
-  threadFrameIdentifier(threadId, level) {
-    return (level << 16) | threadId;
-  }
-
-  /**
-   * Reverses the process in `threadFrameIdentifier(threadId, level)` and
-   * returns the thread ID and it's stack frame level
-   * @param {number} frameId
-   * @returns { { threadId: number, frameLevel: number } }
-   */
-  threadAndFrameLevelFromFrameID(frameId) {
-    return {
-      threadId: frameId & 0xffff,
-      frameLevel: frameId >> 16,
-    };
-  }
-
   async stackTraceRequest(response, args) {
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
     if (exec_ctx.stack.length == 0) {
