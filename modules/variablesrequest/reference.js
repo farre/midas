@@ -33,9 +33,9 @@ class VariablesReference {
   threadId;
 
   /**
-   * @param {number} variablesReference
-   * @param {number} threadId
-   * @param {number} frameLevel
+   * @param {number} variablesReference - can be a stackFrameId or an id for a variable
+   * @param {number} threadId - the thread which this variable or stackframe exists in
+   * @param {number} frameLevel - the (current) frame level this variable or stack frame lives on
    */
   constructor(variablesReference, threadId, frameLevel) {
     this.variablesReferenceId = variablesReference;
