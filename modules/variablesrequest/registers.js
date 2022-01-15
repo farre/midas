@@ -9,11 +9,11 @@ const GDB = require("../gdb");
 
 class RegistersReference extends VariablesReference {
   /** @type {MidasVariable[]}  */
-  #variables;
+  #registerVariables;
 
   constructor(stackFrameId, threadId, frameLevel) {
     super(stackFrameId, threadId, frameLevel);
-    this.#variables = [];
+    this.#registerVariables = [];
   }
 
   /**
@@ -35,7 +35,7 @@ class RegistersReference extends VariablesReference {
    * @param { GDB } gdb - reference to the GDB backend
    */
   async cleanUp(gdb) {
-    for (const v of this.#variables) {
+    for (const v of this.#registerVariables) {
       await gdb.execMI(`-var-delete ${v.voName}`, this.threadId);
       v.voName;
     }
