@@ -25,10 +25,7 @@ class LocalsReference extends VariablesReference {
     if (this.#variables.length == 0) {
       let result = await gdb_.getStackLocals(this.threadId, this.frameLevel);
       for (const { name, type, value } of result) {
-        let nextRef = gdb_.generateVariableReference({
-          threadId: this.threadId,
-          frameLevel: this.frameLevel,
-        });
+        let nextRef = gdb_.generateVariableReference();
         let vscodeRef = 0;
         const voname = `vr_${nextRef}`;
         let cmd = `-var-create ${voname} * ${name}`;
@@ -43,7 +40,6 @@ class LocalsReference extends VariablesReference {
           gdb_.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
         } else if (!value && numchild == 0) {
           await gdb_.execMI(`-var-delete ${voname}`, this.threadId);
-          gdb_.varRefContexts.delete(nextRef);
           continue;
         }
 

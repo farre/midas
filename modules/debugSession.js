@@ -10,6 +10,7 @@ const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { Server } = require("http");
+const { RegistersReference } = require("./variablesrequest/registers");
 
 let server;
 
@@ -257,27 +258,6 @@ class DebugSession extends DebugAdapter.DebugSession {
       await this.handleStructFromEvaluatableRequest(response, evaluatableVar);
       return;
     }
-
-    const threadId = this.gdb.varRefContexts.get(variablesReference).threadId;
-    let executionContext = this.gdb.executionContexts.get(threadId);
-
-    let registers = executionContext.stackFrameRegisterContents.get(variablesReference);
-    if (registers) {
-      this.handleStackFrameRegisterVariablesRequest(response, executionContext, registers);
-      return;
-    }
-  }
-
-  async handleStackFrameRegisterVariablesRequest(response, executionContext, stackFrameRegisters) {
-    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    await this.gdb.selectStackFrame(stackFrameRegisters.frameLevel, executionContext.threadId);
-    let miResult = await this.gdb.execMI(`-data-list-register-values N ${this.gdb.generalPurposeRegCommandString}`);
-    response.body = {
-      variables: miResult["register-values"].map(
-        (res, index) => new DebugAdapter.Variable(this.gdb.registerFile[index], res.value)
-      ),
-    };
-    this.sendResponse(response);
   }
 
   async handleStructFromEvaluatableRequest(response, struct) {
@@ -343,13 +323,11 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   scopesRequest(response, args) {
     const scopes = [];
-    let vrContext = this.gdb.varRefContexts.get(args.frameId);
-    let executionContext = this.gdb.executionContexts.get(vrContext.threadId);
-    let registerScopeVariablesReference = this.gdb.generateVariableReference(vrContext);
-    executionContext.stackFrameRegisterContents.set(registerScopeVariablesReference, {
-      frameLevel: vrContext.frameLevel,
-      variables: [],
-    });
+    let { threadId, frameLevel } = this.gdb.getReferenceContext(args.frameId);
+    let executionContext = this.gdb.executionContexts.get(threadId);
+    let registerScopeVariablesReference = this.gdb.generateVariableReference();
+
+    this.gdb.references.set(registerScopeVariablesReference, new RegistersReference(args.frameId, threadId, frameLevel));
     let registers = this.createScope("Register", "registers", registerScopeVariablesReference, false);
     let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
 
@@ -530,7 +508,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     if (args.context == "watch") {
       await this.gdb
         .evaluateExpression(args.expression, args.frameId)
-        // .execMI(`-data-evaluate-expression ${args.expression}`)
         .then((data) => {
           if (data) {
             if (data.variablesReference != 0) {
