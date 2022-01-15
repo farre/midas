@@ -5,7 +5,7 @@
 
 class ExecutionState {
   threadId;
-  /** @type {{ id: number, isChild: boolean }[]} - currently managed variable references*/
+  /** @type {{ id: number, shouldManuallyDelete: boolean }[]} - currently managed variable references*/
   #managedVariableReferences;
   /** @type {MidasStackFrame[]} */
   stack = [];
@@ -19,16 +19,16 @@ class ExecutionState {
 
   /**
    * Adds a variable reference that this execution context should track
-   * @param {{id: number, isChild: boolean}} `variableReferenceInfo` - the variable reference this execution context
+   * @param {{id: number, shouldManuallyDelete: boolean}} `variableReferenceInfo` - the variable reference this execution context
    * should track and if that points to a variable reference which is a child to some other variable reference
    */
-  addTrackedVariableReference({ id, isChild }) {
-    this.#managedVariableReferences.push({ id, isChild });
+  addTrackedVariableReference({ id, shouldManuallyDelete }) {
+    this.#managedVariableReferences.push({ id, shouldManuallyDelete });
   }
 
   async clear(gdb) {
-    for (const { id, isChild } of this.#managedVariableReferences) {
-      if (!isChild) {
+    for (const { id, shouldManuallyDelete } of this.#managedVariableReferences) {
+      if (shouldManuallyDelete) {
         // we only clean up non-children in the backend; gdb MI does the rest for the children
         let item = gdb.references.get(id);
         item.cleanUp(gdb);

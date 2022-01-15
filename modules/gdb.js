@@ -273,7 +273,7 @@ class GDB extends GDBMixin(GDBBase) {
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
-        exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, isChild: false });
+        exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
 
         this.varRefContexts.set(stackFrameIdentifier, {
           threadId: exec_ctx.threadId,

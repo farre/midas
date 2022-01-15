@@ -268,43 +268,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  async handleStackFrameLocalsVariablesRequest(response, executionContext, stackFrameLocal) {
-    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    if (stackFrameLocal.variables.length == 0) {
-      let result = await this.gdb.getStackLocals(executionContext.threadId, stackFrameLocal.frameLevel);
-      for (const { name, type, value } of result) {
-        let nextRef = this.gdb.generateVariableReference({
-          threadId: executionContext.threadId,
-          frameLevel: stackFrameLocal.frameLevel,
-        });
-        let vscodeRef = 0;
-        const voname = `vr_${nextRef}`;
-        let cmd = `-var-create ${voname} * ${name}`;
-        if (!value) {
-          vscodeRef = nextRef;
-          executionContext.structs.set(nextRef, {
-            variableObjectName: voname,
-            frameLevel: stackFrameLocal.frameLevel,
-            memberVariables: [],
-          });
-        }
-        stackFrameLocal.variables.push(new MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true));
-        await this.gdb.execMI(cmd, executionContext.threadId);
-      }
-      response.body = {
-        variables: stackFrameLocal.variables,
-      };
-      this.sendResponse(response);
-    } else {
-      // we need to update the stack frame
-      await this.gdb.updateMidasVariables(executionContext.threadId, stackFrameLocal.variables);
-      response.body = {
-        variables: stackFrameLocal.variables,
-      };
-      this.sendResponse(response);
-    }
-  }
-
   async handleStackFrameRegisterVariablesRequest(response, executionContext, stackFrameRegisters) {
     // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     await this.gdb.selectStackFrame(stackFrameRegisters.frameLevel, executionContext.threadId);
@@ -366,55 +329,6 @@ class DebugSession extends DebugAdapter.DebugSession {
         variables: struct.memberVariables,
       };
       this.sendResponse(response);
-    }
-  }
-  async handleStructVariablesRequest(response, executionContext, struct) {
-    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    if (struct.memberVariables.length == 0) {
-      // we haven't cached it's members
-      let structAccessModifierList = await this.gdb.execMI(
-        `-var-list-children --all-values "${struct.variableObjectName}"`,
-        executionContext.threadId
-      );
-      let requests = [];
-      for (const accessModifier of structAccessModifierList.children) {
-        const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
-        let members = await this.gdb.execMI(membersCommands, executionContext.threadId);
-        const expr = members.children[0].value.exp;
-        if (expr) {
-          requests.push(members);
-        }
-      }
-      for (let v of requests.flatMap((i) => i.children)) {
-        let nextRef = 0;
-        let displayValue = "";
-        let isStruct = false;
-        if (!v.value.value || v.value.value == "{...}") {
-          nextRef = this.gdb.generateVariableReference({ threadId: executionContext.threadId, frameLevel: struct.frameLevel });
-          executionContext.structs.set(nextRef, {
-            variableObjectName: v.value.name,
-            frameLevel: struct.frameLevel,
-            memberVariables: [],
-          });
-          displayValue = v.value.type;
-          isStruct = true;
-        } else {
-          displayValue = v.value.value;
-          isStruct = false;
-        }
-        struct.memberVariables.push(new MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
-      }
-      response.body = {
-        variables: struct.memberVariables,
-      };
-      this.sendResponse(response);
-    } else {
-      this.gdb.updateMidasVariables(executionContext.threadId, struct.memberVariables).then(() => {
-        response.body = {
-          variables: struct.memberVariables,
-        };
-        this.sendResponse(response);
-      });
     }
   }
 
