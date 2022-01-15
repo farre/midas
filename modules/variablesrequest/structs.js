@@ -1,5 +1,5 @@
 const GDB = require("../gdb");
-const { VariablesReference } = require("./reference");
+const { VariablesReference, err_response } = require("./reference");
 
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
@@ -99,7 +99,7 @@ class StructsReference extends VariablesReference {
         return response;
       }
     }
-    return response;
+    return err_response(response, `${namedObject} is not tracked by the variablesReference ${this.variablesReferenceId}`);
   }
 }
 

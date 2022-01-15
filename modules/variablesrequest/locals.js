@@ -1,4 +1,4 @@
-const { VariablesReference } = require("./reference");
+const { VariablesReference, err_response } = require("./reference");
 const { StructsReference } = require("./structs");
 const GDB = require("../gdb");
 /**
@@ -89,7 +89,7 @@ class LocalsReference extends VariablesReference {
         }
       }
     }
-    return response;
+    return err_response(response, `${namedObject} is not tracked by the variablesReference ${this.variablesReferenceId}`);
   }
 }
 

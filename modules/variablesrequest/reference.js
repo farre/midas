@@ -1,8 +1,21 @@
 /**
+ * @typedef { import("@vscode/debugprotocol").DebugProtocol.Response } Response
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("../gdb").GDB } GDB
  */
+
+/**
+ * Sets this response to indicate that the request failed
+ * @param { Response } response
+ * @returns { any } the `response` object with it's error fields set
+ */
+function err_response(response, msg) {
+  response.message = msg;
+  response.success = false;
+  response.body = null;
+  return response;
+}
 
 // base class, should not be instantiated.
 class VariablesReference {
@@ -63,4 +76,5 @@ class VariablesReference {
 
 module.exports = {
   VariablesReference,
+  err_response,
 };
