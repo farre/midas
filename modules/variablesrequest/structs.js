@@ -47,7 +47,7 @@ class StructsReference extends VariablesReference {
         let displayValue = "";
         let isStruct = false;
         if (!v.value.value || v.value.value == "{...}") {
-          nextRef = gdb.generateVariableReference({ threadId: this.threadId, frameLevel: this.frameLevel });
+          nextRef = gdb.generateVariableReference();
           gdb.references.set(nextRef, new StructsReference(nextRef, this.threadId, this.frameLevel, v.value.name));
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: false });
           displayValue = v.value.type;

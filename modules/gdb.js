@@ -87,9 +87,6 @@ class GDB extends GDBMixin(GDBBase) {
   /** @type { Map<number, import("./variablesrequest/reference").VariablesReference >} */
   references = new Map();
 
-  /** @type {Map<number, { threadId: number, frameLevel: number } >} */
-  varRefContexts = new Map();
-
   /** @typedef {number} VariablesReference */
   /** @type {Map<string, VariablesReference>} */
 
@@ -274,11 +271,6 @@ class GDB extends GDBMixin(GDBBase) {
         const stackFrameIdentifier = this.nextFrameRef;
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
         exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
-
-        this.varRefContexts.set(stackFrameIdentifier, {
-          threadId: exec_ctx.threadId,
-          frameLevel: index,
-        });
 
         let r = new (require("@vscode/debugadapter").StackFrame)(
           stackFrameIdentifier,
@@ -708,9 +700,8 @@ class GDB extends GDBMixin(GDBBase) {
       });
   }
 
-  generateVariableReference({ threadId, frameLevel }) {
+  generateVariableReference() {
     let nextRef = this.nextVarRef;
-    this.varRefContexts.set(nextRef, { threadId, frameLevel });
     return nextRef;
   }
 
@@ -737,11 +728,11 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async evaluateExpression(expr, frameId) {
-    let { threadId } = this.varRefContexts.get(frameId);
-    let executionContext = this.executionContexts.get(threadId);
+    let ref = this.references.get(frameId);
+    const threadId = ref.threadId;
     const voName = `${expr}.${frameId}`;
     if (this.evaluatable.has(voName)) {
-      return await this.execMI(`-var-evaluate-expression ${voName}`, executionContext.threadId).then((res) => {
+      return await this.execMI(`-var-evaluate-expression ${voName}`, threadId).then((res) => {
         let ref = this.evaluatable.get(voName);
         return {
           variablesReference: ref,
@@ -749,7 +740,7 @@ class GDB extends GDBMixin(GDBBase) {
         };
       });
     } else {
-      return await this.execMI(`-var-create ${voName} @ ${expr}`, executionContext.threadId).then((res) => {
+      return await this.execMI(`-var-create ${voName} @ ${expr}`, threadId).then((res) => {
         if (res.numchild > 0) {
           let nextRef = this.nextVarRef;
           this.evaluatable.set(voName, nextRef);
@@ -771,6 +762,10 @@ class GDB extends GDBMixin(GDBBase) {
         }
       });
     }
+  }
+
+  getReferenceContext(variablesReference) {
+    return this.references.get(variablesReference);
   }
 }
 
