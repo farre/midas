@@ -3,8 +3,10 @@ const { VariablesReference } = require("./reference");
 
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
+ * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("../gdb").GDB } GDB
  * @typedef { import("../executionState").ExecutionState } ExecutionState
+ * @typedef { import("../gdb").MidasVariable } MidasVariable
  */
 
 class StructsReference extends VariablesReference {
@@ -73,6 +75,31 @@ class StructsReference extends VariablesReference {
 
   async cleanUp(gdb) {
     // we don't need to do clean up; we're always managed by either a LocalsReference or a WatchReference
+  }
+
+  /**
+   * Sets a new value of a named object (variable object) that this reference tracks or manages.
+   * @param { SetVariableResponse } response - The response initialized by VSCode which we should return
+   * @param {GDB} gdb - GDB backend instance
+   * @param {string} namedObject - a named object this VariablesReference tracks, which should be updated
+   * @param {string} value - The `value` in string form which the named object should be updated to hold
+   * @returns { Promise<SetVariableResponse> } prepared VSCode response
+   */
+  async update(response, gdb, namedObject, value) {
+    for (const v of this.#memberVariables) {
+      if (v.name == namedObject) {
+        let res = await gdb.execMI(`-var-assign ${v.voName} "${value}"`, this.threadId);
+        if (res.value) {
+          v.value = res.value;
+          response.body = {
+            value: res.value,
+            variablesReference: v.variablesReference,
+          };
+        }
+        return response;
+      }
+    }
+    return response;
   }
 }
 

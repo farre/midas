@@ -2,6 +2,7 @@ const { VariablesReference } = require("./reference");
 const { StructsReference } = require("./structs");
 const GDB = require("../gdb");
 /**
+ * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("../gdb").GDB } GDB
  * @typedef { import("../gdb").MidasVariable } MidasVariable
@@ -29,10 +30,9 @@ class LocalsReference extends VariablesReference {
         let vscodeRef = 0;
         const voname = `vr_${nextRef}`;
         let cmd = `-var-create ${voname} * ${name}`;
-
-        // we have to execute the creation of varObjs first; because if we have come across a lambda (i.e not closures, they capture something, so that will be fine)
-        // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0, so we must find out this first, so
-        // we don't add lambdas to variables we should track.
+        // we have to execute the creation of varObjs first; if we have come across a non-capturing lambda
+        // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0,
+        // so we must find out this first, to refrain from tracking it
         let numchild = await gdb_.execMI(cmd, this.threadId).then((res) => res.numchild);
         if (!value && numchild > 0) {
           vscodeRef = nextRef;
@@ -66,6 +66,30 @@ class LocalsReference extends VariablesReference {
       await gdb.execMI(`-var-delete ${v.voName}`, this.threadId);
       v.voName;
     }
+  }
+  /**
+   * Sets a new value of a named object (variable object) that this reference tracks or manages.
+   * @param { SetVariableResponse } response - The response initialized by VSCode which we should return
+   * @param {GDB} gdb - GDB backend instance
+   * @param {string} namedObject - a named object's name, that this VariablesReference tracks, which should be updated
+   * @param {string} value - The `value` in string form which the named object should be updated to hold
+   * @returns { Promise<SetVariableResponse> } prepared VSCode response
+   */
+  async update(response, gdb, namedObject, value) {
+    for (const v of this.#variables) {
+      if (v.name == namedObject) {
+        let res = await gdb.execMI(`-var-assign ${v.voName} "${value}"`, this.threadId);
+        if (res.value) {
+          v.value = res.value;
+          response.body = {
+            value: res.value,
+            variablesReference: v.variablesReference,
+          };
+          return response;
+        }
+      }
+    }
+    return response;
   }
 }
 

@@ -1,16 +1,16 @@
 /**
  * @typedef {import("./gdb").MidasStackFrame } MidasStackFrame
  * @typedef {import("./gdb").MidasVariable } MidasVariable
+ * @typedef {number} VariableReference
  */
 
+/// Type that tracks variablesReferences for an execution context (i.e; a thread).
 class ExecutionState {
   threadId;
-  /** @type {{ id: number, shouldManuallyDelete: boolean }[]} - currently managed variable references*/
+  /** @type {{ id: VariableReference, shouldManuallyDelete: boolean }[]} - currently managed variable references*/
   #managedVariableReferences;
   /** @type {MidasStackFrame[]} */
   stack = [];
-  /** @type {Map<number, {frameLevel: number, variables: MidasVariable[] }>} */
-  stackFrameRegisterContents = new Map();
 
   constructor(threadId) {
     this.threadId = threadId;
@@ -19,7 +19,7 @@ class ExecutionState {
 
   /**
    * Adds a variable reference that this execution context should track
-   * @param {{id: number, shouldManuallyDelete: boolean}} `variableReferenceInfo` - the variable reference this execution context
+   * @param {{id: VariableReference, shouldManuallyDelete: boolean}} `variableReferenceInfo` - the variable reference this execution context
    * should track and if that points to a variable reference which is a child to some other variable reference
    */
   addTrackedVariableReference({ id, shouldManuallyDelete }) {

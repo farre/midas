@@ -324,9 +324,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   scopesRequest(response, args) {
     const scopes = [];
     let { threadId, frameLevel } = this.gdb.getReferenceContext(args.frameId);
-    let executionContext = this.gdb.executionContexts.get(threadId);
     let registerScopeVariablesReference = this.gdb.generateVariableReference();
-
     this.gdb.references.set(registerScopeVariablesReference, new RegistersReference(args.frameId, threadId, frameLevel));
     let registers = this.createScope("Register", "registers", registerScopeVariablesReference, false);
     let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
@@ -387,9 +385,17 @@ class DebugSession extends DebugAdapter.DebugSession {
     super[name](...args);
   }
 
-  async setVariableRequest(response, { variablesReference }) {
-    let reference = this.gdb.references.get(variablesReference);
-    this.sendResponse(response);
+  async setVariableRequest(response, { variablesReference, name, value }) {
+    let ref = this.gdb.references.get(variablesReference);
+    if (!ref) {
+      // for now, we disallow setting value of watch variables.
+      // todo(simon): fix this.
+      this.sendResponse(response);
+    } else {
+      ref.update(response, this.gdb, name, value).then((prepared_response) => {
+        this.sendResponse(prepared_response);
+      });
+    }
   }
 
   runInTerminalRequest(...args) {
