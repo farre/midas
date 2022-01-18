@@ -2,7 +2,7 @@
 "use strict";
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
-
+const { Source } = require("@vscode/debugadapter");
 const path = require("path");
 const {
   InitializedEvent,
@@ -59,50 +59,88 @@ class MidasStackFrame extends StackFrame {
   }
 }
 
-/**
- * @constructor
- */
+function spawnRRGDB(gdbPath, binary, address) {
+  const args = [
+    "-l",
+    "10000",
+    "-iex",
+    "set mi-async on",
+    "-iex",
+    "set non-stop off",
+    "-ex",
+    "set sysroot /",
+    "-ex",
+    `target extended-remote ${address}`,
+    "-i=mi3",
+    binary,
+  ];
+  return spawn(gdbPath, args);
+}
+
+function spawnGDB(gdbPath, binary, ...args) {
+  let gdb = spawn(gdbPath, !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
+  return gdb;
+}
+
+let gdbProcess = null;
+/** @typedef {number} ThreadId */
+/** @typedef {number} VariablesReference */
+/** @typedef { import("@vscode/debugadapter").DebugSession } DebugSession */
 class GDB extends GDBMixin(GDBBase) {
   /** Maps file paths -> Breakpoints
    * @type { Map<string, gdbTypes.Breakpoint[]> } */
-  #lineBreakpoints;
+  #lineBreakpoints = new Map();
   /** Maps function name (original location) -> Function breakpoint id
    * @type { Map<string, number> } */
-  #fnBreakpoints;
+  #fnBreakpoints = new Map();
 
   registerFile = [];
-
+  // loaded libraries
   #loadedLibraries;
-
+  // variablesReferences bookkeeping
   #nextVarRef = 1000 * 1000;
   #nextFrameRef = 1000;
 
+  /**
+   * reference to the DebugSession that talks to VSCode
+   * @type { DebugSession }
+   */
   #target;
+  // program name
   #program = "";
+  // Are we debugging a normal session or an rr session
+  #rrSession = false;
 
-  /** @typedef {number} ThreadId */
   /** @type { Map<ThreadId, ExecutionState> } */
   executionContexts = new Map();
 
   /** @type { Map<number, import("./variablesrequest/reference").VariablesReference >} */
   references = new Map();
 
-  /** @typedef {number} VariablesReference */
   /** @type {Map<string, VariablesReference>} */
-
   evaluatable = new Map();
+
   /** @type {Map<number, { variableObjectName: string, memberVariables: MidasVariable[] }>} */
   evaluatableStructuredVars = new Map();
-  threadIdToEvaluatableState = new Map();
-  #threads = new Map();
 
+  #threads = new Map();
   userRequestedInterrupt = false;
   allStopMode;
 
-  constructor(target, binary, gdbPath, args = undefined) {
-    super(spawn(gdbPath, !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]));
-    this.#lineBreakpoints = new Map();
-    this.#fnBreakpoints = new Map();
+  constructor(target, args) {
+    super(
+      (() => {
+        if (args.type == "midas-rr") {
+          let gdb = spawnRRGDB(args.gdbPath, args.program, args.MIServerAddress);
+          gdbProcess = gdb;
+          return gdb;
+        } else {
+          let gdb = spawnGDB(args.gdbPath, args.program, args.debugeeArgs);
+          gdbProcess = gdb;
+          return gdb;
+        }
+      })()
+    );
     this.#target = target;
   }
 
@@ -120,6 +158,20 @@ class GDB extends GDBMixin(GDBBase) {
 
   get nextFrameRef() {
     return this.#nextFrameRef++;
+  }
+
+  async startWithRR(program, stopOnEntry, doTrace) {
+    this.#program = path.basename(program);
+    trace = doTrace;
+    await this.init();
+    this.allStopMode = true;
+    this.#rrSession = true;
+    let miResult = await this.execMI(`-data-list-register-names`);
+    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
+    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
+    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
+    await this.run();
+    this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
 
   async start(program, stopOnEntry, debug, doTrace, allStopMode) {
@@ -199,7 +251,7 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       // todo(simon): this needs a custom implementation, like in the above if branch
       //  especially when it comes to rr integration
-      await this.reverseProceed(this.allStopMode ? undefined : threadId);
+      await this.reverseProceed(threadId);
     }
   }
 
@@ -266,19 +318,17 @@ class GDB extends GDBMixin(GDBBase) {
   async getTrackedStack(exec_ctx, levels) {
     // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
     //  This is ugly and bad, this needs refactoring.
+    let arr = [];
     exec_ctx.stack = await this.getStack(levels, exec_ctx.threadId).then((r) =>
       r.map((frame, index) => {
         const stackFrameIdentifier = this.nextFrameRef;
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
         exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
-
-        let r = new (require("@vscode/debugadapter").StackFrame)(
-          stackFrameIdentifier,
-          `${frame.func} @ 0x${frame.addr}`,
-          new (require("@vscode/debugadapter").Source)(frame.file, frame.fullname),
-          +frame.line,
-          0
-        );
+        let src = null;
+        if (frame.file && frame.line) {
+          src = new Source(frame.file, frame.fullname);
+        }
+        let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
         // we can't extend StackFrame for some reason. It is doing something magical behind the scenes. We have to brute-force
         // rape the type, and tack this on by ourselves. Embarrassing.
         r.frameAddress = +frame.addr;
@@ -305,7 +355,6 @@ class GDB extends GDBMixin(GDBBase) {
    * @property {string} name
    * @property {string} type
    * @property {string | null} value
-   *
    * @returns {Promise<Local[]>}
    */
   async getStackLocals(threadId, frameLevel) {
@@ -724,7 +773,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   async readStackFrameStart(frameLevel, threadId) {
     await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
-    return this.readProgramCounter(threadId);
+    return this.readRBP(threadId);
   }
 
   async evaluateExpression(expr, frameId) {
@@ -766,6 +815,10 @@ class GDB extends GDBMixin(GDBBase) {
 
   getReferenceContext(variablesReference) {
     return this.references.get(variablesReference);
+  }
+
+  kill() {
+    gdbProcess.kill("SIGINT");
   }
 }
 
