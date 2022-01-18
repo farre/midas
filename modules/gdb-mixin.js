@@ -26,32 +26,46 @@ function GDBMixin(GDBBase) {
         return this._exec(`${name} --thread ${scope.id} ${options}`, "mi");
       } else if (scope instanceof ThreadGroup) {
         // `--thread-group` option changes thread.
-        return this._preserveThread(() =>
-          this._exec(`${name} --thread-group i${scope.id} ${options}`, "mi")
-        );
+        return this._preserveThread(() => this._exec(`${name} --thread-group i${scope.id} ${options}`, "mi"));
       } else {
         return this._exec(cmd, "mi");
       }
     }
 
-    async stepIn(threadId) {
-      await this.execMI(`-exec-step`, threadId);
+    async stepIn(threadId, reverse = false) {
+      if (reverse) {
+        await this.execMI(`-exec-step --reverse`, threadId);
+      } else {
+        await this.execMI(`-exec-step`, threadId);
+      }
     }
 
-    async stepOver(threadId) {
-      await this.execMI(`-exec-next`, threadId);
+    async stepOver(threadId, reverse = false) {
+      if (reverse) {
+        await this.execCLI(`reverse-next`);
+      } else {
+        await this.execMI(`-exec-next`, threadId);
+      }
     }
 
-    async stepInstruction(threadId) {
-      await this.execMI(`-exec-next-instruction`, threadId);
+    async stepInstruction(threadId, reverse = false) {
+      if (reverse) {
+        await this.execMI(`-exec-next-instruction --reverse`, threadId);
+      } else {
+        await this.execMI(`-exec-next-instruction`, threadId);
+      }
     }
 
-    async finishExecution(threadId) {
-      await this.execMI(`-exec-finish`, threadId).catch((e) => {
-        // means we hit an error, probably in the outermost frame, which GDB complains
-        // about we not being able to finish out from
-        this.proceed(threadId);
-      });
+    async finishExecution(threadId, reverse = false) {
+      if (reverse) {
+        await this.execMI("-exec-finish --reverse", threadId);
+      } else {
+        await this.execMI(`-exec-finish`, threadId).catch((e) => {
+          // means we hit an error, probably in the outermost frame, which GDB complains
+          // about we not being able to finish out from
+          this.proceed(threadId);
+        });
+      }
     }
 
     async continueAll() {

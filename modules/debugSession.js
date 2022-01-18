@@ -27,6 +27,11 @@ class DebugSession extends DebugAdapter.DebugSession {
   _reportProgress;
   useInvalidetedEvent;
 
+  withRR = false;
+
+  /** @type {vscode.Terminal} */
+  #terminal;
+
   // eslint-disable-next-line no-unused-vars
   constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs) {
     super();
@@ -85,6 +90,8 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
 
+    response.body.supportsRestartFrame = true;
+
     // leave uncommented. Because it does nothing. Perhaps implement it for them?
     // response.body.supportsValueFormattingOptions = true;
 
@@ -142,10 +149,18 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    this.gdb = new GDB(this, args.program, args.gdbPath, args.debuggeeArgs);
-    this.gdb.initialize(args.stopOnEntry);
-
-    await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace, args.allStopMode ?? false);
+    if (args.type == "midas-rr") {
+      console.log(`running gdb against rr target`);
+      this.gdb = new GDB(this, args);
+      this.gdb.withRR = true;
+      this.gdb.initialize(args.stopOnEntry);
+      await this.gdb.startWithRR(args.program, args.stopOnEntry, args.trace);
+    } else if (args.type == "midas") {
+      console.log(`running gdb normally`);
+      this.gdb = new GDB(this, args);
+      this.gdb.initialize(args.stopOnEntry);
+      await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace, args.allStopMode ?? false);
+    }
   }
 
   async setBreakPointAtLine(path, line) {
@@ -223,6 +238,9 @@ class DebugSession extends DebugAdapter.DebugSession {
       this.sendResponse(response);
     } else {
       let frameInfo = await this.gdb.readRBP(exec_ctx.threadId);
+      if (exec_ctx.stack == undefined || exec_ctx == undefined || exec_ctx.stack[0] == undefined) {
+        debugger;
+      }
       if (+frameInfo != exec_ctx.stack[0].frameAddress) {
         // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
         await exec_ctx.clear(this.gdb);
@@ -409,6 +427,9 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   // Super's implementation is fine.
   disconnectRequest(...args) {
+    this.gdb.kill();
+    // todo(simon): add possibility to disconnect *without* killing the rr process.
+    this.#terminal.dispose();
     return super.disconnectRequest(args[0], args[1], args[3]);
   }
 
@@ -416,8 +437,8 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  terminateRequest(...args) {
-    return this.virtualDispatch(...args);
+  terminateRequest(response, args) {
+    this.gdb.kill();
   }
 
   async restartRequest(response, { arguments: args }) {
@@ -467,8 +488,20 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  stepBackRequest(...args) {
-    return this.virtualDispatch(...args);
+  async stepBackRequest(response, args) {
+    let granularity = args.granularity ?? "line";
+    switch (granularity) {
+      case "line":
+        await this.gdb.stepOver(args.threadId, true);
+        break;
+      case "instruction":
+        await this.gdb.stepInstruction(args.threadId, true);
+        break;
+      case "statement":
+      default:
+        await this.gdb.stepOver(args.threadId, true);
+    }
+    this.sendResponse(response);
   }
 
   async reverseContinueRequest(response, args) {
@@ -478,7 +511,6 @@ class DebugSession extends DebugAdapter.DebugSession {
     };
     await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, true);
     this.sendResponse(response);
-    return this.virtualDispatch(...args);
   }
 
   restartFrameRequest(...args) {
@@ -648,6 +680,11 @@ class DebugSession extends DebugAdapter.DebugSession {
     console.log("convertDebuggerPathToClient calledf with " + debuggerPath);
     return super.convertDebuggerPathToClient(debuggerPath);
   }
+
+  // terminal where rr has been started in
+  registerTerminal(terminal) {
+    this.#terminal = terminal;
+  }
 }
 
 class ConfigurationProvider {
@@ -683,7 +720,52 @@ class ConfigurationProvider {
   }
 }
 
+class RRConfigurationProvider {
+  // eslint-disable-next-line no-unused-vars
+  async resolveDebugConfiguration(folder, config, token) {
+    // if launch.json is missing or empty
+    if (!config || !config.type || config.type == undefined) {
+      vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then(() => {
+        return null;
+      });
+
+      return null;
+    }
+
+    if (!config.type && !config.request && !config.name) {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && (editor.document.languageId === "cpp" || editor.document.languageId === "c")) {
+        console.log(`no configuration provided. defaulting`);
+        config.type = "midas";
+        config.name = "Launch Debug";
+        config.request = "launch";
+        config.stopOnEntry = true;
+        config.trace = false;
+        config.MIServerAddress = "localhost:50505";
+        config.cwd = "${workspaceFolder}";
+      }
+    }
+
+    if (!config.rrPath) {
+      config.rrPath = "rr";
+    }
+    if (!config.debuggerPath) {
+      config.debuggerPath = "gdb";
+    }
+
+    if (!config.program) {
+      await vscode.window
+        .showInformationMessage("Binary to debug has not been provided in the launch configuration")
+        .then(() => {});
+      return null;
+    }
+    vscode.commands.executeCommand("setContext", "midas.rrSession", true);
+    return config;
+  }
+}
+
 module.exports = {
   DebugSession,
   ConfigurationProvider,
+  RRConfigurationProvider,
 };

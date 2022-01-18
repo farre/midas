@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 const vscode = require("vscode");
-const { activateExtension } = require("./modules/activateDebuggerExtension");
+const { activateExtension, deactivateExtension } = require("./modules/activateDebuggerExtension");
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 
