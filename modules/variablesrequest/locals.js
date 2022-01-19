@@ -36,14 +36,17 @@ class LocalsReference extends VariablesReference {
         let numchild = await gdb_.execMI(cmd, this.threadId).then((res) => res.numchild);
         if (!value && numchild > 0) {
           vscodeRef = nextRef;
-          gdb_.references.set(nextRef, new StructsReference(nextRef, this.threadId, this.frameLevel, voname));
+          gdb_.references.set(
+            nextRef,
+            new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
+          );
           gdb_.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
         } else if (!value && numchild == 0) {
           await gdb_.execMI(`-var-delete ${voname}`, this.threadId);
           continue;
         }
 
-        let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true);
+        let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
         this.#variables.push(mvar);
       }
       response.body = {

@@ -56,11 +56,30 @@
         "title": "Pause all threads",
         "shortTitle": "Pause all",
         "icon": "$(debug-pause)"
+      },
+      {
+        "command": "midas.reverse-finish",
+        "title": "rr: reverse finish",
+        "shortTitle": "Rev-finish",
+        "icon": "$(debug-step-out)"
+      },
+      {
+        "command": "midas.set-watchpoint",
+        "title": "Set read-access watchpoint",
+        "shortTitle": "Watch variable",
+        "icon": "$(eye-watch)"
       }
     ],
 
     "menus": {
-      "debug/toolBar": [{
+      "debug/variables/context": [
+        {
+          "command": "midas.set-watchpoint",
+          "group": "midas"
+        }
+      ],
+      "debug/toolBar": [
+        {
         "command": "midas.session-continue-all",
         "group": "midas",
         "when": "!midas.allStopModeSet"
@@ -69,7 +88,12 @@
         "command": "midas.session-pause-all",
         "group": "midas",
         "when": "!midas.allStopModeSet"
-      }]
+      },
+      {
+        "command": "midas.reverse-finish",
+        "group": "midas"
+      }
+    ]
     },
     "debuggers": [
       {

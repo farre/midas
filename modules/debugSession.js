@@ -98,7 +98,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     response.body.supportsRestartRequest = true;
 
     // Enable this when we upgrade to DAP 1.51.0
-    // response.body.supportsSingleThreadExecutionRequests = true;
+    response.body.supportsSingleThreadExecutionRequests = true;
 
     response.body.exceptionBreakpointFilters = [
       {
@@ -150,13 +150,11 @@ class DebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
 
     if (args.type == "midas-rr") {
-      console.log(`running gdb against rr target`);
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
       this.gdb.initialize(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry, args.trace);
     } else if (args.type == "midas") {
-      console.log(`running gdb normally`);
       this.gdb = new GDB(this, args);
       this.gdb.initialize(args.stopOnEntry);
       await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace, args.allStopMode ?? false);
@@ -202,6 +200,7 @@ class DebugSession extends DebugAdapter.DebugSession {
       allThreadsContinued: this.gdb.allStopMode,
     };
     await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, false);
+    vscode.commands.executeCommand("setContext", "midas.notRunning", false);
     this.sendResponse(response);
   }
 
@@ -219,7 +218,9 @@ class DebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async pauseRequest(response, args) {
-    await this.gdb.pauseExecution(args.threadId).then(() => {});
+    await this.gdb.pauseExecution(args.threadId);
+    vscode.commands.executeCommand("setContext", "midas.notRunning", true);
+    this.sendResponse(response);
   }
 
   async threadsRequest(response) {
@@ -426,7 +427,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 
   // Super's implementation is fine.
-  disconnectRequest(...args) {
+  disconnectRequest(response, args) {
     this.gdb.kill();
     // todo(simon): add possibility to disconnect *without* killing the rr process.
     this.#terminal.dispose();
@@ -542,10 +543,10 @@ class DebugSession extends DebugAdapter.DebugSession {
       },
       variablesReference: 0,
     };
-
-    if (args.context == "watch") {
+    const { expression, frameId, context } = args;
+    if (context == "watch") {
       await this.gdb
-        .evaluateExpression(args.expression, args.frameId)
+        .evaluateExpression(expression, frameId)
         .then((data) => {
           if (data) {
             response.body.variablesReference = data.variablesReference;
@@ -558,6 +559,8 @@ class DebugSession extends DebugAdapter.DebugSession {
           response.message = "could not be evaluated";
           this.sendResponse(response);
         });
+    } else if (context == "repl") {
+      vscode.debug.activeDebugConsole.appendLine("REPL for midas is on the TODO list");
     }
   }
 
@@ -581,8 +584,8 @@ class DebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  dataBreakpointInfoRequest(...args) {
-    return this.virtualDispatch(...args);
+  dataBreakpointInfoRequest(response, ...args) {
+    return this.virtualDispatch(response, ...args);
   }
 
   setDataBreakpointsRequest(...args) {
@@ -619,10 +622,21 @@ class DebugSession extends DebugAdapter.DebugSession {
   async customRequest(command, response, args) {
     switch (command) {
       case "continueAll":
-        this.gdb.continueAll();
+        await this.gdb.continueAll();
+        response.body = {
+          allThreadsContinued: this.gdb.allStopMode,
+        };
+        this.sendResponse(response);
         break;
       case "pauseAll":
-        this.gdb.pauseAll();
+        await this.gdb.pauseAll();
+        break;
+      case "reverse-finish":
+        await this.gdb.finishExecution(undefined, true);
+        this.sendResponse(response);
+        break;
+      case "set-watchpoint":
+        await this.gdb.setReadWatchPoint(args.location);
         break;
       default:
         vscode.window.showInformationMessage(`Unknown request: ${command}`);
@@ -736,7 +750,7 @@ class RRConfigurationProvider {
       const editor = vscode.window.activeTextEditor;
       if (editor && (editor.document.languageId === "cpp" || editor.document.languageId === "c")) {
         console.log(`no configuration provided. defaulting`);
-        config.type = "midas";
+        config.type = "midas-rr";
         config.name = "Launch Debug";
         config.request = "launch";
         config.stopOnEntry = true;

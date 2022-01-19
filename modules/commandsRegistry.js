@@ -23,9 +23,7 @@ const unimplemented = (commandName, msg = "No message provided") => {
 function getVSCodeCommands() {
   let start = registerCommand("midas.start", () => unimplemented("start"));
   let stop = registerCommand("midas.stop", () => unimplemented("stop"));
-  let getExecutable = registerCommand("midas.get-binary", () =>
-    unimplemented("get-binary")
-  );
+  let getExecutable = registerCommand("midas.get-binary", () => unimplemented("get-binary"));
   let startDebugging = registerCommand("midas.start-debug-session", () =>
     vscode.debug.startDebugging(undefined, {
       type: "midas",
@@ -35,24 +33,27 @@ function getVSCodeCommands() {
       stopOnEntry: false,
     })
   );
-  let stopDebugging = registerCommand("midas.stop-debug-session", () =>
-    unimplemented("stop-debug-session")
-  );
+  let stopDebugging = registerCommand("midas.stop-debug-session", () => unimplemented("stop-debug-session"));
   let continueAll = registerCommand("midas.session-continue-all", () => {
     vscode.debug.activeDebugSession.customRequest("continueAll");
   });
   let pauseAll = registerCommand("midas.session-pause-all", () => {
     vscode.debug.activeDebugSession.customRequest("pauseAll");
   });
-  return [
-    start,
-    stop,
-    getExecutable,
-    startDebugging,
-    stopDebugging,
-    continueAll,
-    pauseAll,
-  ];
+
+  let reverseFinish = registerCommand("midas.reverse-finish", () => {
+    vscode.debug.activeDebugSession.customRequest("reverse-finish");
+  });
+
+  let watch = registerCommand("midas.set-watchpoint", ({ container, variable }) => {
+    if (!container.evaluateName) {
+      vscode.window.showErrorMessage("Variable has no evaluatable name");
+      return;
+    }
+    vscode.debug.activeDebugSession.customRequest("set-watchpoint", { location: `${container.evaluateName}.${variable.name}` });
+  });
+
+  return [start, stop, getExecutable, startDebugging, stopDebugging, continueAll, pauseAll, reverseFinish, watch];
 }
 
 module.exports = {
