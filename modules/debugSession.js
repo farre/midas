@@ -701,6 +701,21 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 }
 
+function setDefaults(config) {
+  if (!config.hasOwnProperty("stopOnEntry")) {
+    config.stopOnEntry = false;
+  }
+  if (!config.hasOwnProperty("trace")) {
+    config.trace = false;
+  }
+  if (!config.hasOwnProperty("allStopMode")) {
+    config.allStopMode = true;
+  }
+  if (!config.hasOwnProperty("debuggerPath")) {
+    config.debuggerPath = "gdb";
+  }
+}
+
 class ConfigurationProvider {
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
@@ -713,17 +728,24 @@ class ConfigurationProvider {
       return null;
     }
 
-    if (!config.type && !config.request && !config.name) {
-      const editor = vscode.window.activeTextEditor;
-      if (editor && (editor.document.languageId === "cpp" || editor.document.languageId === "c")) {
-        config.type = "midas";
-        config.name = "Launch Debug";
-        config.request = "launch";
-        config.stopOnEntry = true;
-        config.trace = false;
-        config.allStopMode = false;
+    if (config.hasOwnProperty("rrServerAddress")) {
+      // midas with rr
+      if (config.allStopMode ?? false) {
+        vscode.window
+          .showErrorMessage("rr can not run in non-stop mode. Remove the setting from the launch config or set it to true")
+          .then(() => {
+            return null;
+          });
+        return null;
       }
+      if (!config.rrPath) {
+        config.rrPath = "rr";
+      }
+    } else {
+      // midas without rr
     }
+
+    setDefaults(config);
 
     if (!config.program) {
       await vscode.window.showInformationMessage("Cannot find a program to debug").then(() => {});
@@ -742,7 +764,6 @@ class RRConfigurationProvider {
       vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then(() => {
         return null;
       });
-
       return null;
     }
 
@@ -750,7 +771,7 @@ class RRConfigurationProvider {
       const editor = vscode.window.activeTextEditor;
       if (editor && (editor.document.languageId === "cpp" || editor.document.languageId === "c")) {
         console.log(`no configuration provided. defaulting`);
-        config.type = "midas-rr";
+        config.type = "midasrr";
         config.name = "Launch Debug";
         config.request = "launch";
         config.stopOnEntry = true;
@@ -760,17 +781,10 @@ class RRConfigurationProvider {
       }
     }
 
-    if (!config.rrPath) {
-      config.rrPath = "rr";
-    }
-    if (!config.debuggerPath) {
-      config.debuggerPath = "gdb";
-    }
-
     if (!config.program) {
-      await vscode.window
-        .showInformationMessage("Binary to debug has not been provided in the launch configuration")
-        .then(() => {});
+      await vscode.window.showInformationMessage("Binary to debug has not been provided in the launch configuration").then(() => {
+        return null;
+      });
       return null;
     }
     vscode.commands.executeCommand("setContext", "midas.rrSession", true);

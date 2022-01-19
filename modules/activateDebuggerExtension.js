@@ -66,7 +66,7 @@ function activateExtension(context, descriptorFactory) {
   let rrprovider = new RRConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider("midas", provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic),
-    vscode.debug.registerDebugConfigurationProvider("midas-rr", rrprovider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+    vscode.debug.registerDebugConfigurationProvider("midasrr", rrprovider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
   );
   // TODO(simon): when we've implemented the most bare bones debugger
   //  meaning, we can start gdb, launch a program and stop on entry
@@ -78,7 +78,7 @@ function activateExtension(context, descriptorFactory) {
     descriptorFactory = new DebugAdapterFactory();
   }
   context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midas", descriptorFactory));
-  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midas-rr", new RRDebugAdapterFactory()));
+  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midasrr", new RRDebugAdapterFactory()));
 }
 
 class RRDebugAdapterFactory {
