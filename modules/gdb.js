@@ -2,6 +2,7 @@
 "use strict";
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
+const vscode = require("vscode");
 const { Source } = require("@vscode/debugadapter");
 const path = require("path");
 const {
@@ -19,6 +20,7 @@ const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
+const { getVSCodeDownloadUrl } = require("@vscode/test-electron/out/util");
 
 let trace = true;
 function log(location, payload) {
@@ -34,13 +36,13 @@ let GDBBase = gdbjs.GDB;
 
 // A bridge between GDB Variable Objects and VSCode "Variable" from the vscode-debugadapter module
 class MidasVariable extends Variable {
-  constructor(name, value, ref, variableObjectName, isStructureType) {
+  constructor(name, value, ref, variableObjectName, isStructureType, evaluateName) {
     super(name, value, ref);
     this.voName = variableObjectName;
     this.isStruct = isStructureType;
     if (isStructureType) {
       this.presentationHint = { kind: "class" };
-      this.evaluateName = this.voName;
+      this.evaluateName = evaluateName;
     }
   }
 }
@@ -164,12 +166,9 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = doTrace;
     await this.init();
-    this.allStopMode = true;
+    this.registerAsAllStopMode();
     this.#rrSession = true;
-    let miResult = await this.execMI(`-data-list-register-names`);
-    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
-    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
-    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
+    await this.#setUpRegistersInfo();
     await this.run();
     this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
@@ -185,10 +184,7 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       await this.execMI(`-gdb-set mi-async on`);
     }
-    let miResult = await this.execMI(`-data-list-register-names`);
-    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
-    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
-    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
+    await this.#setUpRegistersInfo();
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -200,7 +196,12 @@ class GDB extends GDBMixin(GDBBase) {
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
-      await this.run();
+      if (this.#rrSession) {
+        await this.execMI("-exec-run");
+        await this.execMI(`-exec-continue`);
+      } else {
+        await this.run();
+      }
     }
   }
 
@@ -466,11 +467,10 @@ class GDB extends GDBMixin(GDBBase) {
     } catch {
       reason = payload.reason;
     }
-
+    let exec_ctx = this.executionContexts.get(payload.thread.id);
     switch (reason) {
       case "breakpoint-hit": {
         this.#onBreakpointHit(payload.thread);
-        let exec_ctx = this.executionContexts.get(payload.thread.id);
         if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = payload.thread.frame.line;
         break;
       }
@@ -484,14 +484,36 @@ class GDB extends GDBMixin(GDBBase) {
       }
       case "end-stepping-range": {
         this.executionContexts.get(payload.thread.id).stack[0].line = payload.thread.frame.line;
-        this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
+        let evt = new StoppedEvent("step", payload.thread.id);
+        evt.body.allThreadsStopped = this.allStopMode;
+        this.#target.sendEvent(evt);
         break;
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
-        this.#target.sendEvent(new StoppedEvent("step", payload.thread.id));
+        let evt = new StoppedEvent("step", payload.thread.id);
+        evt.body.allThreadsStopped = this.allStopMode;
+        this.#target.sendEvent(evt);
         break;
       }
+      case "read-watchpoint-trigger":
+        let evt = new StoppedEvent("step", payload.thread.id);
+        evt.body.reason = "Hit watchpoint";
+        evt.body.description = "Read access watchpoint was triggered";
+        evt.body.allThreadsStopped = this.allStopMode;
+        if (exec_ctx.stack.length > 0) {
+          this.readRBP(payload.thread.id).then((frameAddress) => {
+            if (frameAddress == exec_ctx.stack[0].frameAddress) {
+              exec_ctx.stack[0].line = payload.thread.frame.line;
+            } else {
+              exec_ctx.clear(this);
+            }
+            this.#target.sendEvent(evt);
+          });
+        } else {
+          this.#target.sendEvent(evt);
+        }
+        break;
       default:
         console.log(`stopped for other reason: ${payload.reason}`);
     }
@@ -819,6 +841,19 @@ class GDB extends GDBMixin(GDBBase) {
 
   kill() {
     gdbProcess.kill("SIGINT");
+  }
+
+  // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
+  registerAsAllStopMode() {
+    this.allStopMode = true;
+    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", true);
+  }
+
+  async #setUpRegistersInfo() {
+    let miResult = await this.execMI(`-data-list-register-names`);
+    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
+    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
+    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
   }
 }
 

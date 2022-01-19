@@ -16,10 +16,15 @@ class StructsReference extends VariablesReference {
   /** @type {string} */
   variableObjectName;
 
-  constructor(variablesReference, threadId, frameLevel, variableObjectName) {
+  /** @type {string} */
+  evaluateName;
+
+  constructor(variablesReference, threadId, frameLevel, names) {
     super(variablesReference, threadId, frameLevel);
     this.#memberVariables = [];
-    this.variableObjectName = variableObjectName;
+
+    this.variableObjectName = names.variableObjectName;
+    this.evaluateName = names.evaluateName;
   }
 
   /**
@@ -50,7 +55,13 @@ class StructsReference extends VariablesReference {
         let isStruct = false;
         if (!v.value.value || v.value.value == "{...}") {
           nextRef = gdb.generateVariableReference();
-          gdb.references.set(nextRef, new StructsReference(nextRef, this.threadId, this.frameLevel, v.value.name));
+          gdb.references.set(
+            nextRef,
+            new StructsReference(nextRef, this.threadId, this.frameLevel, {
+              variableObjectName: v.value.name,
+              evaluateName: `${this.evaluateName}.${v.value.exp}`,
+            })
+          );
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: false });
           displayValue = v.value.type;
           isStruct = true;
@@ -58,7 +69,9 @@ class StructsReference extends VariablesReference {
           displayValue = v.value.value;
           isStruct = false;
         }
-        this.#memberVariables.push(new GDB.MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
+        this.#memberVariables.push(
+          new GDB.MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
+        );
       }
       response.body = {
         variables: this.#memberVariables,
