@@ -99,9 +99,12 @@
       {
         "type": "midas",
         "label": "C/C++ Midas GDB",
+        "runtime": "node",
         "languages": ["c", "cpp", "cuda-cpp"],
         "configurationAttributes": {
           "launch": {
+            "type": "object",
+            "default": {},
             "required": [
               "program"
             ],
@@ -129,9 +132,14 @@
               "description": "Whether or not GDB should run in all stop mode",
               "default": false
             },
-            "gdbPath": {
+            "rrPath": {
               "type": "string",
-              "description": "Path to gdb executable or command",
+              "description": "Path to rr. Defaults to trying to execute rr in $PATH",
+              "default": "rr"
+            },
+            "debuggerPath": {
+              "type": "string",
+              "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
               "default": "gdb"
             }
           }
@@ -164,9 +172,10 @@
         ]
       },
       {
-        "type": "midas-rr",
+        "type": "midasrr",
         "label": "C/C++ Midas GDB w/rr",
         "languages": ["c", "cpp", "cuda-cpp"],
+        "runtime": "node",
         "configurationAttributes": {
           "launch": {
             "required": [ "program", "MIServerAddress", "rrPath", "debuggerPath"],
@@ -179,7 +188,7 @@
               "description": "Set breakpoint on main",
               "default": false
             },
-            "MIServerAddress": {
+            "rrServerAddress": {
               "type": "string",
               "description": "Connection string to GDB server; format host:port",
               "default": "localhost:50505"
@@ -220,7 +229,7 @@
         ],
         "configurationSnippets": [
           {
-            "label": "midas: Launch",
+            "label": "midas-rr: Launch",
             "description": "Launches midas debugging session for binary selected by user",
             "body": {
               "type": "midas-rr",
