@@ -194,6 +194,9 @@ class GDB extends GDBMixin(GDBBase) {
   async restart(program, stopOnEntry) {
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
+      if (this.#rrSession) {
+        await this.execMI(`-exec-continue`);
+      }
     } else {
       if (this.#rrSession) {
         await this.execMI("-exec-run");
@@ -456,6 +459,12 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onExec(payload) {
     log(getFunctionName(), payload);
+    if(this.#rrSession) {
+      if((payload.data["signal-name"] ?? "") == "SIGKILL" &&  (payload.data.frame.func ?? "") == "syscall_traced") {
+        let evt = new StoppedEvent("pause", 1);
+        this.#target.sendEvent(evt);
+      }
+    }
   }
 
   #onStopped(payload) {
@@ -538,6 +547,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
+    this.executionContexts.delete(payload.id);
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
 

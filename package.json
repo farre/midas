@@ -2,7 +2,11 @@
   "name": "midas",
   "displayName": "midas",
   "description": "Midas: A GDB/MI Visual Studio Code Debug Adapter",
-  "keywords": ["gdb", "midas", "debug"],
+  "keywords": [
+    "gdb",
+    "midas",
+    "debug"
+  ],
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.61.0"
@@ -26,24 +30,9 @@
     ],
     "commands": [
       {
-        "command": "midas.start",
-        "title": "start"
-      },
-      {
-        "command": "midas.stop",
-        "title": "stop"
-      },
-      {
-        "command": "midas.get-binary",
-        "title": "get binary"
-      },
-      {
-        "command": "midas.start-debug-session",
-        "title": "start debugging"
-      },
-      {
-        "command": "midas.stop-debug-session",
-        "title": "stop debugging"
+        "command": "midas.rr-record",
+        "title": "Record the execution of a binary",
+        "shortTitle": "rr Record"
       },
       {
         "command": "midas.session-continue-all",
@@ -70,7 +59,6 @@
         "icon": "$(eye-watch)"
       }
     ],
-
     "menus": {
       "debug/variables/context": [
         {
@@ -80,26 +68,30 @@
       ],
       "debug/toolBar": [
         {
-        "command": "midas.session-continue-all",
-        "group": "midas",
-        "when": "!midas.allStopModeSet"
-      },
-      {
-        "command": "midas.session-pause-all",
-        "group": "midas",
-        "when": "!midas.allStopModeSet"
-      },
-      {
-        "command": "midas.reverse-finish",
-        "group": "midas"
-      }
-    ]
+          "command": "midas.session-continue-all",
+          "group": "midas",
+          "when": "!midas.allStopModeSet"
+        },
+        {
+          "command": "midas.session-pause-all",
+          "group": "midas",
+          "when": "!midas.allStopModeSet"
+        },
+        {
+          "command": "midas.reverse-finish",
+          "group": "midas"
+        }
+      ]
     },
     "debuggers": [
       {
         "type": "midas",
         "label": "C/C++ Midas GDB",
-        "languages": ["c", "cpp", "cuda-cpp"],
+        "languages": [
+          "c",
+          "cpp",
+          "cuda-cpp"
+        ],
         "configurationAttributes": {
           "launch": {
             "type": "object",
@@ -208,7 +200,8 @@
   "scripts": {
     "lint": "eslint .",
     "pretest": "npm run lint",
-    "test": "node ./test/runTest.js"
+    "test": "node ./test/runTest.js",
+    "package": "vsce package --yarn"
   },
   "devDependencies": {
     "@babel/cli": "^7.16.0",

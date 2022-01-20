@@ -21,22 +21,39 @@ const unimplemented = (commandName, msg = "No message provided") => {
  * @returns { Disposable[] }
  */
 function getVSCodeCommands() {
-  let start = registerCommand("midas.start", () => unimplemented("start"));
-  let stop = registerCommand("midas.stop", () => unimplemented("stop"));
-  let getExecutable = registerCommand("midas.get-binary", () => unimplemented("get-binary"));
-  let startDebugging = registerCommand("midas.start-debug-session", () =>
-    vscode.debug.startDebugging(undefined, {
-      type: "midas",
-      request: "launch",
-      name: "Foo foo",
-      program: "${workspaceFolder}/build/testapp",
-      stopOnEntry: false,
-    })
-  );
+  let rrRecord = registerCommand("midas.rr-record", async () => {
+
+    const spawnTerminalRunRecord = (pathToBinary) => {
+      let t = vscode.window.createTerminal("rr record terminal");
+      t.sendText(`rr record ${pathToBinary}`);
+    }
+
+    const config = vscode.workspace.getConfiguration(
+      'launch',
+      vscode.workspace.workspaceFolders[0].uri
+    );
+    // retrieve values
+    const values = config.get('configurations').filter((cfg) => cfg.type == "midas").map((cfg) => cfg.program);
+    let programs = values.map((c) => c.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
+    let pathToBinaryToRecord = "";
+    if(programs.length >= 1) {
+      let program = await vscode.window.showQuickPick(programs, {
+        canPickMany: false,
+        ignoreFocusOut: true,
+        title: "Select program to record",
+      });
+      if(!program) return;
+      spawnTerminalRunRecord(program);
+    } else {
+      vscode.window.showInformationMessage("rr Record command uses the program configuration property in launch.json but this was not set.");
+      return;
+    }
+  });
   let stopDebugging = registerCommand("midas.stop-debug-session", () => unimplemented("stop-debug-session"));
   let continueAll = registerCommand("midas.session-continue-all", () => {
     vscode.debug.activeDebugSession.customRequest("continueAll");
   });
+
   let pauseAll = registerCommand("midas.session-pause-all", () => {
     vscode.debug.activeDebugSession.customRequest("pauseAll");
   });
@@ -53,7 +70,7 @@ function getVSCodeCommands() {
     vscode.debug.activeDebugSession.customRequest("set-watchpoint", { location: `${container.evaluateName}.${variable.name}` });
   });
 
-  return [start, stop, getExecutable, startDebugging, stopDebugging, continueAll, pauseAll, reverseFinish, watch];
+  return [rrRecord, continueAll, pauseAll, reverseFinish, watch];
 }
 
 module.exports = {
