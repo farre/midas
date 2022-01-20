@@ -20,7 +20,6 @@ const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
-const { getVSCodeDownloadUrl } = require("@vscode/test-electron/out/util");
 
 let trace = true;
 function log(location, payload) {
