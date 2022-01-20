@@ -99,7 +99,6 @@
       {
         "type": "midas",
         "label": "C/C++ Midas GDB",
-        "runtime": "node",
         "languages": ["c", "cpp", "cuda-cpp"],
         "configurationAttributes": {
           "launch": {
@@ -141,6 +140,11 @@
               "type": "string",
               "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
               "default": "gdb"
+            },
+            "rrServerAddress": {
+              "type": "string",
+              "description": "Connection string to GDB server; format host:port",
+              "default": "localhost:50505"
             }
           }
         },
@@ -148,15 +152,26 @@
           {
             "type": "midas",
             "request": "launch",
-            "name": "${1:Launch Debug}",
+            "name": "Debug binary",
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
             "allStopMode": false
+          },
+          {
+            "type": "midas",
+            "request": "launch",
+            "name": "Launch replay session",
+            "program": "${workspaceFolder}/${2:binary}",
+            "stopOnEntry": true,
+            "trace": false,
+            "allStopMode": true,
+            "rrServerAddress": "localhost:50505"
           }
         ],
         "configurationSnippets": [
           {
+            "name": "midas",
             "label": "midas: Launch",
             "description": "Launches midas debugging session for binary selected by user",
             "body": {
@@ -168,80 +183,22 @@
               "trace": false,
               "allStopMode": false
             }
-          }
-        ]
-      },
-      {
-        "type": "midasrr",
-        "label": "C/C++ Midas GDB w/rr",
-        "languages": ["c", "cpp", "cuda-cpp"],
-        "runtime": "node",
-        "configurationAttributes": {
-          "launch": {
-            "required": [ "program", "MIServerAddress", "rrPath", "debuggerPath"],
-            "program": {
-              "type": "string",
-              "description": "binary to debug"
-            },
-            "stopOnEntry": {
-              "type": "boolean",
-              "description": "Set breakpoint on main",
-              "default": false
-            },
-            "rrServerAddress": {
-              "type": "string",
-              "description": "Connection string to GDB server; format host:port",
-              "default": "localhost:50505"
-            },
-            "cwd": {
-              "type": "string",
-              "description": "Current working directory",
-              "default": "^\"\\${workspaceFolder}\""
-            },
-            "trace": {
-              "type": "boolean",
-              "description": "Turns logging on or off",
-              "default": false
-            },
-            "rrPath": {
-              "type": "string",
-              "description": "Path to rr. Defaults to trying to execute rr in $PATH",
-              "default": "rr"
-            },
-            "debuggerPath": {
-              "type": "string",
-              "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
-              "default": "gdb"
-            }
-          }
-        },
-        "initialConfigurations": [
+          },
           {
-            "type": "midas-rr",
-            "request": "launch",
-            "name": "Debug w/rr",
-            "program": "${workspaceFolder}/path/to/binary",
-            "stopOnEntry": false,
-            "trace": false,
-            "MIServerAddress": "localhost:50505",
-            "cwd": "${workspaceFolder}"
-          }
-        ],
-        "configurationSnippets": [
-          {
-            "label": "midas-rr: Launch",
-            "description": "Launches midas debugging session for binary selected by user",
+            "name": "midas",
+            "label": "midas with rr: Launch",
+            "description": "Launches midas debugging session against an rr replay",
             "body": {
-              "type": "midas-rr",
+              "type": "midas",
               "request": "launch",
-              "name": "Debug w/rr",
-              "program": "${workspaceFolder}/path/to/binary",
-              "debuggerPath": "gdb",
-              "rrPath": "rr",
-              "stopOnEntry": false,
+              "name": "${1:Launch Debug}",
+              "program": "^\"\\${workspaceFolder}/${2:binary}\"",
+              "stopOnEntry": true,
               "trace": false,
-              "MIServerAddress": "localhost:50505",
-              "cwd": "${workspaceFolder}"
+              "allStopMode": false,
+              "rrServerAddress": "localhost:50505",
+              "rrPath": "rr",
+              "debuggerPath": "gdb"
             }
           }
         ]

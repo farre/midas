@@ -132,8 +132,8 @@ class GDB extends GDBMixin(GDBBase) {
   constructor(target, args) {
     super(
       (() => {
-        if (args.type == "midas-rr") {
-          let gdb = spawnRRGDB(args.gdbPath, args.program, args.MIServerAddress);
+        if (args.hasOwnProperty("rrServerAddress")) {
+          let gdb = spawnRRGDB(args.gdbPath, args.program, args.rrServerAddress);
           gdbProcess = gdb;
           return gdb;
         } else {

@@ -1,7 +1,7 @@
 "use strict";
 
 const vscode = require("vscode");
-const { DebugSession, RRConfigurationProvider } = require("./debugSession");
+const { DebugSession } = require("./debugSession");
 
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider } = require("./debugSession");
@@ -61,12 +61,10 @@ function getTraceInfo(trace) {
  */
 function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
-  context.workspaceState.update("allStopModeSet", false);
+  context.workspaceState.update("allStopModeSet", true);
   let provider = new ConfigurationProvider();
-  let rrprovider = new RRConfigurationProvider();
   context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider("midas", provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic),
-    vscode.debug.registerDebugConfigurationProvider("midasrr", rrprovider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+    vscode.debug.registerDebugConfigurationProvider("midas", provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
   );
   // TODO(simon): when we've implemented the most bare bones debugger
   //  meaning, we can start gdb, launch a program and stop on entry
@@ -78,42 +76,6 @@ function activateExtension(context, descriptorFactory) {
     descriptorFactory = new DebugAdapterFactory();
   }
   context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midas", descriptorFactory));
-  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midasrr", new RRDebugAdapterFactory()));
-}
-
-class RRDebugAdapterFactory {
-  /**
-   *
-   * @param { vscode.DebugSession } session
-   * @returns ProviderResult<vscode.DebugAdapterDescriptor>
-   */
-  async createDebugAdapterDescriptor(session) {
-    /** @type {string} */
-    let miServerAddress = session.configuration.MIServerAddress;
-    let rrPath = session.configuration.rrPath;
-
-    const options = {
-      canPickMany: false,
-      ignoreFocusOut: true,
-      title: "Select process to debug",
-    };
-
-    const tracePicked = async (tracePath) => {
-      await vscode.window.showQuickPick(getTraceInfo(tracePath)).then((selection) => {
-        const addr = miServerAddress.split(":");
-        const port = addr[1];
-        const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k`;
-        term = vscode.window.createTerminal("rr terminal");
-        term.sendText(cmd_str);
-        term.show(true);
-      });
-    };
-    await vscode.window.showQuickPick(getTraces(), options).then(tracePicked);
-
-    let dbg_session = new DebugSession(true);
-    dbg_session.registerTerminal(term);
-    return new vscode.DebugAdapterInlineImplementation(dbg_session);
-  }
 }
 
 class DebugAdapterFactory {
@@ -122,9 +84,36 @@ class DebugAdapterFactory {
    * @param { vscode.DebugSession } session
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
-  createDebugAdapterDescriptor(session) {
-    let dbg_session = new DebugSession(true);
-    return new vscode.DebugAdapterInlineImplementation(dbg_session);
+  async createDebugAdapterDescriptor(session) {
+    if (session.configuration.hasOwnProperty("rrServerAddress")) {
+      let miServerAddress = session.configuration.rrServerAddress;
+      let rrPath = session.configuration.rrPath;
+
+      const options = {
+        canPickMany: false,
+        ignoreFocusOut: true,
+        title: "Select process to debug",
+      };
+
+      const tracePicked = async (tracePath) => {
+        await vscode.window.showQuickPick(getTraceInfo(tracePath)).then((selection) => {
+          const addr = miServerAddress.split(":");
+          const port = addr[1];
+          const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k`;
+          term = vscode.window.createTerminal("rr terminal");
+          vscode.window.createTerminal();
+          term.sendText(cmd_str);
+          term.show(true);
+        });
+      };
+      await vscode.window.showQuickPick(getTraces(), options).then(tracePicked);
+      let dbg_session = new DebugSession(true);
+      dbg_session.registerTerminal(term);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    } else {
+      let dbg_session = new DebugSession(true);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    }
   }
 }
 
