@@ -149,7 +149,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    if (args.type == "midas-rr") {
+    if (args.hasOwnProperty("rrServerAddress")) {
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
       this.gdb.initialize(args.stopOnEntry);
@@ -721,7 +721,7 @@ class ConfigurationProvider {
   async resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config || !config.type || config.type == undefined) {
-      vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then(() => {
+      vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.").then(() => {
         return null;
       });
 
@@ -730,9 +730,11 @@ class ConfigurationProvider {
 
     if (config.hasOwnProperty("rrServerAddress")) {
       // midas with rr
-      if (config.allStopMode ?? false) {
+      if (!(config.allStopMode ?? true)) {
         vscode.window
-          .showErrorMessage("rr can not run in non-stop mode. Remove the setting from the launch config or set it to true")
+          .showErrorMessage(
+            "rr can not run in non-stop mode. Remove the setting from the launch config (defaults it) or set it to true"
+          )
           .then(() => {
             return null;
           });
@@ -751,49 +753,18 @@ class ConfigurationProvider {
       await vscode.window.showInformationMessage("Cannot find a program to debug").then(() => {});
       return null;
     }
+
     vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
     return config;
   }
-}
 
-class RRConfigurationProvider {
-  // eslint-disable-next-line no-unused-vars
-  async resolveDebugConfiguration(folder, config, token) {
-    // if launch.json is missing or empty
-    if (!config || !config.type || config.type == undefined) {
-      vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.").then(() => {
-        return null;
-      });
-      return null;
-    }
-
-    if (!config.type && !config.request && !config.name) {
-      const editor = vscode.window.activeTextEditor;
-      if (editor && (editor.document.languageId === "cpp" || editor.document.languageId === "c")) {
-        console.log(`no configuration provided. defaulting`);
-        config.type = "midasrr";
-        config.name = "Launch Debug";
-        config.request = "launch";
-        config.stopOnEntry = true;
-        config.trace = false;
-        config.MIServerAddress = "localhost:50505";
-        config.cwd = "${workspaceFolder}";
-      }
-    }
-
-    if (!config.program) {
-      await vscode.window.showInformationMessage("Binary to debug has not been provided in the launch configuration").then(() => {
-        return null;
-      });
-      return null;
-    }
-    vscode.commands.executeCommand("setContext", "midas.rrSession", true);
-    return config;
+  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
+  async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
+    return debugConfiguration;
   }
 }
 
 module.exports = {
   DebugSession,
   ConfigurationProvider,
-  RRConfigurationProvider,
 };
