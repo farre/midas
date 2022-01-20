@@ -547,7 +547,12 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
-    this.executionContexts.delete(payload.id);
+    if(!this.#rrSession) {
+      this.executionContexts.delete(payload.id);
+    } else {
+      // just clear state - user might decide to rewind.
+      this.executionContexts.get(payload.id).clear(this);
+    }
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
 
