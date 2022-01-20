@@ -135,8 +135,7 @@
             },
             "rrServerAddress": {
               "type": "string",
-              "description": "Connection string to GDB server; format host:port",
-              "default": "localhost:50505"
+              "description": "Connection string to GDB server; format host:port"
             }
           }
         },
