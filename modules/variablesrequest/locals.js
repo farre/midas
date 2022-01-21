@@ -67,7 +67,6 @@ class LocalsReference extends VariablesReference {
   async cleanUp(gdb) {
     for (const v of this.#variables) {
       await gdb.deleteVariableObject(v.voName);
-      v.voName;
     }
   }
   /**
