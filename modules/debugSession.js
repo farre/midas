@@ -11,6 +11,7 @@ const fs = require("fs");
 const net = require("net");
 const { Server } = require("http");
 const { RegistersReference } = require("./variablesrequest/registers");
+const { deescape_gdbjs_output } = require("./utils");
 
 let server;
 
@@ -161,18 +162,19 @@ class DebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  async setBreakPointAtLine(path, line) {
-    let id = 0;
-    if (this.gdb) {
-      let breakpoint = await this.gdb.setBreakPointAtLine(path, line);
-      line = breakpoint.line;
-      id = breakpoint.id;
-    }
+  async setBreakPointAtLine(path, line, condition, threadId = undefined) {
     let response = {
-      verified: true,
-      line: line,
-      id: id,
+      verified: false,
+      line: 0,
+      id: 0,
     };
+    if (this.gdb) {
+      let breakpoint = await this.gdb.setConditionalBreakpoint(path, line, condition, threadId);
+      
+      response.line = breakpoint.line;
+      response.id = breakpoint.id;
+      response.verified = true;
+    }
     return response;
   }
 
@@ -183,8 +185,8 @@ class DebugSession extends DebugAdapter.DebugSession {
     // todo(simon): room for optimization. instead of emptying and re-setting, just remove those not in request.
     this.gdb.clearBreakPointsInFile(path);
 
-    for (let { line } of args?.breakpoints ?? []) {
-      res.push(this.setBreakPointAtLine(path, line));
+    for (let { line, condition } of args?.breakpoints ?? []) {
+      res.push(this.setBreakPointAtLine(path, line, condition));
     }
 
     response.body = {
@@ -559,7 +561,21 @@ class DebugSession extends DebugAdapter.DebugSession {
           this.sendResponse(response);
         });
     } else if (context == "repl") {
-      vscode.debug.activeDebugConsole.appendLine("REPL for midas is on the TODO list");
+      vscode.debug.activeDebugConsole.appendLine("REPL is Semi-unsupported: any side effects you cause will most likely not be seen in the UI");
+      if(expression.charAt(0) == "-") { // assume MI command, for now
+        this.gdb.execMI(expression).then(r => {
+          response.body.result = r;
+          this.sendResponse(response);
+        });
+      } else { // assume CLI command, for now
+        this.gdb.execCLI(`${expression}`).then(msg => {
+          response.body.result = msg;
+          this.sendResponse(response);
+        }).catch(msg => {
+          response.body.result = `Error: ${msg}`;
+          this.sendResponse(response);
+        })
+      }
     }
   }
 

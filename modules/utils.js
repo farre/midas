@@ -57,8 +57,13 @@ function spawn(program, args) {
   };
 }
 
+function deescape_gdbjs_output(str) {
+  return str.replaceAll("\"", "").replaceAll("\\n", "\n");
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
+  deescape_gdbjs_output
 };

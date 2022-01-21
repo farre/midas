@@ -459,8 +459,15 @@ class GDB extends GDBMixin(GDBBase) {
     log(getFunctionName(), payload);
     if(this.#rrSession) {
       if((payload.data["signal-name"] ?? "") == "SIGKILL" &&  (payload.data.frame.func ?? "") == "syscall_traced") {
+        // replayable binary has executed to it's finish; we're now in rr-land
         let evt = new StoppedEvent("pause", 1);
         this.#target.sendEvent(evt);
+        return;
+      }
+      if(payload.data.reason == "exited-normally") {
+        // rr has exited
+        this.sendEvent(new TerminatedEvent());
+        return;
       }
     }
   }
@@ -704,9 +711,22 @@ class GDB extends GDBMixin(GDBBase) {
   /**
    * Reports that a breakpoint was created.
    *
-   * @param {bkpt} payload
+   * @param { { bkpt: bkpt } } payload
    */
-  #onNotifyBreakpointCreated(payload) {
+  async #onNotifyBreakpointCreated(payload) {
+    const { number, addr, func, file, enabled, line }  = payload.bkpt;
+    let bp = {
+      id: `${number}`,
+      enabled: enabled == 'y'
+    };
+    let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
+    if(!dapbkpt) {
+      let pos = new vscode.Position((+line) - 1, 0);
+      let uri = vscode.Uri.parse(file);
+      let loc = new vscode.Location(uri, pos);
+      let src_bp = new vscode.SourceBreakpoint(loc, bp.enabled);
+      vscode.debug.addBreakpoints([src_bp]);
+    }
     log(getFunctionName(), payload);
   }
 
@@ -875,16 +895,28 @@ class GDB extends GDBMixin(GDBBase) {
    * Sets conditional pending breakpoint 
    */
   async setConditionalBreakpoint(path, line, condition, threadId = undefined)  {
-    if(condition ?? "" == "") {
-      return await this.setPendingBreakpoint(path, line, threadId);
+    if((condition ?? "") == "") {
+      let bp = await this.setPendingBreakpoint(path, line, threadId);
+      this.registerBreakpoint(bp);
+      return bp;
     }
     const tParam = threadId ? `-p ${threadId}` : "";
-    const cParam = `-c ${condition}`;
-    return await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then(r => r.bkpt);
+    const cParam = `-c "${condition}"`;
+    let breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then(r => r.bkpt);
+    this.registerBreakpoint(breakpoint);
+    return breakpoint;
   }
 
   async deleteVariableObject(name) {
     this.execMI(`-var-delete ${name}`);
+  }
+
+  registerBreakpoint(bp) {
+    let bps = this.#lineBreakpoints.get(bp.file) ?? [];
+    if(!bps.some(b => bp.number == b.id)) {
+      bps.push(bp);
+    }
+    this.#lineBreakpoints.set(bp.file, bps);
   }
 }
 
