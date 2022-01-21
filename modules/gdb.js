@@ -264,7 +264,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns { Promise<gdbTypes.Breakpoint> }
    */
   async setBreakPointAtLine(path, line) {
-    const breakpoint = await this.addBreak(path, line);
+    const breakpoint = await this.setPendingBreakpoint(path, line);
     let bp = new gdbTypes.Breakpoint(breakpoint.id, breakpoint.line);
     let ref = this.#lineBreakpoints.get(breakpoint.file) ?? [];
     ref.push(bp);
@@ -285,7 +285,8 @@ class GDB extends GDBMixin(GDBBase) {
 
   // eslint-disable-next-line no-unused-vars
   async setFunctionBreakpoint(name, condition, hitCondition) {
-    const { bkpt } = await this.execMI(`-break-insert ${name}`);
+    const { bkpt } = await this.execMI(`-break-insert -f ${name}`);
+
     this.#fnBreakpoints.set(name, bkpt.number);
     return bkpt.number;
   }
@@ -868,6 +869,30 @@ class GDB extends GDBMixin(GDBBase) {
     let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
     this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
     this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
+  }
+
+  /**
+   * Sets pending breakpoint 
+   */
+   async setPendingBreakpoint(path, line, threadId = undefined) {
+    const tParam = threadId ? `-p ${threadId}` : "";
+    return await this.execMI(`-break-insert -f ${path}:${line} ${tParam}`).then(r => r.bkpt);
+  }
+
+  /**
+   * Sets conditional pending breakpoint 
+   */
+  async setConditionalBreakpoint(path, line, condition, threadId = undefined)  {
+    if(condition ?? "" == "") {
+      return await this.setPendingBreakpoint(path, line, threadId);
+    }
+    const tParam = threadId ? `-p ${threadId}` : "";
+    const cParam = `-c ${condition}`;
+    return await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then(r => r.bkpt);
+  }
+
+  async deleteVariableObject(name) {
+    this.execMI(`-var-delete ${name}`);
   }
 }
 
