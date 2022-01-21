@@ -25,6 +25,35 @@ function getTraces() {
     });
   });
 }
+const WHITESPACE_REGEX = /\s/;
+function* get_field(line) {
+  let it = 0;
+  let end = 0;
+  let parts_generated = 0;
+  while(it < line.length) {
+      if(parts_generated < 3) {
+          while(WHITESPACE_REGEX.test(line.charAt(it))) it++;
+          end = it;
+          while(!WHITESPACE_REGEX.test(line.charAt(end))) end++;
+          const res = line.substring(it, end).trim();
+          it = end;
+          parts_generated++;
+          yield res;
+      } else {
+          const r = line.substring(it).trim();
+          it = line.length;
+          yield r;
+      }
+  }
+  return null;
+}
+
+function fallbackParseOfrrps(trace) {
+  return trace.split("\n").slice(1).map(line => {
+    const [pid, ppid, exit, cmd] = [...get_field(line)];
+    return {pid, ppid, exit, cmd }
+  });
+}
 
 /** @type {(trace: string) => Thenable<readonly (vscode.QuickPickItem & {value: string})[]>} */
 function getTraceInfo(trace) {
@@ -39,7 +68,18 @@ function getTraceInfo(trace) {
       if (error) {
         reject(stderr);
       } else {
-        resolve(JSON.parse(stdout));
+        try {
+          let json =  JSON.parse(stdout);
+          resolve(json);
+        } catch(err) {
+          console.log(`Error parsing json, using fallback method`);
+          try {
+            let json = fallbackParseOfrrps(stdout);
+            resolve(json);
+          } catch(err) {
+            reject(err); 
+          }
+        }
       }
     });
   }).then((picks) =>
