@@ -19,30 +19,30 @@ class LocalsReference extends VariablesReference {
 
   /**
    * @param { VariablesResponse } response - response which we prepare, to be sent back to VSCode
-   * @param { GDB } gdb_ - reference to the GDB backend
+   * @param { GDB } gdb - reference to the GDB backend
    * @returns { Promise<VariablesResponse> }
    */
-  async handleRequest(response, gdb_) {
+  async handleRequest(response, gdb) {
     if (this.#variables.length == 0) {
-      let result = await gdb_.getStackLocals(this.threadId, this.frameLevel);
+      let result = await gdb.getStackLocals(this.threadId, this.frameLevel);
       for (const { name, type, value } of result) {
-        let nextRef = gdb_.generateVariableReference();
+        let nextRef = gdb.generateVariableReference();
         let vscodeRef = 0;
         const voname = `vr_${nextRef}`;
         let cmd = `-var-create ${voname} * ${name}`;
         // we have to execute the creation of varObjs first; if we have come across a non-capturing lambda
         // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0,
         // so we must find out this first, to refrain from tracking it
-        let numchild = await gdb_.execMI(cmd, this.threadId).then((res) => res.numchild);
+        let numchild = await gdb.execMI(cmd, this.threadId).then((res) => res.numchild);
         if (!value && numchild > 0) {
           vscodeRef = nextRef;
-          gdb_.references.set(
+          gdb.references.set(
             nextRef,
             new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
           );
-          gdb_.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
+          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
         } else if (!value && numchild == 0) {
-          await gdb_.execMI(`-var-delete ${voname}`, this.threadId);
+          await gdb.deleteVariableObject(voname);
           continue;
         }
 
@@ -54,7 +54,7 @@ class LocalsReference extends VariablesReference {
       };
     } else {
       // we need to update the stack frame
-      await gdb_.updateMidasVariables(this.threadId, this.#variables);
+      await gdb.updateMidasVariables(this.threadId, this.#variables);
       response.body = {
         variables: this.#variables,
       };
@@ -66,7 +66,7 @@ class LocalsReference extends VariablesReference {
    */
   async cleanUp(gdb) {
     for (const v of this.#variables) {
-      await gdb.execMI(`-var-delete ${v.voName}`, this.threadId);
+      await gdb.deleteVariableObject(v.voName);
       v.voName;
     }
   }
