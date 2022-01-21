@@ -96,20 +96,30 @@ class DebugAdapterFactory {
       };
 
       const tracePicked = async (tracePath) => {
-        await vscode.window.showQuickPick(getTraceInfo(tracePath)).then((selection) => {
-          const addr = miServerAddress.split(":");
-          const port = addr[1];
-          const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k`;
-          term = vscode.window.createTerminal("rr terminal");
-          vscode.window.createTerminal();
-          term.sendText(cmd_str);
-          term.show(true);
+        return await vscode.window.showQuickPick(getTraceInfo(tracePath)).then((selection) => {
+          if(selection) {
+            const addr = miServerAddress.split(":");
+            const port = addr[1];
+            const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k`;
+            term = vscode.window.createTerminal("rr terminal");
+            vscode.window.createTerminal();
+            term.sendText(cmd_str);
+            term.show(true);
+            return true;
+          } 
+          return false;
         });
       };
-      await vscode.window.showQuickPick(getTraces(), options).then(tracePicked);
-      let dbg_session = new DebugSession(true);
-      dbg_session.registerTerminal(term);
-      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+      return await vscode.window.showQuickPick(getTraces(), options).then(tracePicked).then((success) => {
+        if(success) {
+          let dbg_session = new DebugSession(true);
+          dbg_session.registerTerminal(term);
+          return new vscode.DebugAdapterInlineImplementation(dbg_session);
+        } else {
+          vscode.window.showErrorMessage("You did not pick a trace.");
+          return null;
+        }
+      })
     } else {
       let dbg_session = new DebugSession(true);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
