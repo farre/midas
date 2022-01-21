@@ -74,8 +74,14 @@ function getTraceInfo(trace) {
         } catch(err) {
           console.log(`Error parsing json, using fallback method`);
           try {
-            let json = fallbackParseOfrrps(stdout);
-            resolve(json);
+            subprocess.exec(`rr ps ${trace}`, (err, stdout, stderr) => {
+              if(err) {
+                reject(stderr);
+              } else {
+                let json = fallbackParseOfrrps(stdout);
+                resolve(json);
+              }
+            });
           } catch(err) {
             reject(err); 
           }
