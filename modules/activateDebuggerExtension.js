@@ -48,10 +48,10 @@ function* get_field(line) {
   return null;
 }
 
-function fallbackParseOfrrps(trace) {
-  return trace.split("\n").slice(1).map(line => {
+function fallbackParseOfrrps(data) {
+  return data.split("\n").slice(1).filter(line => line.length > 2).map(line => {
     const [pid, ppid, exit, cmd] = [...get_field(line)];
-    return {pid, ppid, exit, cmd }
+    return { pid, ppid, exit, cmd }
   });
 }
 
@@ -64,28 +64,12 @@ function getTraceInfo(trace) {
   const rrps = `rr ps ${trace} | awk ${prefix} { printf "%s{ ${json} }",sep,$1,$2,$3,substr($0, index($0, $4));sep=","} ${suffix}'`;
 
   return new Promise((resolve, reject) => {
-    subprocess.exec(rrps, (error, stdout, stderr) => {
+    subprocess.exec(`rr ps ${trace}`, (error, stdout, stderr) => {
       if (error) {
         reject(stderr);
       } else {
-        try {
-          let json =  JSON.parse(stdout);
-          resolve(json);
-        } catch(err) {
-          console.log(`Error parsing json, using fallback method`);
-          try {
-            subprocess.exec(`rr ps ${trace}`, (err, stdout, stderr) => {
-              if(err) {
-                reject(stderr);
-              } else {
-                let json = fallbackParseOfrrps(stdout);
-                resolve(json);
-              }
-            });
-          } catch(err) {
-            reject(err); 
-          }
-        }
+        const json = fallbackParseOfrrps(stdout);
+        resolve(json);
       }
     });
   }).then((picks) =>
@@ -142,11 +126,11 @@ class DebugAdapterFactory {
       };
 
       const tracePicked = async (tracePath) => {
-        return await vscode.window.showQuickPick(getTraceInfo(tracePath)).then((selection) => {
+        return await vscode.window.showQuickPick(getTraceInfo(tracePath), options).then((selection) => {
           if(selection) {
             const addr = miServerAddress.split(":");
             const port = addr[1];
-            const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k`;
+            const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k ${tracePath}`;
             term = vscode.window.createTerminal("rr terminal");
             vscode.window.createTerminal();
             term.sendText(cmd_str);
