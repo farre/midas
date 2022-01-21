@@ -321,24 +321,21 @@ class GDB extends GDBMixin(GDBBase) {
    */
   async getTrackedStack(exec_ctx, levels) {
     // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
-    //  This is ugly and bad, this needs refactoring.
-    let arr = [];
-    exec_ctx.stack = await this.getStack(levels, exec_ctx.threadId).then((r) =>
-      r.map((frame, index) => {
-        const stackFrameIdentifier = this.nextFrameRef;
-        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
-        exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
-        let src = null;
-        if (frame.file && frame.line) {
-          src = new Source(frame.file, frame.fullname);
-        }
-        let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-        // we can't extend StackFrame for some reason. It is doing something magical behind the scenes. We have to brute-force
-        // rape the type, and tack this on by ourselves. Embarrassing.
-        r.frameAddress = +frame.addr;
-        return r;
-      })
-    );
+    // This is ugly and bad, this needs refactoring.
+    let frames = await this.getStack(levels, exec_ctx.threadId);
+    exec_ctx.stack = frames.map((frame, index) => {
+      const stackFrameIdentifier = this.nextFrameRef;
+      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
+      exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
+      let src = null;
+      if (frame.file && frame.line) {
+        src = new Source(frame.file, frame.fullname);
+      }
+      let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+      r.frameAddress = +frame.addr;
+      return r;      
+    });
+
     let level = 0;
     for (let s of exec_ctx.stack) {
       const frameAddress = +(await this.readStackFrameStart(level++, exec_ctx.threadId));
@@ -511,14 +508,13 @@ class GDB extends GDBMixin(GDBBase) {
         evt.body.description = "Read access watchpoint was triggered";
         evt.body.allThreadsStopped = this.allStopMode;
         if (exec_ctx.stack.length > 0) {
-          this.readRBP(payload.thread.id).then((frameAddress) => {
-            if (frameAddress == exec_ctx.stack[0].frameAddress) {
-              exec_ctx.stack[0].line = payload.thread.frame.line;
-            } else {
-              exec_ctx.clear(this);
-            }
-            this.#target.sendEvent(evt);
-          });
+          const frameAddress = this.readRBP(payload.thread.id);
+          if (frameAddress == exec_ctx.stack[0].frameAddress) {
+            exec_ctx.stack[0].line = payload.thread.frame.line;
+          } else {
+            exec_ctx.clear(this);
+          }
+          this.#target.sendEvent(evt);
         } else {
           this.#target.sendEvent(evt);
         }
@@ -778,12 +774,8 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns {Promise<{level: string, addr: string, func: string, file: string, fullname: string, line: string, arch: string}>}
    */
   async stackInfoFrame() {
-    return this.execMI(`-stack-info-frame`)
-      .then((r) => r.frame)
-      .catch((e) => {
-        console.log(`failed to get frame info: ${e}`);
-        return null;
-      });
+    let miResult = await this.execMI(`-stack-info-frame`);
+    return miResult.frame;
   }
 
   generateVariableReference() {
@@ -800,12 +792,14 @@ class GDB extends GDBMixin(GDBBase) {
     return this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
   }
 
-  readRBP(threadId) {
-    return this.execMI(`-data-evaluate-expression $rbp`, threadId).then((r) => r.value);
+  async readRBP(threadId) {
+    let r = await this.execMI(`-data-evaluate-expression $rbp`, threadId);
+    return r.value;
   }
 
-  readProgramCounter(threadId) {
-    return this.execMI(`-data-evaluate-expression $pc`, threadId).then((r) => r.value);
+  async readProgramCounter(threadId) {
+    let r = await this.execMI(`-data-evaluate-expression $pc`, threadId);
+    return r.value;
   }
 
   async readStackFrameStart(frameLevel, threadId) {
@@ -818,35 +812,33 @@ class GDB extends GDBMixin(GDBBase) {
     const threadId = ref.threadId;
     const voName = `${expr}.${frameId}`;
     if (this.evaluatable.has(voName)) {
-      return await this.execMI(`-var-evaluate-expression ${voName}`, threadId).then((res) => {
-        let ref = this.evaluatable.get(voName);
+      const res = await this.execMI(`-var-evaluate-expression ${voName}`, threadId);
+      let ref = this.evaluatable.get(voName);
+      return {
+        variablesReference: ref,
+        value: res.value,
+      };
+    } else {
+      const res = await this.execMI(`-var-create ${voName} @ ${expr}`, threadId);
+      if (res.numchild > 0) {
+        let nextRef = this.nextVarRef;
+        this.evaluatable.set(voName, nextRef);
+        let result = {
+          variablesReference: nextRef,
+          value: res.type,
+        };
+        this.evaluatableStructuredVars.set(nextRef, {
+          variableObjectName: voName,
+          memberVariables: [],
+        });
+        return result;
+      } else {
+        this.evaluatable.set(voName, 0);
         return {
-          variablesReference: ref,
+          variablesReference: 0,
           value: res.value,
         };
-      });
-    } else {
-      return await this.execMI(`-var-create ${voName} @ ${expr}`, threadId).then((res) => {
-        if (res.numchild > 0) {
-          let nextRef = this.nextVarRef;
-          this.evaluatable.set(voName, nextRef);
-          let result = {
-            variablesReference: nextRef,
-            value: res.type,
-          };
-          this.evaluatableStructuredVars.set(nextRef, {
-            variableObjectName: voName,
-            memberVariables: [],
-          });
-          return result;
-        } else {
-          this.evaluatable.set(voName, 0);
-          return {
-            variablesReference: 0,
-            value: res.value,
-          };
-        }
-      });
+      }
     }
   }
 

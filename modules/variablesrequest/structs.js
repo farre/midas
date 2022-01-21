@@ -77,11 +77,10 @@ class StructsReference extends VariablesReference {
         variables: this.#memberVariables,
       };
     } else {
-      await gdb.updateMidasVariables(this.threadId, this.#memberVariables).then(() => {
-        response.body = {
-          variables: this.#memberVariables,
-        };
-      });
+      await gdb.updateMidasVariables(this.threadId, this.#memberVariables);
+      response.body = {
+        variables: this.#memberVariables,
+      };
     }
     return response;
   }

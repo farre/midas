@@ -411,9 +411,8 @@ class DebugSession extends DebugAdapter.DebugSession {
       // todo(simon): fix this.
       this.sendResponse(response);
     } else {
-      ref.update(response, this.gdb, name, value).then((prepared_response) => {
-        this.sendResponse(prepared_response);
-      });
+      const prepared_response = await ref.update(response, this.gdb, name, value);
+      this.sendResponse(prepared_response);
     }
   }
 
@@ -721,10 +720,7 @@ class ConfigurationProvider {
   async resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config || !config.type || config.type == undefined) {
-      vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.").then(() => {
-        return null;
-      });
-
+      await vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.");
       return null;
     }
 
@@ -750,7 +746,7 @@ class ConfigurationProvider {
     setDefaults(config);
 
     if (!config.program) {
-      await vscode.window.showInformationMessage("Cannot find a program to debug").then(() => {});
+      await vscode.window.showInformationMessage("Cannot find a program to debug");
       return null;
     }
 
