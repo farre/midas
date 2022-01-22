@@ -26,8 +26,21 @@ function log(location, payload) {
   if (!trace) {
     return;
   }
-
   console.log(`Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
+}
+/**
+ * Prepares a stopped event body
+ * @param {string} reason
+ * @param {string} description
+ * @param {boolean} allThreadsStopped
+ * @returns
+ */
+function stoppedEventBody(reason, description, allThreadsStopped) {
+  return {
+    reason,
+    allThreadsStopped,
+    description,
+  };
 }
 
 /** @constructor */
@@ -485,11 +498,10 @@ class GDB extends GDBMixin(GDBBase) {
     } catch {
       reason = payload.reason;
     }
-    let exec_ctx = this.executionContexts.get(payload.thread.id);
+
     switch (reason) {
       case "breakpoint-hit": {
         this.#onBreakpointHit(payload.thread);
-        if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = payload.thread.frame.line;
         break;
       }
       case "exited-normally": {
@@ -503,22 +515,21 @@ class GDB extends GDBMixin(GDBBase) {
       case "end-stepping-range": {
         this.executionContexts.get(payload.thread.id).stack[0].line = payload.thread.frame.line;
         let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body.allThreadsStopped = this.allStopMode;
+        evt.body = stoppedEventBody("step", "Stepping finished", this.allStopMode);
         this.#target.sendEvent(evt);
         break;
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
         let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body.allThreadsStopped = this.allStopMode;
+        evt.body = stoppedEventBody("pause", "Function finished", this.allStopMode);
         this.#target.sendEvent(evt);
         break;
       }
-      case "read-watchpoint-trigger":
+      case "read-watchpoint-trigger": {
+        let exec_ctx = this.executionContexts.get(payload.thread.id);
         let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body.reason = "Hit watchpoint";
-        evt.body.description = "Read access watchpoint was triggered";
-        evt.body.allThreadsStopped = this.allStopMode;
+        evt.body = stoppedEventBody("Watchpoint", "Hardware watchpoint hit", this.allStopMode);
         if (exec_ctx.stack.length > 0) {
           const frameAddress = this.readRBP(payload.thread.id);
           if (frameAddress == exec_ctx.stack[0].frameAddress) {
@@ -526,11 +537,10 @@ class GDB extends GDBMixin(GDBBase) {
           } else {
             exec_ctx.clear(this);
           }
-          this.#target.sendEvent(evt);
-        } else {
-          this.#target.sendEvent(evt);
         }
+        this.#target.sendEvent(evt);
         break;
+      }
       default:
         console.log(`stopped for other reason: ${payload.reason}`);
     }
@@ -557,6 +567,7 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
     if (!this.#rrSession) {
+      this.executionContexts.get(payload.id).clear(this);
       this.executionContexts.delete(payload.id);
     } else {
       // just clear state - user might decide to rewind.
@@ -762,6 +773,8 @@ class GDB extends GDBMixin(GDBBase) {
       threadId: THREADID,
     };
     stopEvent.body = body;
+    let exec_ctx = this.executionContexts.get(thread.id);
+    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = thread.frame.line;
     this.sendEvent(stopEvent);
   }
 
@@ -769,16 +782,15 @@ class GDB extends GDBMixin(GDBBase) {
   #onSignalReceived(thread, code) {
     const THREADID = thread.id;
     // we do not pass thread id, because if the user hits pause, we want to interrupt _everything_
-    if (this.userRequestedInterrupt) {
-      let stopEvent = new StoppedEvent("pause", THREADID);
-      let body = {
-        reason: stopEvent.body.reason,
-        allThreadsStopped: true,
-        threadId: THREADID,
-      };
-      stopEvent.body = body;
-      this.sendEvent(stopEvent);
-    }
+    let stopEvent = new StoppedEvent("pause", THREADID);
+    let body = {
+      reason: stopEvent.body.reason,
+      allThreadsStopped: true,
+      threadId: THREADID,
+      description: "Interrupted by signal",
+    };
+    stopEvent.body = body;
+    this.sendEvent(stopEvent);
   }
 
   /**

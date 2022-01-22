@@ -1,19 +1,14 @@
 "use strict";
 
 const assert = require("assert");
-const { DebugClient } = require("vscode-debugadapter-testsupport");
-const { DebugSession } = require("../../modules/debugSession");
+const { DebugClient } = require("@vscode/debugadapter-testsupport");
+const { MidasDebugSession } = require("../../modules/debugSession");
 const path = require("path");
 const { buildTestFiles } = require("../../modules/utils");
 
 const PROJECT_ROOT = path.normalize(path.join(__dirname, "..", ".."));
 const TEST_PROJECT = path.join(PROJECT_ROOT, "test", "cppworkspace", "test");
-const MANDELBROT_PROJECT = path.join(
-  PROJECT_ROOT,
-  "test",
-  "cppworkspace",
-  "thread"
-);
+const MANDELBROT_PROJECT = path.join(PROJECT_ROOT, "test", "cppworkspace", "thread");
 
 setup(() => {
   return [buildTestFiles(TEST_PROJECT), buildTestFiles(MANDELBROT_PROJECT)];
@@ -25,13 +20,9 @@ suite("Extension Launch Test Suite", () => {
   let port = 44444;
   setup(() => {
     let myport = port++;
-    DebugSession.run(myport);
+    MidasDebugSession.run(myport);
 
-    dc = new DebugClient(
-      "node",
-      "we're running the adapter as a server and don't need an executable",
-      "midas"
-    );
+    dc = new DebugClient("node", "we're running the adapter as a server and don't need an executable", "midas");
     return dc.start(myport);
   });
 
@@ -43,10 +34,7 @@ suite("Extension Launch Test Suite", () => {
     test("should return supported features", async () => {
       let response = await dc.initializeRequest();
       response.body = response.body || {};
-      assert(
-        response.body.supportsConfigurationDoneRequest,
-        "supports configuation done"
-      );
+      assert(response.body.supportsConfigurationDoneRequest, "supports configuation done");
     });
   });
 
@@ -54,11 +42,7 @@ suite("Extension Launch Test Suite", () => {
     test("should run program to the end", () => {
       const PROGRAM = path.join(TEST_PROJECT, "build", "testapp");
 
-      return Promise.all([
-        dc.configurationSequence(),
-        dc.launch({ program: PROGRAM }),
-        dc.waitForEvent("terminated"),
-      ]);
+      return Promise.all([dc.configurationSequence(), dc.launch({ program: PROGRAM }), dc.waitForEvent("terminated")]);
     }).timeout("5s");
 
     test("should stop at entry", () => {
@@ -68,11 +52,7 @@ suite("Extension Launch Test Suite", () => {
         dc.configurationSequence(),
         dc.launch({ program: PROGRAM, stopOnEntry: true }),
         dc.waitForEvent("stopped").then((event) => {
-          assert.strictEqual(
-            event.body.reason,
-            "entry",
-            "should receive entry event"
-          );
+          assert.strictEqual(event.body.reason, "entry", "should receive entry event");
         }),
       ]);
     }).timeout("5s");
@@ -85,13 +65,9 @@ suite("Multi-threaded testing suite", () => {
   let dc;
 
   setup(async () => {
-    DebugSession.run(PORT);
+    MidasDebugSession.run(PORT);
 
-    dc = new DebugClient(
-      "node",
-      "we're running the adapter as a server and don't need an executable",
-      "midas"
-    );
+    dc = new DebugClient("node", "we're running the adapter as a server and don't need an executable", "midas");
 
     await dc.start(PORT);
     return Promise.all([
@@ -100,9 +76,7 @@ suite("Multi-threaded testing suite", () => {
         program: PROGRAM,
         stopOnEntry: true,
         trace: false,
-        debuggeeArgs: [
-          "additionalCLIParamTellsTestProgramCalled_Threads_ToRunAsTestSuiteOrShortMandelbrot",
-        ],
+        debuggeeArgs: ["additionalCLIParamTellsTestProgramCalled_Threads_ToRunAsTestSuiteOrShortMandelbrot"],
       }),
       dc.waitForEvent("stopped"),
     ]);
@@ -152,13 +126,9 @@ suite("Extension Breakpoints Test Suite", () => {
   let dc;
 
   setup(async () => {
-    DebugSession.run(PORT);
+    MidasDebugSession.run(PORT);
 
-    dc = new DebugClient(
-      "node",
-      "we're running the adapter as a server and don't need an executable",
-      "midas"
-    );
+    dc = new DebugClient("node", "we're running the adapter as a server and don't need an executable", "midas");
 
     await dc.start(PORT);
     return Promise.all([
@@ -187,10 +157,7 @@ suite("Extension Breakpoints Test Suite", () => {
       const line = 20;
       const threadId = 1;
       await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
-      return Promise.all([
-        dc.continueRequest({ threadId }),
-        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
-      ]);
+      return Promise.all([dc.continueRequest({ threadId }), dc.assertStoppedLocation("breakpoint", { path: source.path, line })]);
     });
 
     test("should hit breakpoint after restart", async () => {
@@ -199,10 +166,7 @@ suite("Extension Breakpoints Test Suite", () => {
       const line = 20;
       const threadId = 1;
       await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
-      return Promise.all([
-        dc.continueRequest({ threadId }),
-        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
-      ]);
+      return Promise.all([dc.continueRequest({ threadId }), dc.assertStoppedLocation("breakpoint", { path: source.path, line })]);
     });
   });
 });
