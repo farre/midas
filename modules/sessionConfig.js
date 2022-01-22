@@ -183,16 +183,14 @@ class DebugAdapterFactory {
     if (isReplaySession(session.configuration)) {
       let miServerAddress = session.configuration.replay.rrServerAddress;
       const rrPath = session.configuration.replay.rrPath;
-      let term;
       const pid = session.configuration.replay.parameters.pid;
       const tracePath = session.configuration.replay.parameters.tracePath;
       const inet_addr = miServerAddress.split(":");
       // turns out, gdb doesn't recognize "localhost" as a parameter.
       const addr = inet_addr[0] == "localhost" ? "127.0.0.1" : inet_addr[0];
       const port = inet_addr[1];
-      const cmd_str = `${rrPath} replay -s ${port} -p ${pid} -k ${tracePath}`;
-      term = vscode.window.createTerminal("rr terminal");
-      vscode.window.createTerminal();
+      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${tracePath}`;
+      let term = vscode.window.createTerminal("rr terminal");
       term.sendText(cmd_str);
       term.show(true);
       let dbg_session = new MidasDebugSession(true);
