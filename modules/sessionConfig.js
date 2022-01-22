@@ -1,7 +1,8 @@
 const vscode = require("vscode");
-const { DebugSession } = require("./debugSession");
+const { MidasDebugSession } = require("./debugSession");
 const path = require("path");
 const subprocess = require("child_process");
+const { isReplaySession } = require("./utils");
 
 /**
  * @returns { Thenable<string[]> }
@@ -97,15 +98,6 @@ function setDefaults(config) {
   }
 }
 
-/** @typedef { import("@vscode/debugprotocol").DebugProtocol.LaunchRequestArguments | import("vscode").DebugConfiguration } ConfigurationVariant  */
-
-/**
- * Checks if this object represents a configuration of a replay session with rr
- * @param { ConfigurationVariant } config -  object to check if it has the "replay" attribute, it can be an LaunchArguments or DebugConfiguration
- * @returns true if it is
- */
-const isReplaySession = (config) => config.hasOwnProperty("replay");
-
 class ConfigurationProvider {
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
@@ -198,16 +190,16 @@ class DebugAdapterFactory {
       // turns out, gdb doesn't recognize "localhost" as a parameter.
       const addr = inet_addr[0] == "localhost" ? "127.0.0.1" : inet_addr[0];
       const port = inet_addr[1];
-      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${tracePath}`;
+      const cmd_str = `${rrPath} replay -s ${port} -p ${pid} -k ${tracePath}`;
       term = vscode.window.createTerminal("rr terminal");
       vscode.window.createTerminal();
       term.sendText(cmd_str);
       term.show(true);
-      let dbg_session = new DebugSession(true);
+      let dbg_session = new MidasDebugSession(true);
       dbg_session.registerTerminal(term);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     } else {
-      let dbg_session = new DebugSession(true);
+      let dbg_session = new MidasDebugSession(true);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }
