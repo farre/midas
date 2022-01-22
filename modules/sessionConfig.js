@@ -105,24 +105,62 @@ class ConfigurationProvider {
       await vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.");
       return null;
     }
-
-    if (config.hasOwnProperty("rrServerAddress")) {
-      // midas with rr
-      if (!(config.allStopMode ?? true)) {
-        vscode.window.showErrorMessage(
-          "rr can not run in non-stop mode. Remove the setting from the launch config (defaults it) or set it to true"
-        );
+    setDefaults(config);
+    if (!config.program) {
+      await vscode.window.showErrorMessage("A binary to debug was not provided");
+      return null;
+    }
+    if (config.hasOwnProperty("replay")) {
+      if (!config.program) {
+        await vscode.window.showErrorMessage("A path to a binary containing the symbols for the replay session was not provided");
         return null;
       }
-      if (!config.rrPath) {
-        config.rrPath = "rr";
+
+      const options = {
+        canPickMany: false,
+        ignoreFocusOut: true,
+        title: "Select process to debug",
+      };
+
+      if (!config.replay) config.replay = {};
+      const tracePicked = async (tracePath) => {
+        return await vscode.window.showQuickPick(getTraceInfo(tracePath), options).then((selection) => {
+          if (selection) {
+            const replay_parameters = { pid: selection.value, tracePath: tracePath, cmd: selection.detail };
+            return replay_parameters;
+          }
+          return null;
+        });
+      };
+
+      if (config.replay.tracePath && !config.replay.pid) {
+        return await tracePicked(config.replay.tracePath).then((replay_parameters) => {
+          if (replay_parameters) {
+            config.replay.parameters = replay_parameters;
+            return config;
+          } else {
+            vscode.window.showErrorMessage("You did not pick a trace.");
+            return null;
+          }
+        });
+      } else if (!config.replay.tracePath && !config.replay.pid) {
+        return await vscode.window
+          .showQuickPick(getTraces(), options)
+          .then(tracePicked)
+          .then((replay_parameters) => {
+            if (replay_parameters) {
+              config.replay.parameters = replay_parameters;
+              return config;
+            } else {
+              vscode.window.showErrorMessage("You did not pick a trace.");
+              return null;
+            }
+          });
+      } else {
+        return config;
       }
-    } else {
-      // midas without rr
     }
-
-    setDefaults(config);
-
+    // without rr
     if (!config.program) {
       await vscode.window.showInformationMessage("Cannot find a program to debug");
       return null;
@@ -145,44 +183,23 @@ class DebugAdapterFactory {
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
   async createDebugAdapterDescriptor(session) {
-    if (session.configuration.hasOwnProperty("rrServerAddress")) {
-      let miServerAddress = session.configuration.rrServerAddress;
-      let rrPath = session.configuration.rrPath;
+    if (session.configuration.hasOwnProperty("replay")) {
+      let miServerAddress = session.configuration.replay.rrServerAddress;
+      const rrPath = session.configuration.replay.rrPath;
       let term;
-      const options = {
-        canPickMany: false,
-        ignoreFocusOut: true,
-        title: "Select process to debug",
-      };
+      const pid = session.configuration.replay.parameters.pid;
+      const tracePath = session.configuration.replay.parameters.tracePath;
 
-      const tracePicked = async (tracePath) => {
-        return await vscode.window.showQuickPick(getTraceInfo(tracePath), options).then((selection) => {
-          if (selection) {
-            const addr = miServerAddress.split(":");
-            const port = addr[1];
-            const cmd_str = `${rrPath} replay -s ${port} -p ${selection.value} -k ${tracePath}`;
-            term = vscode.window.createTerminal("rr terminal");
-            vscode.window.createTerminal();
-            term.sendText(cmd_str);
-            term.show(true);
-            return true;
-          }
-          return false;
-        });
-      };
-      return await vscode.window
-        .showQuickPick(getTraces(), options)
-        .then(tracePicked)
-        .then((success) => {
-          if (success) {
-            let dbg_session = new DebugSession(true);
-            dbg_session.registerTerminal(term);
-            return new vscode.DebugAdapterInlineImplementation(dbg_session);
-          } else {
-            vscode.window.showErrorMessage("You did not pick a trace.");
-            return null;
-          }
-        });
+      const addr = miServerAddress.split(":");
+      const port = addr[1];
+      const cmd_str = `${rrPath} replay -h ${addr[0]} -s ${port} -p ${pid} -k ${tracePath}`;
+      term = vscode.window.createTerminal("rr terminal");
+      vscode.window.createTerminal();
+      term.sendText(cmd_str);
+      term.show(true);
+      let dbg_session = new DebugSession(true);
+      dbg_session.registerTerminal(term);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
     } else {
       let dbg_session = new DebugSession(true);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);

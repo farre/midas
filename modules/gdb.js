@@ -131,8 +131,8 @@ class GDB extends GDBMixin(GDBBase) {
   constructor(target, args) {
     super(
       (() => {
-        if (args.hasOwnProperty("rrServerAddress")) {
-          let gdb = spawnRRGDB(args.gdbPath, args.program, args.rrServerAddress);
+        if (args.hasOwnProperty("replay")) {
+          let gdb = spawnRRGDB(args.gdbPath, args.program, args.replay.rrServerAddress);
           gdbProcess = gdb;
           return gdb;
         } else {
@@ -167,8 +167,13 @@ class GDB extends GDBMixin(GDBBase) {
     await this.init();
     this.registerAsAllStopMode();
     this.#rrSession = true;
+    if (stopOnEntry) {
+      // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
+      this.setFunctionBreakpoint("main");
+    }
     await this.#setUpRegistersInfo();
     await this.run();
+
     this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
 
@@ -286,7 +291,6 @@ class GDB extends GDBMixin(GDBBase) {
   // eslint-disable-next-line no-unused-vars
   async setFunctionBreakpoint(name, condition, hitCondition) {
     const { bkpt } = await this.execMI(`-break-insert -f ${name}`);
-
     this.#fnBreakpoints.set(name, bkpt.number);
     return bkpt.number;
   }
@@ -333,7 +337,7 @@ class GDB extends GDBMixin(GDBBase) {
       }
       let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
       r.frameAddress = +frame.addr;
-      return r;      
+      return r;
     });
 
     let level = 0;
@@ -457,14 +461,14 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onExec(payload) {
     log(getFunctionName(), payload);
-    if(this.#rrSession) {
-      if((payload.data["signal-name"] ?? "") == "SIGKILL" &&  (payload.data.frame.func ?? "") == "syscall_traced") {
+    if (this.#rrSession) {
+      if ((payload.data["signal-name"] ?? "") == "SIGKILL" && (payload.data.frame.func ?? "") == "syscall_traced") {
         // replayable binary has executed to it's finish; we're now in rr-land
         let evt = new StoppedEvent("pause", 1);
         this.#target.sendEvent(evt);
         return;
       }
-      if(payload.data.reason == "exited-normally") {
+      if (payload.data.reason == "exited-normally") {
         // rr has exited
         this.sendEvent(new TerminatedEvent());
         return;
@@ -551,7 +555,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
-    if(!this.#rrSession) {
+    if (!this.#rrSession) {
       this.executionContexts.delete(payload.id);
     } else {
       // just clear state - user might decide to rewind.
@@ -714,14 +718,14 @@ class GDB extends GDBMixin(GDBBase) {
    * @param { { bkpt: bkpt } } payload
    */
   async #onNotifyBreakpointCreated(payload) {
-    const { number, addr, func, file, enabled, line }  = payload.bkpt;
+    const { number, addr, func, file, enabled, line } = payload.bkpt;
     let bp = {
       id: `${number}`,
-      enabled: enabled == 'y'
+      enabled: enabled == "y",
     };
     let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
-    if(!dapbkpt) {
-      let pos = new vscode.Position((+line) - 1, 0);
+    if (!dapbkpt) {
+      let pos = new vscode.Position(+line - 1, 0);
       let uri = vscode.Uri.parse(file);
       let loc = new vscode.Location(uri, pos);
       let src_bp = new vscode.SourceBreakpoint(loc, bp.enabled);
@@ -884,25 +888,25 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * Sets pending breakpoint 
+   * Sets pending breakpoint
    */
-   async setPendingBreakpoint(path, line, threadId = undefined) {
+  async setPendingBreakpoint(path, line, threadId = undefined) {
     const tParam = threadId ? `-p ${threadId}` : "";
-    return await this.execMI(`-break-insert -f ${path}:${line} ${tParam}`).then(r => r.bkpt);
+    return await this.execMI(`-break-insert -f ${path}:${line} ${tParam}`).then((r) => r.bkpt);
   }
 
   /**
-   * Sets conditional pending breakpoint 
+   * Sets conditional pending breakpoint
    */
-  async setConditionalBreakpoint(path, line, condition, threadId = undefined)  {
-    if((condition ?? "") == "") {
+  async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
+    if ((condition ?? "") == "") {
       let bp = await this.setPendingBreakpoint(path, line, threadId);
       this.registerBreakpoint(bp);
       return bp;
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
-    let breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then(r => r.bkpt);
+    let breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then((r) => r.bkpt);
     this.registerBreakpoint(breakpoint);
     return breakpoint;
   }
@@ -913,15 +917,13 @@ class GDB extends GDBMixin(GDBBase) {
 
   registerBreakpoint(bp) {
     let bps = this.#lineBreakpoints.get(bp.file) ?? [];
-    if(!bps.some(b => bp.number == b.id)) {
+    if (!bps.some((b) => bp.number == b.id)) {
       bps.push(bp);
     }
     this.#lineBreakpoints.set(bp.file, bps);
   }
 
-  interrupt() {
-    
-  }
+  interrupt() {}
 }
 
 exports.GDB = GDB;

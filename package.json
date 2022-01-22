@@ -127,19 +127,28 @@
               "description": "Whether or not GDB should run in all stop mode",
               "default": false
             },
-            "rrPath": {
-              "type": "string",
-              "description": "Path to rr. Defaults to trying to execute rr in $PATH",
-              "default": "rr"
-            },
             "debuggerPath": {
               "type": "string",
               "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
               "default": "gdb"
             },
-            "rrServerAddress": {
-              "type": "string",
-              "description": "Connection string to GDB server; format host:port"
+            "replay": {
+              "type": "object",
+              "properties": {
+                "rrPath": {
+                  "type": "string",
+                  "description": "Path to rr. Defaults to trying to execute rr in $PATH",
+                  "default": "rr"
+                },
+                "rrServerAddress": {
+                  "type": "string",
+                  "description": "Connection string to GDB server; format host:port"
+                },
+                "tracePath": {
+                  "type": "string",
+                  "description": "trace workspace. Can be found running the rr command `rr ls`"
+                }
+              }
             }
           }
         },
@@ -160,8 +169,10 @@
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
-            "allStopMode": true,
-            "rrServerAddress": "localhost:50505"
+            "replay": {
+              "rrPath": "rr",
+              "rrServerAddress": "localhost:50505"
+            }
           }
         ],
         "configurationSnippets": [
@@ -190,10 +201,11 @@
               "program": "^\"\\${workspaceFolder}/${2:binary}\"",
               "stopOnEntry": true,
               "trace": false,
-              "allStopMode": false,
-              "rrServerAddress": "localhost:50505",
-              "rrPath": "rr",
-              "debuggerPath": "gdb"
+              "debuggerPath": "gdb",
+              "replay": {
+                "rrPath": "rr",
+                "rrServerAddress": "localhost:50505"
+              }
             }
           }
         ]
