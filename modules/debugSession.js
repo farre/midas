@@ -10,11 +10,11 @@ const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { RegistersReference } = require("./variablesrequest/registers");
-const { isReplaySession } = require("./sessionConfig");
+const { isReplaySession } = require("./utils");
 
 let server;
 
-class DebugSession extends DebugAdapter.DebugSession {
+class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
 
@@ -368,7 +368,7 @@ class DebugSession extends DebugAdapter.DebugSession {
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
   static run(port) {
     if (!port) {
-      DebugAdapter.DebugSession.run(DebugSession);
+      DebugAdapter.DebugSession.run(MidasDebugSession);
       return;
     }
     if (server) {
@@ -380,7 +380,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     server = net
       .createServer((socket) => {
         socket.on("end", () => {});
-        const session = new DebugSession();
+        const session = new MidasDebugSession();
         session.setRunAsServer(true);
         session.start(socket, socket);
       })
@@ -723,5 +723,5 @@ class DebugSession extends DebugAdapter.DebugSession {
 }
 
 module.exports = {
-  DebugSession,
+  MidasDebugSession,
 };

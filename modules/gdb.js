@@ -17,10 +17,9 @@ const {
 
 const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
-const { getFunctionName, spawn } = require("./utils");
+const { getFunctionName, spawn, isReplaySession } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
-const { isReplaySession } = require("./sessionConfig");
 
 let trace = true;
 function log(location, payload) {
@@ -166,6 +165,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = doTrace;
     await this.init();
+    await this.attachOnFork();
     this.registerAsAllStopMode();
     this.#rrSession = true;
     if (stopOnEntry) {

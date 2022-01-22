@@ -4,6 +4,15 @@ const { exec, spawn: _spawn } = require("child_process");
 var fs = require("fs");
 var path = require("path");
 
+// we moved this here, to deal with cyclic imports which failed silently in debug *and* in installed ("release") mode
+/** @typedef { import("@vscode/debugprotocol").DebugProtocol.LaunchRequestArguments | import("vscode").DebugConfiguration } ConfigurationVariant  */
+/**
+ * Checks if this object represents a configuration of a replay session with rr
+ * @param { ConfigurationVariant } config -  object to check if it has the "replay" attribute, it can be an LaunchArguments or DebugConfiguration
+ * @returns true if it is
+ */
+const isReplaySession = (config) => config.hasOwnProperty("replay");
+
 async function buildTestFiles(testPath) {
   const buildPath = path.join(testPath, "build");
   if (!fs.existsSync(buildPath)) {
@@ -16,9 +25,7 @@ async function buildTestFiles(testPath) {
     }).once("exit", resolve)
   );
 
-  await new Promise((resolve) =>
-    exec("cmake --build .", { cwd: buildPath }).once("exit", resolve)
-  );
+  await new Promise((resolve) => exec("cmake --build .", { cwd: buildPath }).once("exit", resolve));
 }
 
 function getFunctionName() {
@@ -58,12 +65,13 @@ function spawn(program, args) {
 }
 
 function deescape_gdbjs_output(str) {
-  return str.replaceAll("\"", "").replaceAll("\\n", "\n");
+  return str.replaceAll('"', "").replaceAll("\\n", "\n");
 }
 
 module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
-  deescape_gdbjs_output
+  deescape_gdbjs_output,
+  isReplaySession,
 };
