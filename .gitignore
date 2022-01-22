@@ -8,3 +8,5 @@ test/cppworkspace/test/build
 test/cppworkspace/test/testapp
 test/cppworkspace/thread/.vscode/
 test/cppworkspace/thread/build
+.vscode/settings.json
+
