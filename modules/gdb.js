@@ -20,6 +20,7 @@ const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
+const { isReplaySession } = require("./sessionConfig");
 
 let trace = true;
 function log(location, payload) {
@@ -131,7 +132,7 @@ class GDB extends GDBMixin(GDBBase) {
   constructor(target, args) {
     super(
       (() => {
-        if (args.hasOwnProperty("replay")) {
+        if (isReplaySession(args)) {
           let gdb = spawnRRGDB(args.gdbPath, args.program, args.replay.rrServerAddress);
           gdbProcess = gdb;
           return gdb;

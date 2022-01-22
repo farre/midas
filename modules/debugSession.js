@@ -9,9 +9,8 @@ const { GDB, MidasVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { Server } = require("http");
 const { RegistersReference } = require("./variablesrequest/registers");
-const { deescape_gdbjs_output } = require("./utils");
+const { isReplaySession } = require("./sessionConfig");
 
 let server;
 
@@ -150,7 +149,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    if (args.hasOwnProperty("replay")) {
+    if (isReplaySession(args)) {
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
       this.gdb.initialize(args.stopOnEntry);
