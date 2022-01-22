@@ -150,7 +150,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
 
-    if (args.hasOwnProperty("rrServerAddress")) {
+    if (args.hasOwnProperty("replay")) {
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
       this.gdb.initialize(args.stopOnEntry);
