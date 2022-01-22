@@ -208,5 +208,4 @@ class DebugAdapterFactory {
 module.exports = {
   ConfigurationProvider,
   DebugAdapterFactory,
-  isReplaySession,
 };
