@@ -918,6 +918,10 @@ class GDB extends GDBMixin(GDBBase) {
     }
     this.#lineBreakpoints.set(bp.file, bps);
   }
+
+  interrupt() {
+    
+  }
 }
 
 exports.GDB = GDB;
