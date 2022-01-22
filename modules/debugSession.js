@@ -170,7 +170,7 @@ class DebugSession extends DebugAdapter.DebugSession {
     };
     if (this.gdb) {
       let breakpoint = await this.gdb.setConditionalBreakpoint(path, line, condition, threadId);
-      
+
       response.line = breakpoint.line;
       response.id = breakpoint.id;
       response.verified = true;
@@ -561,20 +561,27 @@ class DebugSession extends DebugAdapter.DebugSession {
           this.sendResponse(response);
         });
     } else if (context == "repl") {
-      vscode.debug.activeDebugConsole.appendLine("REPL is Semi-unsupported: any side effects you cause will most likely not be seen in the UI");
-      if(expression.charAt(0) == "-") { // assume MI command, for now
-        this.gdb.execMI(expression).then(r => {
+      vscode.debug.activeDebugConsole.appendLine(
+        "REPL is Semi-unsupported: any side effects you cause will most likely not be seen in the UI"
+      );
+      if (expression.charAt(0) == "-") {
+        // assume MI command, for now
+        this.gdb.execMI(expression).then((r) => {
           response.body.result = r;
           this.sendResponse(response);
         });
-      } else { // assume CLI command, for now
-        this.gdb.execCLI(`${expression}`).then(msg => {
-          response.body.result = msg;
-          this.sendResponse(response);
-        }).catch(msg => {
-          response.body.result = `Error: ${msg}`;
-          this.sendResponse(response);
-        })
+      } else {
+        // assume CLI command, for now
+        this.gdb
+          .execCLI(`${expression}`)
+          .then((msg) => {
+            response.body.result = msg;
+            this.sendResponse(response);
+          })
+          .catch((msg) => {
+            response.body.result = `Error: ${msg}`;
+            this.sendResponse(response);
+          });
       }
     }
   }
@@ -716,67 +723,6 @@ class DebugSession extends DebugAdapter.DebugSession {
   }
 }
 
-function setDefaults(config) {
-  if (!config.hasOwnProperty("stopOnEntry")) {
-    config.stopOnEntry = false;
-  }
-  if (!config.hasOwnProperty("trace")) {
-    config.trace = false;
-  }
-  if (!config.hasOwnProperty("allStopMode")) {
-    config.allStopMode = true;
-  }
-  if (!config.hasOwnProperty("debuggerPath")) {
-    config.debuggerPath = "gdb";
-  }
-}
-
-class ConfigurationProvider {
-  // eslint-disable-next-line no-unused-vars
-  async resolveDebugConfiguration(folder, config, token) {
-    // if launch.json is missing or empty
-    if (!config || !config.type || config.type == undefined) {
-      await vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.");
-      return null;
-    }
-
-    if (config.hasOwnProperty("rrServerAddress")) {
-      // midas with rr
-      if (!(config.allStopMode ?? true)) {
-        vscode.window
-          .showErrorMessage(
-            "rr can not run in non-stop mode. Remove the setting from the launch config (defaults it) or set it to true"
-          )
-          .then(() => {
-            return null;
-          });
-        return null;
-      }
-      if (!config.rrPath) {
-        config.rrPath = "rr";
-      }
-    } else {
-      // midas without rr
-    }
-
-    setDefaults(config);
-
-    if (!config.program) {
-      await vscode.window.showInformationMessage("Cannot find a program to debug");
-      return null;
-    }
-
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
-    return config;
-  }
-
-  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
-  async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
-    return debugConfiguration;
-  }
-}
-
 module.exports = {
   DebugSession,
-  ConfigurationProvider,
 };
