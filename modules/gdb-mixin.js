@@ -76,7 +76,7 @@ function GDBMixin(GDBBase) {
     //  if pause of all is desired, call pauseAll() instead
     async pauseExecution(threadId) {
       this.userRequestedInterrupt = true;
-      if (!threadId) {
+      if((this.allStopMode || !threadId)) {
         return await this.execMI(`-exec-interrupt --all`);
       } else {
         return await this.execMI(`-exec-interrupt`, threadId);
