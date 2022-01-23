@@ -78,6 +78,8 @@ function spawnRRGDB(gdbPath, binary, address) {
     "-l",
     "10000",
     "-iex",
+    "set tcp connect-timeout 180", // if rr is taking time to start up, we want to wait. We set it to 3 minutes.
+    "-iex",
     "set mi-async on",
     "-iex",
     "set non-stop off",
