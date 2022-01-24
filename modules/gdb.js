@@ -790,28 +790,7 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param {{ bkpt: bkpt }} payload
    */
-  async #onNotifyBreakpointModified(payload) {
-    const { number, addr, func, file, enabled, line } = payload.bkpt;
-    let bps = this.vscodeBreakpoints.get(file);
-    let remove = [];
-    let add = [];
-    for (let bp of bps) {
-      if (!bp.verified) {
-        let pos = new vscode.Position(+line - 1, 0);
-        let uri = vscode.Uri.parse(file);
-        let loc = new vscode.Location(uri, pos);
-        let copy = new vscode.SourceBreakpoint(loc, bp.enabled);
-        copy.verified = true;
-        // copy.verified = true;
-        remove.push(bp);
-        add.push(copy);
-        bp = copy;
-      }
-    }
-    this.vscodeBreakpoints.set(file, bps);
-    // we have to remove, and add again to update the debug ui, unfortunately, but it works.
-    vscode.debug.removeBreakpoints(remove);
-    vscode.debug.addBreakpoints(add);
+  #onNotifyBreakpointModified(payload) {
     log(getFunctionName(), payload);
   }
 
