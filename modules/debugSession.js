@@ -160,28 +160,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  async setBreakPointAtLine(path, line, condition, threadId = undefined) {
-    let response = {
-      verified: false,
-      line: 0,
-      id: 0,
-    };
-    if (this.gdb) {
-      let breakpoint = await this.gdb.setConditionalBreakpoint(path, line, condition, threadId);
-      if (!breakpoint) {
-        return null;
-      }
-      response.line = breakpoint.line;
-      response.id = +breakpoint.number;
-      response.verified = breakpoint.addr != "<PENDING>";
-    }
-    return response;
-  }
-
   // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequest(response, args, request) {
     // todo(simon): room for optimization. instead of emptying and re-setting, just remove those not in request.
     const res = await this.gdb.setBreakpointsInFile(args.source.path, args.breakpoints);
+    this.gdb.vscodeBreakpoints.set(args.source.path, res);
     response.body = {
       breakpoints: res,
     };
@@ -709,6 +692,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // terminal where rr has been started in
   registerTerminal(terminal) {
     this.#terminal = terminal;
+  }
+
+  getDebugProtocolBreakpoint(breakpoint) {
+    return super.getDebugProtocolBreakpoint(breakpoint);
   }
 }
 

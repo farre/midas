@@ -107,7 +107,7 @@ class GDB extends GDBMixin(GDBBase) {
   /** Maps function name (original location) -> Function breakpoint id
    * @type { Map<string, number> } */
   #fnBreakpoints = new Map();
-
+  vscodeBreakpoints = new Map();
   registerFile = [];
   // loaded libraries
   #loadedLibraries;
@@ -309,15 +309,18 @@ class GDB extends GDBMixin(GDBBase) {
    */
   async setBreakpointsInFile(file, bpRequest) {
     let breakpointIds = (this.#lineBreakpoints.get(file) ?? []).map((bkpt) => bkpt.number);
+    // clear previously set breakpoints
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
-      this.#lineBreakpoints.set(file, []);
     }
     let res = [];
+    // set new breakpoints
+    let bps = [];
     for (const { line, condition, threadId } of bpRequest) {
       let breakpoint = await this.setConditionalBreakpoint(file, line, condition, threadId);
       if (breakpoint) {
+        bps.push(breakpoint);
         res.push({
           line: breakpoint.line,
           id: +breakpoint.number,
@@ -326,6 +329,7 @@ class GDB extends GDBMixin(GDBBase) {
         });
       }
     }
+    this.#lineBreakpoints.set(file, bps);
     return res;
   }
 
@@ -786,13 +790,28 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param {{ bkpt: bkpt }} payload
    */
-  #onNotifyBreakpointModified(payload) {
-    const { bkpt } = payload;
-    let bps = this.#lineBreakpoints.get(bkpt.file);
-    if (bps) {
-      let dapbp = { line: bkpt.line, id: `${bkpt.number}`, verified: false, enabled: bkpt.enabled == "y" };
-      let bp = vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(dapbp);
+  async #onNotifyBreakpointModified(payload) {
+    const { number, addr, func, file, enabled, line } = payload.bkpt;
+    let bps = this.vscodeBreakpoints.get(file);
+    let remove = [];
+    let add = [];
+    for (let bp of bps) {
+      if (!bp.verified) {
+        let pos = new vscode.Position(+line - 1, 0);
+        let uri = vscode.Uri.parse(file);
+        let loc = new vscode.Location(uri, pos);
+        let copy = new vscode.SourceBreakpoint(loc, bp.enabled);
+        copy.verified = true;
+        // copy.verified = true;
+        remove.push(bp);
+        add.push(copy);
+        bp = copy;
+      }
     }
+    this.vscodeBreakpoints.set(file, bps);
+    // we have to remove, and add again to update the debug ui, unfortunately, but it works.
+    vscode.debug.removeBreakpoints(remove);
+    vscode.debug.addBreakpoints(add);
     log(getFunctionName(), payload);
   }
 
