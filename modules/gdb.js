@@ -183,13 +183,13 @@ class GDB extends GDBMixin(GDBBase) {
     await this.attachOnFork();
     this.registerAsAllStopMode();
     this.#rrSession = true;
+    await this.#setUpRegistersInfo();
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
-      this.setFunctionBreakpoint("main");
+      await this.execMI("-exec-run --start");
+    } else {
+      await this.run();
     }
-    await this.#setUpRegistersInfo();
-    await this.run();
-
     this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
 
@@ -206,7 +206,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
     await this.#setUpRegistersInfo();
     if (stopOnEntry) {
-      await this.execMI("-exec-run");
+      await this.execMI("-exec-run --start");
     } else {
       await this.run();
     }
