@@ -103,8 +103,6 @@ let gdbProcess = null;
 /** @typedef {number} VariablesReference */
 /** @typedef { import("@vscode/debugadapter").DebugSession } DebugSession */
 class GDB extends GDBMixin(GDBBase) {
-  /** Maps file paths -> Breakpoints
-   * @type { Map<string, gdbTypes.Breakpoint[]> } */
   #lineBreakpoints = new Map();
   /** Maps function name (original location) -> Function breakpoint id
    * @type { Map<string, number> } */
@@ -180,7 +178,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = doTrace;
     await this.init();
-    await this.attachOnFork();
+    // await this.attachOnFork();
     this.registerAsAllStopMode();
     this.#rrSession = true;
     await this.#setUpRegistersInfo();
@@ -303,6 +301,32 @@ class GDB extends GDBMixin(GDBBase) {
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
       this.#lineBreakpoints.set(path, []);
     }
+  }
+
+  /** Removes all breakpoints set for `file` and adds the ones defined in `bpRequest`
+   * @param { string } file
+   * @param { {line: number, condition: string, threadId: number}[] } bpRequest
+   */
+  async setBreakpointsInFile(file, bpRequest) {
+    let breakpointIds = (this.#lineBreakpoints.get(file) ?? []).map((bkpt) => bkpt.number);
+    if (breakpointIds.length > 0) {
+      // we need this check. an "empty" param list to break-delete deletes all
+      this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
+      this.#lineBreakpoints.set(file, []);
+    }
+    let res = [];
+    for (const { line, condition, threadId } of bpRequest) {
+      let breakpoint = await this.setConditionalBreakpoint(file, line, condition, threadId);
+      if (breakpoint) {
+        res.push({
+          line: breakpoint.line,
+          id: +breakpoint.number,
+          verified: breakpoint.addr != "<PENDING>",
+          enabled: breakpoint.enabled == "y",
+        });
+      }
+    }
+    return res;
   }
 
   /**
