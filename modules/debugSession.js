@@ -180,15 +180,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequest(response, args, request) {
-    let path = args.source.path;
-    let res = [];
     // todo(simon): room for optimization. instead of emptying and re-setting, just remove those not in request.
-    this.gdb.clearBreakPointsInFile(path);
-
-    for (let { line, condition } of args?.breakpoints ?? []) {
-      let bp = await this.setBreakPointAtLine(args.source.name, line, condition);
-      if (bp) res.push(bp);
-    }
+    const res = await this.gdb.setBreakpointsInFile(args.source.path, args.breakpoints);
     response.body = {
       breakpoints: res,
     };
