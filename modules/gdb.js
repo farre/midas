@@ -278,20 +278,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  /**
-   * @param {string} path
-   * @param {number} line
-   * @returns { Promise<gdbTypes.Breakpoint> }
-   */
-  async setBreakPointAtLine(path, line) {
-    const breakpoint = await this.setPendingBreakpoint(path, line);
-    let bp = new gdbTypes.Breakpoint(breakpoint.id, breakpoint.line);
-    let ref = this.#lineBreakpoints.get(breakpoint.file) ?? [];
-    ref.push(bp);
-    this.#lineBreakpoints.set(breakpoint.file, ref);
-    return bp;
-  }
-
   clearFunctionBreakpoints() {
     let ids = [];
     for (let id of this.#fnBreakpoints.values()) {
@@ -341,6 +327,7 @@ class GDB extends GDBMixin(GDBBase) {
   async getTrackedStack(exec_ctx, startFrame, levels) {
     // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
     // This is ugly and bad, this needs refactoring.
+
     let frames = await this.getStack(startFrame, levels, exec_ctx.threadId);
     const vscStackFrames = frames.map((frame) => {
       const stackFrameIdentifier = this.nextFrameRef;
@@ -759,6 +746,7 @@ class GDB extends GDBMixin(GDBBase) {
       enabled: enabled == "y",
     };
     let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
+
     if (!dapbkpt) {
       let pos = new vscode.Position(+line - 1, 0);
       let uri = vscode.Uri.parse(file);
@@ -772,9 +760,15 @@ class GDB extends GDBMixin(GDBBase) {
   /**
    * Reports that a breakpoint was modified.
    *
-   * @param {bkpt} payload
+   * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
+    const { bkpt } = payload;
+    let bps = this.#lineBreakpoints.get(bkpt.file);
+    if (bps) {
+      let dapbp = { line: bkpt.line, id: `${bkpt.number}`, verified: false, enabled: bkpt.enabled == "y" };
+      let bp = vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(dapbp);
+    }
     log(getFunctionName(), payload);
   }
 
@@ -927,8 +921,16 @@ class GDB extends GDBMixin(GDBBase) {
    * Sets pending breakpoint
    */
   async setPendingBreakpoint(path, line, threadId = undefined) {
-    const tParam = threadId ? `-p ${threadId}` : "";
-    return await this.execMI(`-break-insert -f ${path}:${line} ${tParam}`).then((r) => r.bkpt);
+    const tParam = threadId ? ` -p ${threadId}` : "";
+    const command = `-break-insert -f ${path}:${line}${tParam}`;
+    try {
+      let res = await this.execMI(command, undefined);
+      let bp = res.bkpt;
+      return bp;
+    } catch (err) {
+      console.log(`failed to execute set breakpoint command: ${command}:\n\t: ${err}`);
+      return null;
+    }
   }
 
   /**
@@ -937,8 +939,12 @@ class GDB extends GDBMixin(GDBBase) {
   async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
     if ((condition ?? "") == "") {
       let bp = await this.setPendingBreakpoint(path, line, threadId);
-      this.registerBreakpoint(bp);
-      return bp;
+      if (bp) {
+        this.registerBreakpoint(bp);
+        return bp;
+      } else {
+        return null;
+      }
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
@@ -953,9 +959,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   registerBreakpoint(bp) {
     let bps = this.#lineBreakpoints.get(bp.file) ?? [];
-    if (!bps.some((b) => bp.number == b.id)) {
-      bps.push(bp);
-    }
+    bps.push(bp);
     this.#lineBreakpoints.set(bp.file, bps);
   }
 
@@ -964,6 +968,22 @@ class GDB extends GDBMixin(GDBBase) {
   clear() {
     this.executionContexts.clear();
     this.references.clear();
+  }
+
+  async replInput(expression) {
+    if (expression.charAt(0) == "-") {
+      // assume MI command, for now
+      try {
+        let r = await this.execMI(`${expression}`);
+        return r;
+      } catch (err) {
+        console.log(`failed to run MI command: ${err}`);
+        throw err;
+      }
+    } else {
+      // assume CLI command, for now
+      return await this.execCLI(`${expression}`);
+    }
   }
 }
 

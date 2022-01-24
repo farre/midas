@@ -52,8 +52,8 @@
       },
       {
         "command": "midas.reverse-finish",
-        "title": "rr: reverse finish",
-        "shortTitle": "Rev-finish",
+        "title": "Reverse finish",
+        "shortTitle": "Reverse finish",
         "icon": "$(debug-step-out)"
       },
       {
@@ -83,7 +83,8 @@
         },
         {
           "command": "midas.reverse-finish",
-          "group": "midas"
+          "group": "midas",
+          "when": "midas.rrSession"
         }
       ]
     },
