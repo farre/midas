@@ -15,7 +15,7 @@
     "Debuggers"
   ],
   "activationEvents": [
-    "*"
+    "onDebug"
   ],
   "main": "./extension.js",
   "publisher": "farrese",
