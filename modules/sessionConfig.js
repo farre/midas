@@ -114,6 +114,8 @@ class ConfigurationProvider {
         return null;
       }
 
+      vscode.commands.executeCommand("setContext", "midas.rrSession", true);
+
       const options = {
         canPickMany: false,
         ignoreFocusOut: true,
@@ -164,6 +166,7 @@ class ConfigurationProvider {
     }
 
     vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
+    vscode.commands.executeCommand("setContext", "midas.rrSession", false);
     return config;
   }
 

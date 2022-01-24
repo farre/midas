@@ -10,7 +10,7 @@ const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { RegistersReference } = require("./variablesrequest/registers");
-const { isReplaySession } = require("./utils");
+const { isReplaySession, diff } = require("./utils");
 
 let server;
 
@@ -138,7 +138,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   configurationDoneRequest(response, args) {
     super.configurationDoneRequest(response, args);
     // notify the launchRequest that configuration has finished
-
     this.configIsDone.notify();
   }
 
@@ -169,10 +168,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     if (this.gdb) {
       let breakpoint = await this.gdb.setConditionalBreakpoint(path, line, condition, threadId);
-
+      if (!breakpoint) {
+        return null;
+      }
       response.line = breakpoint.line;
-      response.id = breakpoint.id;
-      response.verified = true;
+      response.id = +breakpoint.number;
+      response.verified = breakpoint.addr != "<PENDING>";
     }
     return response;
   }
@@ -185,11 +186,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.gdb.clearBreakPointsInFile(path);
 
     for (let { line, condition } of args?.breakpoints ?? []) {
-      res.push(this.setBreakPointAtLine(path, line, condition));
+      let bp = await this.setBreakPointAtLine(args.source.name, line, condition);
+      if (bp) res.push(bp);
     }
-
     response.body = {
-      breakpoints: await Promise.all(res),
+      breakpoints: res,
     };
     this.sendResponse(response);
   }
@@ -246,21 +247,18 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       if (+frameInfo != exec_ctx.stack[0].frameAddress) {
         // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
         await exec_ctx.clear(this.gdb);
+        let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
         response.body = {
-          stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
+          stackFrames: frames,
+          totalFrames: frames.length,
         };
         this.sendResponse(response);
       } else {
-        let frames = await this.gdb.getStack(args.startFrame, args.levels, exec_ctx.threadId);
-        if (frames.length == exec_ctx.stack.length) {
-          response.body = {
-            stackFrames: exec_ctx.stack,
-          };
-        } else {
-          response.body = {
-            stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
-          };
-        }
+        let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
+        response.body = {
+          stackFrames: frames,
+          totalFrames: exec_ctx.stack.length,
+        };
         this.sendResponse(response);
       }
     }
@@ -550,7 +548,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       },
       variablesReference: 0,
     };
-    const { expression, frameId, context } = args;
+    let { expression, frameId, context } = args;
     if (context == "watch") {
       await this.gdb
         .evaluateExpression(expression, frameId)
@@ -562,32 +560,24 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           this.sendResponse(response);
         })
         .catch((err) => {
+          // means expression did not exist
           response.success = false;
           response.message = "could not be evaluated";
           this.sendResponse(response);
         });
     } else if (context == "repl") {
       vscode.debug.activeDebugConsole.appendLine(
-        "REPL is Semi-unsupported: any side effects you cause will most likely not be seen in the UI"
+        "REPL is semi-unsupported currently: any side effects you cause are not guaranteed to be seen in the UI"
       );
-      if (expression.charAt(0) == "-") {
-        // assume MI command, for now
-        this.gdb.execMI(expression).then((r) => {
-          response.body.result = r;
-          this.sendResponse(response);
-        });
-      } else {
-        // assume CLI command, for now
-        this.gdb
-          .execCLI(`${expression}`)
-          .then((msg) => {
-            response.body.result = msg;
-            this.sendResponse(response);
-          })
-          .catch((msg) => {
-            response.body.result = `Error: ${msg}`;
-            this.sendResponse(response);
-          });
+      try {
+        let msg = await this.gdb.replInput(expression);
+        response.body.message = msg;
+        response.body.result = msg;
+        this.sendResponse(response);
+      } catch (err) {
+        response.body.result = `Error: ${err}`;
+        response.body.message = `Error: ${err}`;
+        this.sendResponse(response);
       }
     }
   }

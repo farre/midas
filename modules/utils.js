@@ -68,10 +68,15 @@ function deescape_gdbjs_output(str) {
   return str.replaceAll('"', "").replaceAll("\\n", "\n");
 }
 
+function diff(a, b) {
+  return Math.abs(a - b);
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
   deescape_gdbjs_output,
   isReplaySession,
+  diff,
 };
