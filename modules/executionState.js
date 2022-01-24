@@ -38,6 +38,18 @@ class ExecutionState {
     this.stack = [];
     this.#managedVariableReferences = [];
   }
+
+  updateTopFrame(frame, gdb) {
+    if (this.stack[0].source.path != frame.file) {
+      // some times, the stack pointer might point to the same
+      // in different contexts, therefore we check if the files are different
+      this.clear(gdb);
+    } else {
+      // if the files are the same, the stack pointer will always differ, if we are in different
+      // functions, therefore, this will be caught in stackTraceRequest() in MidasDebugSession
+      this.stack[0].line = frame.line;
+    }
+  }
 }
 
 module.exports = {

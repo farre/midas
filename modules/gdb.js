@@ -3,7 +3,7 @@
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
-const { Source } = require("@vscode/debugadapter");
+const { Source, ContinuedEvent } = require("@vscode/debugadapter");
 const path = require("path");
 const {
   InitializedEvent,
@@ -28,19 +28,23 @@ function log(location, payload) {
   }
   console.log(`Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
 }
+
 /**
- * Prepares a stopped event body
  * @param {string} reason
  * @param {string} description
  * @param {boolean} allThreadsStopped
+ * @param {number} threadId
  * @returns
  */
-function stoppedEventBody(reason, description, allThreadsStopped) {
-  return {
+function newStoppedEvent(reason, description, allThreadsStopped, threadId = undefined) {
+  let stopevt = new StoppedEvent(reason, threadId);
+  stopevt.body = {
     reason,
     allThreadsStopped,
     description,
+    threadId: threadId,
   };
+  return stopevt;
 }
 
 /** @constructor */
@@ -505,6 +509,10 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendEvent(new StoppedEvent("replay ended"));
         return;
       }
+      if ((payload.state ?? "") == "running") {
+        // rr is all stop, it's all or nothing
+        this.sendEvent(new ContinuedEvent(1, true));
+      }
     } else {
       if (payload.data.reason == "exited-normally") {
         // rr has exited
@@ -539,42 +547,21 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "end-stepping-range": {
-        this.executionContexts.get(payload.thread.id).stack[0].line = payload.thread.frame.line;
-        let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body = {
-          reason: "step",
-          allThreadsStopped: this.allStopMode,
-          description: "Stepping finished",
-          threadId: payload.thread.id,
-        };
-        this.sendEvent(evt);
+        let ec = this.executionContexts.get(payload.thread.id);
+        ec.updateTopFrame(payload.thread.frame, this);
+        this.sendEvent(newStoppedEvent("step", "Stepping finished", this.allStopMode, payload.thread.id));
         break;
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
-        let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body = {
-          reason: "pause",
-          allThreadsStopped: this.allStopMode,
-          description: "Function finished",
-          threadId: payload.thread.id,
-        };
-        this.#target.sendEvent(evt);
+        this.#target.sendEvent(newStoppedEvent("pause", "Function finished", this.allStopMode, payload.thread.id));
         break;
       }
+      case "watchpoint-trigger":
       case "read-watchpoint-trigger": {
-        let exec_ctx = this.executionContexts.get(payload.thread.id);
-        let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body = stoppedEventBody("Watchpoint", "Hardware watchpoint hit", this.allStopMode);
-        if (exec_ctx.stack.length > 0) {
-          const frameAddress = this.readRBP(payload.thread.id);
-          if (frameAddress == exec_ctx.stack[0].frameAddress) {
-            exec_ctx.stack[0].line = payload.thread.frame.line;
-          } else {
-            exec_ctx.clear(this);
-          }
-        }
-        this.#target.sendEvent(evt);
+        let ec = this.executionContexts.get(payload.thread.id);
+        ec.updateTopFrame(payload.thread.frame, this);
+        this.sendEvent(newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
         break;
       }
       default:
