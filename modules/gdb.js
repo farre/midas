@@ -206,18 +206,17 @@ class GDB extends GDBMixin(GDBBase) {
     }
     await this.#setUpRegistersInfo();
     if (stopOnEntry) {
-      await this.execMI("-exec-run --start");
+      await this.execMI("-exec-run");
     } else {
       await this.run();
     }
   }
 
   async restart(program, stopOnEntry) {
+    this.clear();
+    await this.execMI("-exec-interrupt");
     if (stopOnEntry) {
-      await this.execMI("-exec-run --start");
-      if (this.#rrSession) {
-        await this.execMI(`-exec-continue`);
-      }
+      await this.execMI("-exec-run");
     } else {
       if (this.#rrSession) {
         await this.execMI("-exec-run");
@@ -232,7 +231,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#target.sendEvent(event);
   }
 
-  initialize(stopOnEntry) {
+  setupEventHandlers(stopOnEntry) {
     this.on("notify", this.#onNotify.bind(this));
     this.on("status", this.#onStatus.bind(this));
     this.on("exec", this.#onExec.bind(this));
@@ -326,8 +325,8 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {number} [threadId]
    * @returns {Promise<{ addr: string, arch: string, file: string, fullname:string, func:string, level:string, line:string }[]>}
    */
-  async getStack(levels, threadId) {
-    let command = `-stack-list-frames ${threadId != 0 ? `--thread ${threadId}` : ""} 0 ${levels}`;
+  async getStack(startFrame, levels, threadId) {
+    let command = `-stack-list-frames ${threadId != 0 ? `--thread ${threadId}` : ""} ${startFrame} ${startFrame + levels}`;
     let { stack } = await this.execMI(command);
     return stack.map((frame) => {
       return frame.value;
@@ -339,13 +338,13 @@ class GDB extends GDBMixin(GDBBase) {
    * @param { number } levels
    * @returns
    */
-  async getTrackedStack(exec_ctx, levels) {
+  async getTrackedStack(exec_ctx, startFrame, levels) {
     // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
     // This is ugly and bad, this needs refactoring.
-    let frames = await this.getStack(levels, exec_ctx.threadId);
-    exec_ctx.stack = frames.map((frame, index) => {
+    let frames = await this.getStack(startFrame, levels, exec_ctx.threadId);
+    const vscStackFrames = frames.map((frame) => {
       const stackFrameIdentifier = this.nextFrameRef;
-      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, index));
+      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, +frame.level));
       exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
       let src = null;
       if (frame.file && frame.line) {
@@ -356,6 +355,8 @@ class GDB extends GDBMixin(GDBBase) {
       return r;
     });
 
+    exec_ctx.stack.push(...vscStackFrames);
+
     let level = 0;
     for (let s of exec_ctx.stack) {
       const frameAddress = +(await this.readStackFrameStart(level++, exec_ctx.threadId));
@@ -364,7 +365,7 @@ class GDB extends GDBMixin(GDBBase) {
     // we must select top most stack frame again, since we've rolled through the stack, updating the stack frame addresses
     // or rather where they're origin address is, in memory
     await this.execMI(`-stack-select-frame 0`);
-    return exec_ctx.stack;
+    return exec_ctx.stack.slice(startFrame, startFrame + levels);
   }
 
   threads() {
@@ -486,8 +487,13 @@ class GDB extends GDBMixin(GDBBase) {
       }
       if (payload.data.reason == "exited-normally") {
         // rr has exited
-        this.sendEvent(new TerminatedEvent());
+        this.sendEvent(new StoppedEvent("replay ended"));
         return;
+      }
+    } else {
+      if (payload.data.reason == "exited-normally") {
+        // rr has exited
+        this.sendEvent(new TerminatedEvent());
       }
     }
   }
@@ -507,7 +513,10 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "exited-normally": {
-        this.sendEvent(new TerminatedEvent());
+        if (!this.#rrSession) this.sendEvent(new TerminatedEvent());
+        else {
+          this.sendEvent(new StoppedEvent("replay ended"));
+        }
         break;
       }
       case "signal-received": {
@@ -517,14 +526,24 @@ class GDB extends GDBMixin(GDBBase) {
       case "end-stepping-range": {
         this.executionContexts.get(payload.thread.id).stack[0].line = payload.thread.frame.line;
         let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body = stoppedEventBody("step", "Stepping finished", this.allStopMode);
-        this.#target.sendEvent(evt);
+        evt.body = {
+          reason: "step",
+          allThreadsStopped: this.allStopMode,
+          description: "Stepping finished",
+          threadId: payload.thread.id,
+        };
+        this.sendEvent(evt);
         break;
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
         let evt = new StoppedEvent("step", payload.thread.id);
-        evt.body = stoppedEventBody("pause", "Function finished", this.allStopMode);
+        evt.body = {
+          reason: "pause",
+          allThreadsStopped: this.allStopMode,
+          description: "Function finished",
+          threadId: payload.thread.id,
+        };
         this.#target.sendEvent(evt);
         break;
       }
@@ -569,11 +588,13 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
     if (!this.#rrSession) {
-      this.executionContexts.get(payload.id).clear(this);
+      let ec = this.executionContexts.get(payload.id);
+      if (ec) ec.clear(this);
       this.executionContexts.delete(payload.id);
     } else {
       // just clear state - user might decide to rewind.
-      this.executionContexts.get(payload.id).clear(this);
+      let ec = this.executionContexts.get(payload.id);
+      if (ec) ec.clear(this);
     }
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
@@ -939,6 +960,11 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   interrupt() {}
+
+  clear() {
+    this.executionContexts.clear();
+    this.references.clear();
+  }
 }
 
 exports.GDB = GDB;

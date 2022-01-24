@@ -152,11 +152,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     if (isReplaySession(args)) {
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
-      this.gdb.initialize(args.stopOnEntry);
+      this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry, args.trace);
     } else if (args.type == "midas") {
       this.gdb = new GDB(this, args);
-      this.gdb.initialize(args.stopOnEntry);
+      this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace, args.allStopMode ?? false);
     }
   }
@@ -235,7 +235,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
     if (exec_ctx.stack.length == 0) {
       response.body = {
-        stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.levels),
+        stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
       };
       this.sendResponse(response);
     } else {
@@ -247,13 +247,20 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
         await exec_ctx.clear(this.gdb);
         response.body = {
-          stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.levels),
+          stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
         };
         this.sendResponse(response);
       } else {
-        response.body = {
-          stackFrames: exec_ctx.stack,
-        };
+        let frames = await this.gdb.getStack(args.startFrame, args.levels, exec_ctx.threadId);
+        if (frames.length == exec_ctx.stack.length) {
+          response.body = {
+            stackFrames: exec_ctx.stack,
+          };
+        } else {
+          response.body = {
+            stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
+          };
+        }
         this.sendResponse(response);
       }
     }
@@ -430,7 +437,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   disconnectRequest(response, args) {
     this.gdb.kill();
     // todo(simon): add possibility to disconnect *without* killing the rr process.
-    this.#terminal.dispose();
+    if (this.#terminal) this.#terminal.dispose();
     return super.disconnectRequest(args[0], args[1], args[3]);
   }
 

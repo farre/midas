@@ -60,11 +60,7 @@ function GDBMixin(GDBBase) {
       if (reverse) {
         await this.execMI("-exec-finish --reverse", threadId);
       } else {
-        await this.execMI(`-exec-finish`, threadId).catch((e) => {
-          // means we hit an error, probably in the outermost frame, which GDB complains
-          // about we not being able to finish out from
-          this.proceed(threadId);
-        });
+        await this.execMI(`-exec-finish`, threadId);
       }
     }
 
@@ -76,7 +72,7 @@ function GDBMixin(GDBBase) {
     //  if pause of all is desired, call pauseAll() instead
     async pauseExecution(threadId) {
       this.userRequestedInterrupt = true;
-      if((this.allStopMode || !threadId)) {
+      if (this.allStopMode || !threadId) {
         return await this.execMI(`-exec-interrupt --all`);
       } else {
         return await this.execMI(`-exec-interrupt`, threadId);
