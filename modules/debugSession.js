@@ -693,10 +693,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   registerTerminal(terminal) {
     this.#terminal = terminal;
   }
-
-  getDebugProtocolBreakpoint(breakpoint) {
-    return super.getDebugProtocolBreakpoint(breakpoint);
-  }
 }
 
 module.exports = {

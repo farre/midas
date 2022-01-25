@@ -22,13 +22,15 @@ const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
 
 let trace = true;
+let LOG_ID = 0;
 function log(location, payload) {
   if (!trace) {
     return;
   }
-  console.log(`Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
+  console.log(`[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
 }
 
+/** @typedef { { addr: string, disp: string, enabled: string, file: string, fullname: string, func: string, line: string, number: string, "original-location": string, "thread-groups": string[], times: string, type: string } } GDBBreakpoint */
 /**
  * @param {string} reason
  * @param {string} description
@@ -309,7 +311,8 @@ class GDB extends GDBMixin(GDBBase) {
 
   /** Removes all breakpoints set for `file` and adds the ones defined in `bpRequest`
    * @param { string } file
-   * @param { {line: number, condition: string, threadId: number}[] } bpRequest
+   * @param { { line: number, condition: string | undefined, hitCondition: number | undefined, threadId: number | undefined }[] } bpRequest
+   * @returns { Promise<{ line: any; id: number; verified: boolean; enabled: boolean }[]> } res
    */
   async setBreakpointsInFile(file, bpRequest) {
     let breakpointIds = (this.#lineBreakpoints.get(file) ?? []).map((bkpt) => bkpt.number);
@@ -321,8 +324,9 @@ class GDB extends GDBMixin(GDBBase) {
     let res = [];
     // set new breakpoints
     let bps = [];
-    for (const { line, condition, threadId } of bpRequest) {
+    for (const { line, condition, hitCondition, threadId } of bpRequest) {
       let breakpoint = await this.setConditionalBreakpoint(file, line, condition, threadId);
+      if (hitCondition) await this.execMI(`-break-after ${breakpoint.number} ${hitCondition}`);
       if (breakpoint) {
         bps.push(breakpoint);
         res.push({
@@ -927,13 +931,17 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * Sets pending breakpoint
+   * Set a pending breakpoint, that might not resolve immediately.
+   * @param {string} path - `path` to source code file
+   * @param {number} line - `line` in file to break on
+   * @param {number | undefined } threadId - thread this breakpoint belongs to; all threads if undefined
+   * @returns { Promise<GDBBreakpoint> } bp
    */
   async setPendingBreakpoint(path, line, threadId = undefined) {
     const tParam = threadId ? ` -p ${threadId}` : "";
     const command = `-break-insert -f ${path}:${line}${tParam}`;
     try {
-      let res = await this.execMI(command, undefined);
+      let res = await this.execMI(command, threadId);
       let bp = res.bkpt;
       return bp;
     } catch (err) {
@@ -943,7 +951,12 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * Sets conditional pending breakpoint
+   * Sets a software conditional pending breakpoint. These kinds of breakpoints incur a very large overhead.
+   * @param {string} path
+   * @param {number} line
+   * @param {string} condition
+   * @param {number} threadId
+   * @returns { Promise<GDBBreakpoint> }
    */
   async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
     if ((condition ?? "") == "") {
@@ -957,7 +970,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
-    let breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then((r) => r.bkpt);
+    const breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then((r) => r.bkpt);
     this.registerBreakpoint(breakpoint);
     return breakpoint;
   }
