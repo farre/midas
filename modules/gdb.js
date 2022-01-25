@@ -365,7 +365,13 @@ class GDB extends GDBMixin(GDBBase) {
     // This is ugly and bad, this needs refactoring.
 
     let frames = await this.getStack(startFrame, levels, exec_ctx.threadId);
-    const vscStackFrames = frames.map((frame) => {
+    const frameAddress = +(await this.readStackFrameStart(0, exec_ctx.threadId));
+    if (exec_ctx.stack[0] && startFrame == 0) {
+      if (exec_ctx.stack[0].frameAddress == frameAddress) {
+        return exec_ctx.stack;
+      }
+    }
+    for (let frame of frames) {
       const stackFrameIdentifier = this.nextFrameRef;
       this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, +frame.level));
       exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
@@ -375,10 +381,8 @@ class GDB extends GDBMixin(GDBBase) {
       }
       let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
       r.frameAddress = +frame.addr;
-      return r;
-    });
-
-    exec_ctx.stack.push(...vscStackFrames);
+      exec_ctx.stack.push(r);
+    }
 
     let level = 0;
     for (let s of exec_ctx.stack) {
@@ -389,6 +393,35 @@ class GDB extends GDBMixin(GDBBase) {
     // or rather where they're origin address is, in memory
     await this.execMI(`-stack-select-frame 0`);
     return exec_ctx.stack.slice(startFrame, startFrame + levels);
+  }
+
+  async buildNewStack(ec, startFrame, levels) {
+    // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
+    // This is ugly and bad, this needs refactoring.
+    await ec.clear(this);
+    let frames = await this.getStack(startFrame, levels, ec.threadId);
+    for (let frame of frames) {
+      const stackFrameIdentifier = this.nextFrameRef;
+      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, ec.threadId, +frame.level));
+      ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
+      let src = null;
+      if (frame.file && frame.line) {
+        src = new Source(frame.file, frame.fullname);
+      }
+      let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+      r.frameAddress = +frame.addr;
+      ec.stack.push(r);
+    }
+
+    let level = 0;
+    for (let s of ec.stack) {
+      const frameAddress = +(await this.readStackFrameStart(level++, ec.threadId));
+      s.frameAddress = frameAddress;
+    }
+    // we must select top most stack frame again, since we've rolled through the stack, updating the stack frame addresses
+    // or rather where they're origin address is, in memory
+    await this.execMI(`-stack-select-frame 0`);
+    return ec.stack;
   }
 
   threads() {

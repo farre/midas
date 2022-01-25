@@ -208,11 +208,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async stackTraceRequest(response, args) {
+  async stackTraceRequest(response, args, request) {
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
     if (exec_ctx.stack.length == 0) {
+      let frames = await this.gdb.buildNewStack(exec_ctx, args.startFrame, args.levels);
       response.body = {
-        stackFrames: await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels),
+        stackFrames: frames,
       };
       this.sendResponse(response);
     } else {
@@ -226,14 +227,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
         response.body = {
           stackFrames: frames,
-          totalFrames: frames.length,
         };
         this.sendResponse(response);
       } else {
         let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
         response.body = {
           stackFrames: frames,
-          totalFrames: exec_ctx.stack.length,
         };
         this.sendResponse(response);
       }
@@ -403,9 +402,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // Super's implementation is fine.
-  dispatchRequest(...args) {
-    return super.dispatchRequest(args[0]);
-  }
+  // dispatchRequest(...args) {
+  // return super.dispatchRequest(args[0]);
+  // }
 
   // Super's implementation is fine.
   disconnectRequest(response, args) {
@@ -419,7 +418,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  terminateRequest(response, args) {
+  terminateRequest(response, args, request) {
+    super.terminateRequest(response, args, request);
     this.gdb.kill();
   }
 
