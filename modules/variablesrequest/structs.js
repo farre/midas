@@ -44,7 +44,7 @@ class StructsReference extends VariablesReference {
       for (const accessModifier of structAccessModifierList.children) {
         const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
         let members = await gdb.execMI(membersCommands, this.threadId);
-        const expr = members.children[0].value.exp;
+        const expr = (members.children ?? [{ value: { exp: null } }])[0].value.exp;
         if (expr) {
           requests.push(members);
         }

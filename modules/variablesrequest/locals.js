@@ -26,28 +26,83 @@ class LocalsReference extends VariablesReference {
     if (this.#variables.length == 0) {
       let result = await gdb.getStackLocals(this.threadId, this.frameLevel);
       for (const { name, type, value } of result) {
-        let nextRef = gdb.generateVariableReference();
-        let vscodeRef = 0;
-        const voname = `vr_${nextRef}`;
-        let cmd = `-var-create ${voname} * ${name}`;
-        // we have to execute the creation of varObjs first; if we have come across a non-capturing lambda
-        // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0,
-        // so we must find out this first, to refrain from tracking it
-        let numchild = await gdb.execMI(cmd, this.threadId).then((res) => res.numchild);
-        if (!value && numchild > 0) {
-          vscodeRef = nextRef;
+        if (name == "this") {
+          let nextRef = gdb.generateVariableReference();
+          const voname = `vr_${nextRef}`;
+          // notice the extra * -> we are dereferencing a this pointer
+          const cmd = `-var-create ${voname} * *${name}`;
+          await gdb.execMI(cmd, this.threadId).then((res) => res.numchild);
           gdb.references.set(
             nextRef,
             new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
           );
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
-        } else if (!value && numchild == 0) {
-          await gdb.deleteVariableObject(voname);
-          continue;
+          let mvar = new GDB.MidasVariable(name, `<${value}> ${type}`, nextRef, voname, value ? false : true, name);
+          this.#variables.push(mvar);
+        } else {
+          let nextRef = gdb.generateVariableReference();
+          let vscodeRef = 0;
+          const voname = `vr_${nextRef}`;
+          let cmd = `-var-create ${voname} * ${name}`;
+          // we have to execute the creation of varObjs first; if we have come across a non-capturing lambda
+          // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0,
+          // so we must find out this first, to refrain from tracking it
+          let numchild = await gdb.execMI(cmd, this.threadId).then((res) => res.numchild);
+          if (!value && numchild > 0) {
+            vscodeRef = nextRef;
+            gdb.references.set(
+              nextRef,
+              new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
+            );
+            gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
+            let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+            this.#variables.push(mvar);
+          } else if (!value && numchild == 0) {
+            await gdb.deleteVariableObject(voname);
+            continue;
+          } else if (value && numchild > 0) {
+            // we're *most likely* a pointer to something
+            let nextRef = gdb.generateVariableReference();
+            const deref_voname = `vr_${nextRef}`;
+            // notice the extra * -> we are dereferencing a this pointer
+            const cmd = `-var-create ${deref_voname} * *${name}`;
+            // this is wrapped in a try block because:
+            // below, we try to derefence what we believe to be a pointer, but it doesn't have to be,
+            // it can be an l-value reference or an r-value reference. And they don't have the operator*
+            // so the catch block, is there for these kinds, if they're a reference, they get treated as the code on line 52-59
+            // which does the exact same thing, but for l-values
+            try {
+              let varobj = await gdb.execMI(cmd, this.threadId);
+              // means that the value behind the pointer is a structured type. a pointer, always have 1 numchild
+              // so in order to find out if it's a primitive type, we dereference it and check if there are further children.
+              if (varobj.numchild > 0) {
+                vscodeRef = nextRef;
+                gdb.references.set(
+                  nextRef,
+                  new StructsReference(nextRef, this.threadId, this.frameLevel, {
+                    variableObjectName: deref_voname,
+                    evaluateName: name,
+                  })
+                );
+                gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
+                let mvar = new GDB.MidasVariable(name, `<${value}> ${type}`, nextRef, deref_voname, value ? false : true, name);
+                this.#variables.push(mvar);
+              } else {
+                let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+                this.#variables.push(mvar);
+              }
+            } catch (isOf_l_or_r_ReferenceTypeError) {
+              vscodeRef = nextRef;
+              gdb.references.set(
+                nextRef,
+                new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
+              );
+              gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
+              let mvar = new GDB.MidasVariable(name, type, vscodeRef, voname, value ? false : true, name);
+              this.#variables.push(mvar);
+            }
+          }
         }
-
-        let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
-        this.#variables.push(mvar);
       }
       response.body = {
         variables: this.#variables,

@@ -1,7 +1,6 @@
 "use strict";
 
 const vscode = require("vscode");
-const { DebugSession } = require("./debugSession");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./sessionConfig");
 

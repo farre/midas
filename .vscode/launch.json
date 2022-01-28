@@ -24,6 +24,15 @@
 			]
 		},
 		{
+			"name": "Debug extension - mozilla-central",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"/home/cx/dev/opensource/mozilla-central"
+			]
+		},
+		{
 			"name": "Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",

@@ -148,6 +148,11 @@
                 "tracePath": {
                   "type": "string",
                   "description": "trace workspace. Can be found running the rr command `rr ls`"
+                },
+                "startEventRequest": {
+                  "type": "boolean",
+                  "description": "Request event to start debugging from with user input",
+                  "default": false
                 }
               }
             }
@@ -172,7 +177,8 @@
             "trace": false,
             "replay": {
               "rrPath": "rr",
-              "rrServerAddress": "localhost:50505"
+              "rrServerAddress": "localhost:50505",
+              "startEventRequest": false
             }
           }
         ],
@@ -205,7 +211,8 @@
               "debuggerPath": "gdb",
               "replay": {
                 "rrPath": "rr",
-                "rrServerAddress": "localhost:50505"
+                "rrServerAddress": "localhost:50505",
+                "startEventRequest": false
               }
             }
           }

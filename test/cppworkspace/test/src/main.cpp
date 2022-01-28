@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-
+#include <string>
 #include <number.hpp>
 #include <todo.hpp>
 
@@ -194,9 +194,65 @@ int start_stackchain(int v) {
   return result + 1;
 }
 
+void do_todo(Todo& t) {
+  std::cout << t.title() << std::endl;
+}
+
+Todo move_todo(Todo&& t) {
+  std::cout << t.title() << std::endl;
+  return t;
+}
+static int ids = 0;
+struct Base {
+protected:
+  int id;
+  std::string name;
+public:
+  Base(int id, std::string name) : id(id), name(std::move(name)) {}
+  virtual ~Base() {}
+
+  virtual void sayHello() = 0;
+};
+
+struct Derived : Base {
+  Derived(std::string sub_name) : Base(ids++, "Derived"), sub_name(std::move(sub_name)) {}
+  ~Derived() = default;
+
+  std::string sub_name;
+  void sayHello() override {
+    std::cout << "[ID: " << this->id << "]: Hello my name is: " << this->name << ", " << this->sub_name << std::endl;
+  }
+};
+
+struct IntDerived : Base {
+  IntDerived(int sub_id) : Base(ids++, "Derived"), sub_id(id) {}
+  ~IntDerived() = default;
+  int sub_id;
+  void sayHello() override {
+    std::cout << "[ID: " << this->id << ":" << this->sub_id << "]: Hello my name is: " << this->name << std::endl;
+  }
+};
+
+
+void take_interface(Base* b) {
+  b->sayHello();
+  std::cout << "good bye" << std::endl;
+}
+
+void two_impls() {
+  Base* ba = new Derived{"foo"};
+  Base* bb = new IntDerived{42};
+  take_interface(ba);
+  take_interface(bb);
+}
+
+
+
 int main(int argc, const char **argv) {
   const auto somelocal = 42;
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
+  auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
+
   auto Double = add_two(1.550795, 1.590795);
   auto Float = add_two(668.19685f, 668.93685f);
   auto Int = add_two(20, 22);
@@ -231,4 +287,12 @@ int main(int argc, const char **argv) {
 
   auto r = start_stackchain(10);
   std::cout << "result of chain: " << r << std::endl;
+
+  std::cout << tmpptr->title() << std::endl;
+  std::cout << tmp.title() << std::endl;
+
+  do_todo(*tmpptr);
+  auto a = move_todo(std::move(tmp));
+  std::cout << a.title() << std::endl;
+  two_impls();
 }

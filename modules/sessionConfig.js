@@ -189,10 +189,20 @@ class DebugAdapterFactory {
       const pid = session.configuration.replay.parameters.pid;
       const tracePath = session.configuration.replay.parameters.tracePath;
       const inet_addr = miServerAddress.split(":");
+      let startEvent = "";
+      if (session.configuration.replay.startEventRequest) {
+        const input = await vscode.window.showInputBox({prompt: " Input start event to debug from "});
+        if(input) {
+          let num = Number.parseInt(input);
+          if(!Number.isNaN(num)) {
+            startEvent = ` -g ${num}`;
+          }
+        }
+      }
       // turns out, gdb doesn't recognize "localhost" as a parameter.
       const addr = inet_addr[0] == "localhost" ? "127.0.0.1" : inet_addr[0];
       const port = inet_addr[1];
-      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${tracePath}`;
+      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${tracePath}${startEvent}`;
       let term = vscode.window.createTerminal("rr terminal");
       term.sendText(cmd_str);
       term.show(true);

@@ -79,28 +79,29 @@ class MidasStackFrame extends StackFrame {
   }
 }
 
-function spawnRRGDB(gdbPath, binary, address) {
-  const args = [
-    "-l",
-    "10000",
-    "-iex",
-    "set tcp connect-timeout 180", // if rr is taking time to start up, we want to wait. We set it to 3 minutes.
-    "-iex",
-    "set mi-async on",
-    "-iex",
-    "set non-stop off",
-    "-ex",
-    "set sysroot /",
-    "-ex",
-    `target extended-remote ${address}`,
-    "-i=mi3",
-    binary,
-  ];
+
+
+const DefaultRRSpawnArgs = [
+  "-l",
+  "10000",
+  "-iex",
+  "set tcp connect-timeout 180", // if rr is taking time to start up, we want to wait. We set it to 3 minutes.
+  "-iex",
+  "set mi-async on",
+  "-iex",
+  "set non-stop off",
+  "-ex",
+  "set sysroot /",
+];
+
+function spawnRRGDB(gdbPath, binary, replayConfig) {
+  const args = [...DefaultRRSpawnArgs, "-ex", "set print static-members off", "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary];
   return spawn(gdbPath, args);
 }
 
 function spawnGDB(gdbPath, binary, ...args) {
-  let gdb = spawn(gdbPath, !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
+  let params = !args ? ["-i=mi3", "-ex", "set print object on", "-iex", "set print static-members off", binary] : ["-i=mi3", "-ex", "set print object on", "-iex", "set print static-members off", "--args", binary, ...args];
+  let gdb = spawn(gdbPath, params);
   return gdb;
 }
 
@@ -151,11 +152,11 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.gdbPath, args.program, args.replay.rrServerAddress);
+          let gdb = spawnRRGDB(args.gdbPath, args.program, args.replay);
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.gdbPath, args.program, args.debugeeArgs);
+          let gdb = spawnGDB(args.gdbPath, args.program, ...(args.debugeeArgs ?? []));
           gdbProcess = gdb;
           return gdb;
         }
@@ -658,7 +659,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{threadId: number}} payload
    */
   // eslint-disable-next-line no-unused-vars
-  #onNotifyRunning(payload) {}
+  #onNotifyRunning(payload) { }
 
   /**
    * The target has stopped.
@@ -1018,7 +1019,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#lineBreakpoints.set(bp.file, bps);
   }
 
-  interrupt() {}
+  interrupt() { }
 
   clear() {
     this.executionContexts.clear();
