@@ -262,7 +262,7 @@ struct Bar {
 Struct variablesRequestTest(Struct s) {
   // set first breakpoint here
   const auto new_i = s.i + 10;
-  const auto new_f = s.f + 10.0f;
+  const auto new_f = s.f + 10.10f;
   s.i = new_i;
   s.f = new_f;
   return s;
@@ -270,9 +270,9 @@ Struct variablesRequestTest(Struct s) {
 
 void variablesRequestTestReference(Struct& s) {
   const auto i = s.i + 10;
-  const auto f = s.f + 10.0f;
+  const auto f = s.f + 10.10f;
   s.i = i;
-  s.f = f;  
+  s.f = f;
 }
 
 int testSubChildUpdate(Bar* b) {
@@ -285,7 +285,7 @@ int testSubChildUpdate(Bar* b) {
 void variablesRequestTestPointer(Struct* s) {
   auto local_ptr = s;
   const auto i = local_ptr->i + 10;
-  const auto f = local_ptr->f + 10.0f;
+  const auto f = local_ptr->f + 10.10f;
   variablesRequestTestReference(*s);
   local_ptr->i += i;
   local_ptr->f += f;
@@ -341,10 +341,11 @@ int main(int argc, const char **argv) {
   std::cout << a.title() << std::endl;
   two_impls();
 
-  auto somestruct = new Struct { .i = 10, .f = 10.0f, .name = "somestruct" };
+  auto somestruct = new Struct { .i = 10, .f = 10.10f, .name = "somestruct" };
   auto copied_somestruct = variablesRequestTest(*somestruct);
   variablesRequestTestPointer(&copied_somestruct);
-
-  auto barptr = new Bar{.j = 100, .s = new Struct { .i = 10, .f = 10.0f, .name = "somestruct_refByBar" }};
+  auto iptr = new int{42};
+  
+  auto barptr = new Bar{.j = 100, .s = new Struct { .i = 10, .f = 10.10f, .name = "somestruct_refByBar" }};
   testSubChildUpdate(barptr);
 }

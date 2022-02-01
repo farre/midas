@@ -1,16 +1,16 @@
 const GDB = require("../gdb");
-const { VariablesReference, err_response } = require("./reference");
+const { VariablesReference, err_response } = require("./variablesReference");
 
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("../gdb").GDB } GDB
  * @typedef { import("../executionState").ExecutionState } ExecutionState
- * @typedef { import("../gdb").MidasVariable } MidasVariable
+ * @typedef { import("../gdb").VSCodeVariable } VSCodeVariable
  */
 
 class StructsReference extends VariablesReference {
-  /** @type {MidasVariable[]} */
+  /** @type {VSCodeVariable[]} */
   #memberVariables;
   /** @type {string} */
   variableObjectName;
@@ -74,25 +74,14 @@ class StructsReference extends VariablesReference {
           isStruct = false;
         }
         this.#memberVariables.push(
-          new GDB.MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
+          new GDB.VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
         );
+        gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length-1]);
       }
-      response.body = {
-        variables: this.#memberVariables,
-      };
-    } else {
-      let ec = gdb.executionContexts.get(this.threadId);
-      for(let v of this.#memberVariables) {
-        let changeValue = ec.getMaybeUpdatedValue(v.variableObjectName);
-        if(changeValue) {
-          v.value = changeValue;
-          ec.removeUpdatedValue(v.variableObjectName);
-        }
-      }
-      response.body = {
-        variables: this.#memberVariables,
-      };
     }
+    response.body = {
+      variables: this.#memberVariables,
+    };
     return response;
   }
 
