@@ -209,7 +209,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
   async stackTraceRequest(response, args, request) {
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
-    if(args.startFrame == 0) {
+    if (args.startFrame == 0) {
       response.body = {
         stackFrames: exec_ctx.stack,
       };
@@ -341,7 +341,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // start a server that creates a new session for every connection request
     server = net
       .createServer((socket) => {
-        socket.on("end", () => {});
+        socket.on("end", () => { });
         const session = new MidasDebugSession();
         session.setRunAsServer(true);
         session.start(socket, socket);

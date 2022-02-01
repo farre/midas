@@ -1,5 +1,37 @@
+const assert = require("assert");
 const GDB = require("../gdb");
 const { VariablesReference, err_response } = require("./variablesReference");
+
+/**
+ * Creates a variable object for variableObjectName and create children for all it's members. This function "flattens"
+ * the variable object, by creating children until it finds no more base types. Direct "struct" descendants
+ * live under .public .protected and .private, but derived from, lives "directly under" so, foo.Derived instead of
+ * foo.public.Derived. This function makes sure that all of Derived's members also get created as var-object listed children
+ * @param { GDB.GDB } gdb
+ * @param { string } variableObjectName
+ */
+async function parseStructVariable(gdb, variableObjectName) {
+  let requests = [];
+  // all variable objects for structured types, begin with .public, .protected or private, or the derived type
+  let structAccessModifierList = await gdb.execMI(
+    `-var-list-children --all-values "${variableObjectName}"`,
+    this.threadId
+  );
+  for (const accessModifier of structAccessModifierList.children) {
+    let e = accessModifier.value.exp;
+    if(e == "public" || e == "protected" || e == "private") {
+      const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
+      let members = await gdb.execMI(membersCommands, this.threadId);
+      if(members.children && members.children[0].value.exp) {
+        requests.push(members);
+      }
+    } else if(e) {
+      let r = await parseStructVariable(gdb, accessModifier.value.name);
+      requests.push(...r);
+    }
+  }
+  return requests;
+}
 
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
@@ -35,20 +67,7 @@ class StructsReference extends VariablesReference {
   async handleRequest(response, gdb) {
     // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
     if (this.#memberVariables.length == 0) {
-      // we haven't cached it's members
-      let structAccessModifierList = await gdb.execMI(
-        `-var-list-children --all-values "${this.variableObjectName}"`,
-        this.threadId
-      );
-      let requests = [];
-      for (const accessModifier of structAccessModifierList.children) {
-        const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
-        let members = await gdb.execMI(membersCommands, this.threadId);
-        const expr = (members.children ?? [{ value: { exp: null } }])[0].value.exp;
-        if (expr) {
-          requests.push(members);
-        }
-      }
+      let requests = await parseStructVariable(gdb, this.variableObjectName);
       for (let v of requests.flatMap((i) => i.children)) {
         let nextRef = 0;
         let displayValue = "";
@@ -62,8 +81,13 @@ class StructsReference extends VariablesReference {
               evaluateName: `${this.evaluateName}.${v.value.exp}`
             }, this.stackFrameIdentifier)
           );
-          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: false }, this.stackFrameIdentifier);
-          if(v.value.type.charAt(v.value.type.length-1) == "*") {
+          gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
+          try {
+            v.value.type.charAt(v.value.type.length - 1);
+          } catch(e) {
+            debugger;
+          }
+          if (v.value.type.charAt(v.value.type.length - 1) == "*") {
             displayValue = `<${v.value.value}> ${v.value.type}`;
           } else {
             displayValue = v.value.type;
@@ -76,7 +100,7 @@ class StructsReference extends VariablesReference {
         this.#memberVariables.push(
           new GDB.VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
         );
-        gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length-1]);
+        gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length - 1]);
       }
     }
     response.body = {
