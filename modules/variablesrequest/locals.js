@@ -23,48 +23,42 @@ class LocalsReference extends VariablesReference {
     this.#variables = [];
   }
 
+  /**
+   * @param {GDB} gdb
+   */
   async #initRequest(gdb) {
-    const registerGlobalTracking = (mvar) => {
-
-    }
     let ec = gdb.getExecutionContext(this.threadId);
     const frameLevel = ec.getFrameLevel(this.variablesReferenceId);
     this.frameLevel = frameLevel;
     let result = await gdb.getStackLocals(this.threadId, this.frameLevel);
     for (const { name, type, value } of result) {
       if (name == "this") {
-        let nextRef = gdb.generateVariableReference();
-        const voname = `vr_${nextRef}`;
-        // notice the extra * -> we are dereferencing a this pointer
-        const cmd = `-var-create ${voname} * *${name}`;
-        await gdb.execMI(cmd, this.threadId);
+        let { nextRef, varObjectName } = await gdb.createVariableObjectForPointerType(name, this.threadId);
         gdb.references.set(
           nextRef,
-          new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
+          new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: varObjectName, evaluateName: name })
         );
-        gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
-        let mvar = new GDB.VSCodeVariable(name, `<${value}> ${type}`, nextRef, voname, value ? false : true, name);
+        ec.addTrackedVariableReference(nextRef, this.variablesReferenceId);
+        let mvar = new GDB.VSCodeVariable(name, `<${value}> ${type}`, nextRef, varObjectName, value ? false : true, name);
         this.#variables.push(mvar);
       } else {
-        let nextRef = gdb.generateVariableReference();
         let vscodeRef = 0;
-        const voname = `vr_${nextRef}`;
-        let cmd = `-var-create ${voname} * ${name}`;
+        let { nextRef, varObjectName, result } = await gdb.createVariableObject(name, this.threadId);
         // we have to execute the creation of varObjs first; if we have come across a non-capturing lambda
         // it will *not* have `value` set, like structured types, but it will also *not* have numchild > 0,
         // so we must find out this first, to refrain from tracking it
-        const numchild = (await gdb.execMI(cmd, this.threadId)).numchild;
+        const numchild = result.numchild;
         if (!value && numchild > 0) {
           vscodeRef = nextRef;
           gdb.references.set(
             nextRef,
-            new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
+            new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: varObjectName, evaluateName: name })
           );
-          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
-          let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+          ec.addTrackedVariableReference(nextRef, this.variablesReferenceId);
+          let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, varObjectName, value ? false : true, name);
           this.#variables.push(mvar);
         } else if (isNotVariable(value, numchild)) {
-          await gdb.deleteVariableObject(voname);
+          await gdb.deleteVariableObject(varObjectName);
           continue;
         } else if (isStructuredOrPointer(value, numchild)) {
           // we're *most likely* a pointer to something
@@ -90,31 +84,33 @@ class LocalsReference extends VariablesReference {
                   evaluateName: name,
                 })
               );
-              gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
+              ec.addTrackedVariableReference(nextRef, this.variablesReferenceId);
               let mvar = new GDB.VSCodeVariable(name, `<${value}> ${type}`, nextRef, deref_voname, value ? false : true, name);
-              gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
+              ec.addMapping(varObjectName, mvar);
               this.#variables.push(mvar);
             } else {
-              let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
-              gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
+              let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, varObjectName, value ? false : true, name);
+              ec.addMapping(varObjectName, mvar);
               this.#variables.push(mvar);
             }
           } catch (isOf_l_or_r_ReferenceTypeError) {
             vscodeRef = nextRef;
             gdb.references.set(
               nextRef,
-              new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name }, this.variablesReferenceId)
+              new StructsReference(nextRef, this.threadId, this.frameLevel,
+                { variableObjectName: varObjectName, evaluateName: name },
+                this.variablesReferenceId)
             );
-            gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
-            let mvar = new GDB.VSCodeVariable(name, type, vscodeRef, voname, value ? false : true, name);
-            gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
+            ec.addTrackedVariableReference(nextRef, this.variablesReferenceId);
+            let mvar = new GDB.VSCodeVariable(name, type, vscodeRef, varObjectName, value ? false : true, name);
+            ec.addMapping(varObjectName, mvar);
             this.#variables.push(mvar);
           }
-        } else if(isPrimitiveType(value, numchild)) {
-          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
+        } else if (isPrimitiveType(value, numchild)) {
+          ec.addTrackedVariableReference(nextRef, this.variablesReferenceId);
           const doesNotReferenceOtherVariables = 0;
-          let mvar = new GDB.VSCodeVariable(name, value, doesNotReferenceOtherVariables, voname, value ? false : true, name);
-          gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
+          let mvar = new GDB.VSCodeVariable(name, value, doesNotReferenceOtherVariables, varObjectName, value ? false : true, name);
+          ec.addMapping(varObjectName, mvar);
           this.#variables.push(mvar);
         }
       }
@@ -128,7 +124,7 @@ class LocalsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    if(!this.#initialized) {
+    if (!this.#initialized) {
       await this.#initRequest(gdb);
       response.body = {
         variables: this.#variables,
@@ -136,9 +132,9 @@ class LocalsReference extends VariablesReference {
     } else {
       // we need to update the stack frame
       let ec = gdb.executionContexts.get(this.threadId);
-      for(let v of this.#variables) {
+      for (let v of this.#variables) {
         const changeList = await gdb.execMI(`-var-update --all-values ${v.variableObjectName}`);
-        for(const change of changeList.changelist) {
+        for (const change of changeList.changelist) {
           ec.updateVariable(change.name, change.value);
         }
       }

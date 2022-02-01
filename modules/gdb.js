@@ -354,11 +354,19 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns {Promise<{ addr: string, arch: string, file: string, fullname:string, func:string, level:string, line:string }[]>}
    */
   async getStack(startFrame, levels, threadId) {
-    let command = `-stack-list-frames ${threadId != 0 ? `--thread ${threadId}` : ""} ${startFrame} ${startFrame + levels}`;
-    let { stack } = await this.execMI(command);
+    const depth = await this.getStackDepth(threadId, startFrame + levels);
+    if(depth <= startFrame) return [];
+    const command = `-stack-list-frames ${startFrame} ${startFrame + levels}`;
+    let { stack } = await this.execMI(command, threadId);
     return stack.map((frame) => {
       return frame.value;
     });
+  }
+
+  async getStackDepth(threadId, maxDepth) {
+    const cmd = `-stack-info-depth ${maxDepth}`;
+    const depth = await this.execMI(cmd, threadId);
+    return depth.depth;
   }
 
   async getCurrentFrameInfo() {
@@ -503,12 +511,12 @@ class GDB extends GDBMixin(GDBBase) {
 
   async #onStopped(payload) {
     log(getFunctionName(), payload);
-    if(payload.thread) {
+    if (payload.thread) {
       const threadId = payload.thread.id;
       const frame = payload.thread.frame;
       let stackStartAddress = await this.readRBP(threadId);
       let ec = this.getExecutionContext(threadId);
-      if(ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
+      if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
         ec.stack[0].line = payload.thread.frame.line;
       } else {
         try {
@@ -518,8 +526,7 @@ class GDB extends GDBMixin(GDBBase) {
           for (let frame of frames) {
             const stackFrameIdentifier = this.nextFrameRef;
             this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
-  
-            ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
+
             let src = null;
             if (frame.file && frame.line) {
               src = new Source(frame.file, frame.fullname);
@@ -534,7 +541,7 @@ class GDB extends GDBMixin(GDBBase) {
               s.stackAddressStart = stackAddressStart;
             }
           }
-        } catch(e) {
+        } catch (e) {
           // do nothing. We already have top
         }
       }
@@ -977,6 +984,23 @@ class GDB extends GDBMixin(GDBBase) {
     this.execMI(`-var-delete ${name}`);
   }
 
+  async createVariableObjectForPointerType(name, threadId) {
+    const nextRef = this.generateVariableReference();
+    const varObjectName = `vr_${nextRef}`;
+    // notice the extra * -> we are dereferencing a this pointer
+    const cmd = `-var-create ${varObjectName} * *${name}`;
+    const result = await this.execMI(cmd, threadId);
+    return { nextRef, varObjectName, result };
+  }
+
+  async createVariableObject(name, threadId) {
+    const nextRef = this.generateVariableReference();
+    const varObjectName = `vr_${nextRef}`;
+    const cmd = `-var-create ${varObjectName} * ${name}`;
+    const result = await this.execMI(cmd, threadId);
+    return { nextRef, varObjectName, result };
+  }
+
   registerBreakpoint(bp) {
     let bps = this.#lineBreakpoints.get(bp.file) ?? [];
     bps.push(bp);
@@ -1015,8 +1039,7 @@ class GDB extends GDBMixin(GDBBase) {
       for (let frame of frames) {
         const stackFrameIdentifier = this.nextFrameRef;
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
-  
-        ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true }, stackFrameIdentifier);
+
         let src = null;
         if (frame.file && frame.line) {
           src = new Source(frame.file, frame.fullname);
@@ -1025,16 +1048,16 @@ class GDB extends GDBMixin(GDBBase) {
         r.func = frame.func;
         result.push(r);
       }
-  
+
       let level = ec.stack.length;
-      for(let s of result) {
+      for (let s of result) {
         const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
         s.stackAddressStart = stackAddressStart;
         ec.stack.push(s);
         ec.pushFrameLevel(s.id);
       }
       return result;
-    } catch(e) {
+    } catch (e) {
       return [];
     }
   }

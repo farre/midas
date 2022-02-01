@@ -1,5 +1,5 @@
 /**
- * @typedef {import("./gdb").VSCodeStackFrame } MidasStackFrame
+ * @typedef {import("./gdb").VSCodeStackFrame } VSCodeStackFrame
  * @typedef {import("./gdb").VSCodeVariable } VSCodeVariable
  * @typedef {number} VariableReference
  * @typedef {import("./gdb").GDB } GDB
@@ -8,11 +8,8 @@
 /// Type that tracks variablesReferences for an execution context (i.e; a thread).
 class ExecutionState {
   threadId;
-  /** @type {{ id: VariableReference, shouldManuallyDelete: boolean }[]} - currently managed variable references*/
-  #managedVariableReferences = [];
-  /** @type {MidasStackFrame[]} */
+  /** @type {VSCodeStackFrame[]} */
   stack = [];
-  #variablesNeedingUpdates = new Map();
   #stackFrameLevelsToStackFrameIdentifiers = [];
   #frameVariablesReferences = new Map();
   /** @type {Map<string, VSCodeVariable>} */
@@ -23,43 +20,40 @@ class ExecutionState {
 
   /**
    * Adds a variable reference that this execution context should track
-   * @param {{id: VariableReference, shouldManuallyDelete: boolean}} variableReferenceInfo - the variable reference this execution context
-   * should track and if that points to a variable reference which is a child to some other variable reference
+   * @param {number} id - variable reference
+   * @param {number} stackFrameIdentifier - stack frame variable reference `id` belongs to
    */
-  addTrackedVariableReference({ id, shouldManuallyDelete }, stackFrameIdentifier) {
+  addTrackedVariableReference(id, stackFrameIdentifier) {
     let frameReferences = this.#frameVariablesReferences.get(stackFrameIdentifier) ?? [];
     frameReferences.push(id);
     this.#frameVariablesReferences.set(stackFrameIdentifier, frameReferences);
-    this.#managedVariableReferences.push({ id, shouldManuallyDelete });
   }
 
   async clear(gdb) {
-    for(let stack of this.stack) {
+    for (let stack of this.stack) {
       let item = gdb.references.get(stack.id);
       await item.cleanUp(gdb);
       let referencedByFrame = this.#frameVariablesReferences.get(stack.id) ?? [];
-      for(const variableReference of referencedByFrame) {
+      for (const variableReference of referencedByFrame) {
         gdb.references.delete(variableReference);
       }
 
     }
     this.#frameVariablesReferences.clear();
     this.stack = [];
-    this.#managedVariableReferences = [];
-    this.#variablesNeedingUpdates = new Map();
     this.#stackFrameLevelsToStackFrameIdentifiers = [];
   }
   /**
    *
    * @param {GDB} gdb
-   * @param {MidasStackFrame[]} selected
+   * @param {VSCodeStackFrame[]} selected
    */
   async clearSelected(gdb, selected) {
-    for(const stack of selected) {
+    for (const stack of selected) {
       let item = gdb.references.get(stack.id);
       await item.cleanUp(gdb);
       let referencedByFrame = this.#frameVariablesReferences.get(stack.id);
-      for(const variableReference of referencedByFrame) {
+      for (const variableReference of referencedByFrame) {
         gdb.references.delete(variableReference);
       }
       this.#frameVariablesReferences.delete(stack.id);
@@ -78,18 +72,6 @@ class ExecutionState {
     }
   }
 
-  registerVariableObjectChange(variableObjectName, variableObjectValue) {
-    this.#variablesNeedingUpdates.set(variableObjectName, variableObjectValue);
-  }
-
-  getMaybeUpdatedValue(variableObjectName) {
-    return this.#variablesNeedingUpdates.get(variableObjectName);
-  }
-
-  removeUpdatedValue(variableObjectName) {
-    this.#variablesNeedingUpdates.delete(variableObjectName);
-  }
-
   currentFunction() {
     return this.stack[0].func;
   }
@@ -99,7 +81,7 @@ class ExecutionState {
   }
 
   isSameContextAsCurrent(stackStartAddress, functionName) {
-    if(this.stack.length == 0) return false;
+    if (this.stack.length == 0) return false;
     return this.currentStackAddressStart() == stackStartAddress && this.currentFunction() == functionName;
   }
 
@@ -115,7 +97,7 @@ class ExecutionState {
 
   async setNewContext(stackStartAddress, func, gdb) {
     let indexOfFrame = this.stack.findIndex(frame => frame.func == func && frame.stackAddressStart == stackStartAddress);
-    if(indexOfFrame != -1) {
+    if (indexOfFrame != -1) {
       const levelsToClean = this.stack.splice(0, indexOfFrame);
       this.#stackFrameLevelsToStackFrameIdentifiers = this.#stackFrameLevelsToStackFrameIdentifiers.slice(indexOfFrame);
       await this.clearSelected(gdb, levelsToClean);

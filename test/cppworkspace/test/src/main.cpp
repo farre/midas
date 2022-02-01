@@ -225,14 +225,28 @@ struct Derived : Base {
 };
 
 struct IntDerived : Base {
-  IntDerived(int sub_id) : Base(ids++, "Derived"), sub_id(id) {}
-  ~IntDerived() = default;
+  IntDerived(int sub_id) : Base(ids++, "Derived"), sub_id(sub_id) {}
+  virtual ~IntDerived() = default;
   int sub_id;
   void sayHello() override {
     std::cout << "[ID: " << this->id << ":" << this->sub_id << "]: Hello my name is: " << this->name << std::endl;
   }
+
+  void foo() {
+    std::cout << "[ID: " << this->id << ":" << this->sub_id << "]: Hello my name is: " << this->name << std::endl;
+  }
 };
 
+struct Final : public IntDerived {
+  int m_k;
+  Final(int k, int sub) : IntDerived(sub), m_k(k) {
+
+  }
+
+  void sayHello() override {
+    std::cout << "[ID: " << this->id << ":" << this->sub_id << "]: Hello my name is: " << this->name << " and I am derived of a derived. Value: " << m_k << std::endl;
+  }
+};
 
 void take_interface(Base* b) {
   b->sayHello();
@@ -241,9 +255,17 @@ void take_interface(Base* b) {
 
 void two_impls() {
   Base* ba = new Derived{"foo"};
-  Base* bb = new IntDerived{42};
+  IntDerived* bb = new IntDerived{42};
+  bb->foo();
   take_interface(ba);
   take_interface(bb);
+}
+
+void testFinalDerived() {
+  auto f = new Final{10, 1};
+  f->sayHello();
+  std::cout << "say hello, through interface" << std::endl;
+  take_interface(f);
 }
 
 struct Struct {
@@ -348,4 +370,5 @@ int main(int argc, const char **argv) {
   
   auto barptr = new Bar{.j = 100, .s = new Struct { .i = 10, .f = 10.10f, .name = "somestruct_refByBar" }};
   testSubChildUpdate(barptr);
+  testFinalDerived();
 }
