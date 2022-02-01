@@ -246,7 +246,52 @@ void two_impls() {
   take_interface(bb);
 }
 
+struct Struct {
+  int i;
+  float f;
+  const char* name; 
+};
 
+struct Bar {
+  int j = 0;
+  Struct* s;
+};
+
+
+
+Struct variablesRequestTest(Struct s) {
+  // set first breakpoint here
+  const auto new_i = s.i + 10;
+  const auto new_f = s.f + 10.0f;
+  s.i = new_i;
+  s.f = new_f;
+  return s;
+}
+
+void variablesRequestTestReference(Struct& s) {
+  const auto i = s.i + 10;
+  const auto f = s.f + 10.0f;
+  s.i = i;
+  s.f = f;  
+}
+
+int testSubChildUpdate(Bar* b) {
+    b->j++;
+    variablesRequestTestReference(*b->s);
+    auto res = b->s->f;
+    return res;
+}
+
+void variablesRequestTestPointer(Struct* s) {
+  auto local_ptr = s;
+  const auto i = local_ptr->i + 10;
+  const auto f = local_ptr->f + 10.0f;
+  variablesRequestTestReference(*s);
+  local_ptr->i += i;
+  local_ptr->f += f;
+  variablesRequestTestReference(*s);
+  local_ptr = nullptr;
+}
 
 int main(int argc, const char **argv) {
   const auto somelocal = 42;
@@ -295,4 +340,11 @@ int main(int argc, const char **argv) {
   auto a = move_todo(std::move(tmp));
   std::cout << a.title() << std::endl;
   two_impls();
+
+  auto somestruct = new Struct { .i = 10, .f = 10.0f, .name = "somestruct" };
+  auto copied_somestruct = variablesRequestTest(*somestruct);
+  variablesRequestTestPointer(&copied_somestruct);
+
+  auto barptr = new Bar{.j = 100, .s = new Struct { .i = 10, .f = 10.0f, .name = "somestruct_refByBar" }};
+  testSubChildUpdate(barptr);
 }

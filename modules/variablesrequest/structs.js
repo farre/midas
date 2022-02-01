@@ -12,17 +12,17 @@ const { VariablesReference, err_response } = require("./reference");
 class StructsReference extends VariablesReference {
   /** @type {MidasVariable[]} */
   #memberVariables;
-
   /** @type {string} */
   variableObjectName;
-
   /** @type {string} */
   evaluateName;
 
-  constructor(variablesReference, threadId, frameLevel, names) {
+  stackFrameIdentifier;
+
+  constructor(variablesReference, threadId, frameLevel, names, stackFrameIdentifier) {
     super(variablesReference, threadId, frameLevel);
     this.#memberVariables = [];
-
+    this.stackFrameIdentifier = stackFrameIdentifier;
     this.variableObjectName = names.variableObjectName;
     this.evaluateName = names.evaluateName;
   }
@@ -53,17 +53,21 @@ class StructsReference extends VariablesReference {
         let nextRef = 0;
         let displayValue = "";
         let isStruct = false;
-        if (!v.value.value || v.value.value == "{...}") {
+        if (!v.value.value || v.value.value == "{...}" || +v.value.numchild > 0) {
           nextRef = gdb.generateVariableReference();
           gdb.references.set(
             nextRef,
             new StructsReference(nextRef, this.threadId, this.frameLevel, {
               variableObjectName: v.value.name,
-              evaluateName: `${this.evaluateName}.${v.value.exp}`,
-            })
+              evaluateName: `${this.evaluateName}.${v.value.exp}`
+            }, this.stackFrameIdentifier)
           );
-          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: false });
-          displayValue = v.value.type;
+          gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: false }, this.stackFrameIdentifier);
+          if(v.value.type.charAt(v.value.type.length-1) == "*") {
+            displayValue = `<${v.value.value}> ${v.value.type}`;
+          } else {
+            displayValue = v.value.type;
+          }
           isStruct = true;
         } else {
           displayValue = v.value.value;
@@ -77,7 +81,14 @@ class StructsReference extends VariablesReference {
         variables: this.#memberVariables,
       };
     } else {
-      await gdb.updateMidasVariables(this.threadId, this.#memberVariables);
+      let ec = gdb.executionContexts.get(this.threadId);
+      for(let v of this.#memberVariables) {
+        let changeValue = ec.getMaybeUpdatedValue(v.variableObjectName);
+        if(changeValue) {
+          v.value = changeValue;
+          ec.removeUpdatedValue(v.variableObjectName);
+        }
+      }
       response.body = {
         variables: this.#memberVariables,
       };
@@ -100,7 +111,7 @@ class StructsReference extends VariablesReference {
   async update(response, gdb, namedObject, value) {
     for (const v of this.#memberVariables) {
       if (v.name == namedObject) {
-        let res = await gdb.execMI(`-var-assign ${v.voName} "${value}"`, this.threadId);
+        let res = await gdb.execMI(`-var-assign ${v.variableObjectName} "${value}"`, this.threadId);
         if (res.value) {
           v.value = res.value;
           response.body = {

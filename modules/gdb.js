@@ -56,7 +56,7 @@ let GDBBase = gdbjs.GDB;
 class MidasVariable extends Variable {
   constructor(name, value, ref, variableObjectName, isStructureType, evaluateName) {
     super(name, value, ref);
-    this.voName = variableObjectName;
+    this.variableObjectName = variableObjectName;
     this.isStruct = isStructureType;
     if (isStructureType) {
       this.presentationHint = { kind: "class" };
@@ -77,6 +77,11 @@ class MidasStackFrame extends StackFrame {
   constructor(variablesReference, name, src, ln, col, frameAddress) {
     super(variablesReference, name, src, ln, col);
   }
+
+  /** @type {number} */
+  stackAddressStart;
+  /** @type {string} */
+  func;
 }
 
 
@@ -356,73 +361,10 @@ class GDB extends GDBMixin(GDBBase) {
     });
   }
 
-  /**
-   * @param { ExecutionState } exec_ctx
-   * @param { number } levels
-   * @returns
-   */
-  async getTrackedStack(exec_ctx, startFrame, levels) {
-    // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
-    // This is ugly and bad, this needs refactoring.
-
-    let frames = await this.getStack(startFrame, levels, exec_ctx.threadId);
-    const frameAddress = +(await this.readStackFrameStart(0, exec_ctx.threadId));
-    if (exec_ctx.stack[0] && startFrame == 0) {
-      if (exec_ctx.stack[0].frameAddress == frameAddress) {
-        return exec_ctx.stack;
-      }
-    }
-    for (let frame of frames) {
-      const stackFrameIdentifier = this.nextFrameRef;
-      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, exec_ctx.threadId, +frame.level));
-      exec_ctx.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
-      let src = null;
-      if (frame.file && frame.line) {
-        src = new Source(frame.file, frame.fullname);
-      }
-      let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-      r.frameAddress = +frame.addr;
-      exec_ctx.stack.push(r);
-    }
-
-    let level = 0;
-    for (let s of exec_ctx.stack) {
-      const frameAddress = +(await this.readStackFrameStart(level++, exec_ctx.threadId));
-      s.frameAddress = frameAddress;
-    }
-    // we must select top most stack frame again, since we've rolled through the stack, updating the stack frame addresses
-    // or rather where they're origin address is, in memory
-    await this.execMI(`-stack-select-frame 0`);
-    return exec_ctx.stack.slice(startFrame, startFrame + levels);
-  }
-
-  async buildNewStack(ec, startFrame, levels) {
-    // todo(simon): clean up. This function returns something and also mutates exec_ctx.stack invisibly from the callee's side.
-    // This is ugly and bad, this needs refactoring.
-    await ec.clear(this);
-    let frames = await this.getStack(startFrame, levels, ec.threadId);
-    for (let frame of frames) {
-      const stackFrameIdentifier = this.nextFrameRef;
-      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, ec.threadId, +frame.level));
-      ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
-      let src = null;
-      if (frame.file && frame.line) {
-        src = new Source(frame.file, frame.fullname);
-      }
-      let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-      r.frameAddress = +frame.addr;
-      ec.stack.push(r);
-    }
-
-    let level = 0;
-    for (let s of ec.stack) {
-      const frameAddress = +(await this.readStackFrameStart(level++, ec.threadId));
-      s.frameAddress = frameAddress;
-    }
-    // we must select top most stack frame again, since we've rolled through the stack, updating the stack frame addresses
-    // or rather where they're origin address is, in memory
-    await this.execMI(`-stack-select-frame 0`);
-    return ec.stack;
+  async getCurrentFrameInfo() {
+    const cmd = `-stack-info-frame`;
+    const frame = await this.execMI(cmd);
+    return frame.frame;
   }
 
   threads() {
@@ -559,8 +501,44 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  #onStopped(payload) {
+  async #onStopped(payload) {
     log(getFunctionName(), payload);
+    if(payload.thread) {
+      const threadId = payload.thread.id;
+      const frame = payload.thread.frame;
+      let stackStartAddress = await this.readRBP(threadId);
+      let ec = this.getExecutionContext(threadId);
+      if(ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
+        ec.stack[0].line = payload.thread.frame.line;
+      } else {
+        try {
+          const start = await ec.setNewContext(stackStartAddress, frame.func, this);
+          // await ec.clear(this);
+          let frames = await this.getStack(start, 20 - start, threadId);
+          for (let frame of frames) {
+            const stackFrameIdentifier = this.nextFrameRef;
+            this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
+  
+            ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true });
+            let src = null;
+            if (frame.file && frame.line) {
+              src = new Source(frame.file, frame.fullname);
+            }
+            let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+            r.func = frame.func;
+            ec.stack.push(r);
+            ec.pushFrameLevel(stackFrameIdentifier);
+            let level = 0;
+            for (let s of ec.stack) {
+              const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
+              s.stackAddressStart = stackAddressStart;
+            }
+          }
+        } catch(e) {
+          // do nothing. We already have top
+        }
+      }
+    }
     let reason;
     try {
       reason = payload.reason.join(",");
@@ -857,20 +835,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  /**
-   * @param {MidasVariable[]} variables - a reference to an array of variables that are to be changed
-   */
-  async updateMidasVariables(threadId, variables) {
-    for (const v of variables) {
-      if (!v.isStruct) {
-        let r = (await this.execMI(`-var-evaluate-expression ${v.voName}`, threadId)).value;
-        if (r) {
-          v.value = r;
-        }
-      }
-    }
-  }
-
   /** Returns info about current stack frame.
    * @returns {Promise<{level: string, addr: string, func: string, file: string, fullname: string, line: string, arch: string}>}
    */
@@ -895,7 +859,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   async readRBP(threadId) {
     let r = await this.execMI(`-data-evaluate-expression $rbp`, threadId);
-    return r.value;
+    return +(r.value);
   }
 
   async readProgramCounter(threadId) {
@@ -1004,7 +968,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
-    const breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).then((r) => r.bkpt);
+    const breakpoint = await (this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`)).bkpt;
     this.registerBreakpoint(breakpoint);
     return breakpoint;
   }
@@ -1039,6 +1003,39 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       // assume CLI command, for now
       return await this.execCLI(`${expression}`);
+    }
+  }
+
+  async requestMoreFrames(threadId, levels) {
+    let ec = this.getExecutionContext(threadId);
+    try {
+      // getStack throws if we're trying to request frames that do not exist.
+      let frames = await this.getStack(ec.stack.length, levels, threadId);
+      let result = [];
+      for (let frame of frames) {
+        const stackFrameIdentifier = this.nextFrameRef;
+        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
+  
+        ec.addTrackedVariableReference({ id: stackFrameIdentifier, shouldManuallyDelete: true }, stackFrameIdentifier);
+        let src = null;
+        if (frame.file && frame.line) {
+          src = new Source(frame.file, frame.fullname);
+        }
+        let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+        r.func = frame.func;
+        result.push(r);
+      }
+  
+      let level = ec.stack.length;
+      for(let s of result) {
+        const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
+        s.stackAddressStart = stackAddressStart;
+        ec.stack.push(s);
+        ec.pushFrameLevel(s.id);
+      }
+      return result;
+    } catch(e) {
+      return [];
     }
   }
 }

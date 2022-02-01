@@ -207,36 +207,19 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
-
   async stackTraceRequest(response, args, request) {
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
-    if (exec_ctx.stack.length == 0) {
-      let frames = await this.gdb.buildNewStack(exec_ctx, args.startFrame, args.levels);
+    if(args.startFrame == 0) {
+      response.body = {
+        stackFrames: exec_ctx.stack,
+      };
+    } else {
+      const frames = await this.gdb.requestMoreFrames(args.threadId, args.levels);
       response.body = {
         stackFrames: frames,
       };
-      this.sendResponse(response);
-    } else {
-      let frameInfo = await this.gdb.readRBP(exec_ctx.threadId);
-      if (exec_ctx.stack == undefined || exec_ctx == undefined || exec_ctx.stack[0] == undefined) {
-        debugger;
-      }
-      if (+frameInfo != exec_ctx.stack[0].frameAddress) {
-        // todo: we invalidate the entire stack, as soon as current != top. in the future, might scan to "chop" of stack.
-        await exec_ctx.clear(this.gdb);
-        let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
-        response.body = {
-          stackFrames: frames,
-        };
-        this.sendResponse(response);
-      } else {
-        let frames = await this.gdb.getTrackedStack(exec_ctx, args.startFrame, args.levels);
-        response.body = {
-          stackFrames: frames,
-        };
-        this.sendResponse(response);
-      }
     }
+    await this.sendResponse(response);
   }
 
   async variablesRequest(response, args) {
@@ -244,7 +227,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // and instead read the values with -var-evaluate-expression calls.
     // However, we must call this, otherwise the var objs do not get updated in the backend
     const { variablesReference } = args;
-    await this.gdb.execMI(`-var-update *`);
 
     let handler = this.gdb.references.get(variablesReference);
     if (handler) {
