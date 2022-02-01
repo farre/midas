@@ -1,11 +1,11 @@
-const { VariablesReference, err_response } = require("./reference");
+const { VariablesReference, err_response } = require("./variablesReference");
 const { StructsReference } = require("./structs");
 const GDB = require("../gdb");
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("../gdb").GDB } GDB
- * @typedef { import("../gdb").MidasVariable } MidasVariable
+ * @typedef { import("../gdb").VSCodeVariable } VSCodeVariable
  */
 
 const isPrimitiveType = (value, childrenCount) => value && (childrenCount == 0);
@@ -13,7 +13,7 @@ const isStructuredOrPointer = (value, childrenCount) => value && (childrenCount 
 const isNotVariable = (value, childrenCount) => !value && (childrenCount == 0);
 
 class LocalsReference extends VariablesReference {
-  /** @type {MidasVariable[]}  */
+  /** @type {VSCodeVariable[]}  */
   #variables;
 
   #initialized = false;
@@ -24,6 +24,9 @@ class LocalsReference extends VariablesReference {
   }
 
   async #initRequest(gdb) {
+    const registerGlobalTracking = (mvar) => {
+
+    }
     let ec = gdb.getExecutionContext(this.threadId);
     const frameLevel = ec.getFrameLevel(this.variablesReferenceId);
     this.frameLevel = frameLevel;
@@ -40,7 +43,7 @@ class LocalsReference extends VariablesReference {
           new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
         );
         gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
-        let mvar = new GDB.MidasVariable(name, `<${value}> ${type}`, nextRef, voname, value ? false : true, name);
+        let mvar = new GDB.VSCodeVariable(name, `<${value}> ${type}`, nextRef, voname, value ? false : true, name);
         this.#variables.push(mvar);
       } else {
         let nextRef = gdb.generateVariableReference();
@@ -58,7 +61,7 @@ class LocalsReference extends VariablesReference {
             new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name })
           );
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true });
-          let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+          let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
           this.#variables.push(mvar);
         } else if (isNotVariable(value, numchild)) {
           await gdb.deleteVariableObject(voname);
@@ -88,10 +91,12 @@ class LocalsReference extends VariablesReference {
                 })
               );
               gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
-              let mvar = new GDB.MidasVariable(name, `<${value}> ${type}`, nextRef, deref_voname, value ? false : true, name);
+              let mvar = new GDB.VSCodeVariable(name, `<${value}> ${type}`, nextRef, deref_voname, value ? false : true, name);
+              gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
               this.#variables.push(mvar);
             } else {
-              let mvar = new GDB.MidasVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+              let mvar = new GDB.VSCodeVariable(name, value ?? type, vscodeRef, voname, value ? false : true, name);
+              gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
               this.#variables.push(mvar);
             }
           } catch (isOf_l_or_r_ReferenceTypeError) {
@@ -101,13 +106,15 @@ class LocalsReference extends VariablesReference {
               new StructsReference(nextRef, this.threadId, this.frameLevel, { variableObjectName: voname, evaluateName: name }, this.variablesReferenceId)
             );
             gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
-            let mvar = new GDB.MidasVariable(name, type, vscodeRef, voname, value ? false : true, name);
+            let mvar = new GDB.VSCodeVariable(name, type, vscodeRef, voname, value ? false : true, name);
+            gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
             this.#variables.push(mvar);
           }
         } else if(isPrimitiveType(value, numchild)) {
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference({ id: nextRef, shouldManuallyDelete: true }, this.variablesReferenceId);
           const doesNotReferenceOtherVariables = 0;
-          let mvar = new GDB.MidasVariable(name, value, doesNotReferenceOtherVariables, voname, value ? false : true, name);
+          let mvar = new GDB.VSCodeVariable(name, value, doesNotReferenceOtherVariables, voname, value ? false : true, name);
+          gdb.getExecutionContext(this.threadId).addMapping(voname, mvar);
           this.#variables.push(mvar);
         }
       }
@@ -132,12 +139,7 @@ class LocalsReference extends VariablesReference {
       for(let v of this.#variables) {
         const changeList = await gdb.execMI(`-var-update --all-values ${v.variableObjectName}`);
         for(const change of changeList.changelist) {
-          ec.registerVariableObjectChange(change.name, change.value);
-        }
-        let changeValue = ec.getMaybeUpdatedValue(v.variableObjectName);
-        if(changeValue) {
-          v.value = changeValue;
-          ec.removeUpdatedValue(v.variableObjectName);
+          ec.updateVariable(change.name, change.value);
         }
       }
 
@@ -152,8 +154,10 @@ class LocalsReference extends VariablesReference {
    * @param { GDB } gdb - reference to the GDB backend
    */
   async cleanUp(gdb) {
+    let ec = gdb.getExecutionContext(this.threadId);
     for (const v of this.#variables) {
       await gdb.deleteVariableObject(v.variableObjectName);
+      ec.deleteMapping(v.variableObjectName);
     }
     gdb.references.delete(this.variablesReferenceId);
   }

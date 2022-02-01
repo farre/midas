@@ -1,6 +1,6 @@
 /**
- * @typedef {import("./gdb").MidasStackFrame } MidasStackFrame
- * @typedef {import("./gdb").MidasVariable } MidasVariable
+ * @typedef {import("./gdb").VSCodeStackFrame } MidasStackFrame
+ * @typedef {import("./gdb").VSCodeVariable } VSCodeVariable
  * @typedef {number} VariableReference
  * @typedef {import("./gdb").GDB } GDB
  */
@@ -15,6 +15,8 @@ class ExecutionState {
   #variablesNeedingUpdates = new Map();
   #stackFrameLevelsToStackFrameIdentifiers = [];
   #frameVariablesReferences = new Map();
+  /** @type {Map<string, VSCodeVariable>} */
+  #debugNameMap = new Map();
   constructor(threadId) {
     this.threadId = threadId;
   }
@@ -126,6 +128,19 @@ class ExecutionState {
 
   getFrameLevel(stackFrameIdentifier) {
     return this.#stackFrameLevelsToStackFrameIdentifiers.indexOf(stackFrameIdentifier);
+  }
+
+
+  addMapping(variableObjectName, variable) {
+    this.#debugNameMap.set(variableObjectName, variable);
+  }
+
+  updateVariable(variableObjectName, value) {
+    let v = this.#debugNameMap.get(variableObjectName);
+    v.value = value;
+  }
+  deleteMapping(variableObjectName) {
+    this.#debugNameMap.delete(variableObjectName);
   }
 }
 

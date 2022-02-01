@@ -53,7 +53,7 @@ function newStoppedEvent(reason, description, allThreadsStopped, threadId = unde
 let GDBBase = gdbjs.GDB;
 
 // A bridge between GDB Variable Objects and VSCode "Variable" from the vscode-debugadapter module
-class MidasVariable extends Variable {
+class VSCodeVariable extends Variable {
   constructor(name, value, ref, variableObjectName, isStructureType, evaluateName) {
     super(name, value, ref);
     this.variableObjectName = variableObjectName;
@@ -65,7 +65,7 @@ class MidasVariable extends Variable {
   }
 }
 
-class MidasStackFrame extends StackFrame {
+class VSCodeStackFrame extends StackFrame {
   /**
    *
    * @param {number} variablesReference
@@ -140,13 +140,13 @@ class GDB extends GDBMixin(GDBBase) {
   /** @type { Map<ThreadId, ExecutionState> } */
   executionContexts = new Map();
 
-  /** @type { Map<number, import("./variablesrequest/reference").VariablesReference >} */
+  /** @type { Map<number, import("./variablesrequest/variablesReference").VariablesReference >} */
   references = new Map();
 
   /** @type {Map<string, VariablesReference>} */
   evaluatable = new Map();
 
-  /** @type {Map<number, { variableObjectName: string, memberVariables: MidasVariable[] }>} */
+  /** @type {Map<number, { variableObjectName: string, memberVariables: VSCodeVariable[] }>} */
   evaluatableStructuredVars = new Map();
 
   #threads = new Map();
@@ -1038,8 +1038,9 @@ class GDB extends GDBMixin(GDBBase) {
       return [];
     }
   }
+
 }
 
 exports.GDB = GDB;
-exports.MidasVariable = MidasVariable;
-exports.MidasStackFrame = MidasStackFrame;
+exports.VSCodeVariable = VSCodeVariable;
+exports.VSCodeStackFrame = VSCodeStackFrame;

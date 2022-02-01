@@ -5,7 +5,7 @@ const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
 const { DebugProtocol } = require("@vscode/debugprotocol");
-const { GDB, MidasVariable } = require("./gdb");
+const { GDB, VSCodeVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
@@ -272,7 +272,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           displayValue = v.value.value;
           isStruct = false;
         }
-        struct.memberVariables.push(new MidasVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
+        struct.memberVariables.push(new VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
       }
       response.body = {
         variables: struct.memberVariables,

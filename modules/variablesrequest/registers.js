@@ -1,14 +1,14 @@
 const DebugAdapter = require("@vscode/debugadapter");
-const { VariablesReference } = require("./reference");
+const { VariablesReference } = require("./variablesReference");
 const GDB = require("../gdb");
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("../gdb").GDB } GDB
- * @typedef { import("../gdb").MidasVariable } MidasVariable
+ * @typedef { import("../gdb").VSCodeVariable } VSCodeVariable
  */
 
 class RegistersReference extends VariablesReference {
-  /** @type {MidasVariable[]}  */
+  /** @type {VSCodeVariable[]}  */
   #registerVariables;
 
   constructor(stackFrameId, threadId, frameLevel) {
