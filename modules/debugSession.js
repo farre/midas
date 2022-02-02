@@ -302,25 +302,16 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       presentationHint: hint,
     };
   }
-
   scopesRequest(response, args) {
     const scopes = [];
-    let { threadId, frameLevel } = this.gdb.getReferenceContext(args.frameId);
-    let registerScopeVariablesReference = this.gdb.generateVariableReference();
-    this.gdb.references.set(registerScopeVariablesReference, new RegistersReference(args.frameId, threadId, frameLevel));
-    let registers = this.createScope("Register", "registers", registerScopeVariablesReference, false);
+    let locals = this.gdb.getReferenceContext(args.frameId);
+    // @ts-ignore
+    let registers = this.createScope("Register", "registers", locals.registerScopeIdentifier, false);
     let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
+    // @ts-ignore
+    let args_scope = this.createScope("Args", "arguments", locals.argScopeIdentifier, false);
 
-    // TODO(simon): add the global scope as well; on c++ this is a rather massive one though.
-    // todo(simon): retrieve frame level/address from GDB and add as "Locals" scopes
-    // let parameters = {
-    //   name: "Parameters",
-    //   variablesReference: 0,
-    //   expensive: false,
-    //   presentationHint: "arguments",
-    // };
-
-    scopes.push(locals_scope, registers);
+    scopes.push(args_scope, locals_scope, registers);
     response.body = {
       scopes: scopes,
     };
