@@ -1,4 +1,3 @@
-const assert = require("assert");
 const GDB = require("../gdb");
 const { VariablesReference, err_response } = require("./variablesReference");
 
@@ -17,6 +16,10 @@ async function parseStructVariable(gdb, variableObjectName) {
     `-var-list-children --all-values "${variableObjectName}"`,
     this.threadId
   );
+  if(!structAccessModifierList.children) {
+    debugger;
+    return [];
+  }
   for (const accessModifier of structAccessModifierList.children) {
     let e = accessModifier.value.exp;
     if(e == "public" || e == "protected" || e == "private") {

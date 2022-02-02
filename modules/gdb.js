@@ -183,10 +183,6 @@ class GDB extends GDBMixin(GDBBase) {
     return this.#nextVarRef++;
   }
 
-  get nextFrameRef() {
-    return this.#nextVarRef++;
-  }
-
   async startWithRR(program, stopOnEntry, doTrace) {
     this.#program = path.basename(program);
     trace = doTrace;
@@ -370,9 +366,9 @@ class GDB extends GDBMixin(GDBBase) {
     return depth.depth;
   }
 
-  async getCurrentFrameInfo() {
+  async getCurrentFrameInfo(threadId) {
     const cmd = `-stack-info-frame`;
-    const frame = await this.execMI(cmd);
+    const frame = await this.execMI(cmd, threadId);
     return frame.frame;
   }
 
@@ -511,50 +507,46 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  async #onStopped(payload) {
-    log(getFunctionName(), payload);
-    if (payload.thread) {
-      const threadId = payload.thread.id;
-      const frame = payload.thread.frame;
-      let stackStartAddress = await this.readRBP(threadId);
-      let ec = this.getExecutionContext(threadId);
-      if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
-        ec.stack[0].line = payload.thread.frame.line;
-      } else {
-        try {
-          const start = await ec.setNewContext(stackStartAddress, frame.func, this);
-          let frames = await this.getStack(start, 20 - start, threadId);
-          for (let frame of frames) {
-            const argsVarRef = this.nextFrameRef;
-            const frameIdVarRef = this.nextFrameRef;
-            const registerVarRef = this.nextFrameRef;
-            let state = new StackFrameState(frameIdVarRef, threadId);
-            this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
-            this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
-            this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
-            ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
-            ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
+  async buildExecutionState(threadId) {
+    let frame = await this.getCurrentFrameInfo()
+    let stackStartAddress = await this.readRBP(threadId);
+    let ec = this.getExecutionContext(threadId);
+    if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
+      if(!frame.line) debugger;
+      ec.stack[0].line = frame.line;
+    } else {
+      const start = await ec.setNewContext(stackStartAddress, frame.func, this);
+      let frames = await this.getStack(start, 20 - start, threadId);
+      for (let frame of frames) {
+        const argsVarRef = this.nextVarRef;
+        const frameIdVarRef = this.nextVarRef;
+        const registerVarRef = this.nextVarRef;
+        let state = new StackFrameState(frameIdVarRef, threadId);
+        this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
+        this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
+        this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
+        ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
+        ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
 
-            let src = null;
-            if (frame.file && frame.line) {
-              src = new Source(frame.file, frame.fullname);
-            }
+        let src = null;
+        if (frame.file && frame.line) {
+          src = new Source(frame.file, frame.fullname);
+        }
 
-            let r = new StackFrame(frameIdVarRef, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-            r.func = frame.func;
-            ec.pushStackFrame(r, state);
-            let level = 0;
-            for (let s of ec.stack) {
-              const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-              s.stackAddressStart = stackAddressStart;
-            }
-          }
-        } catch (e) {
-          // do nothing. We already have top
-          console.log(e);
+        let r = new StackFrame(frameIdVarRef, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+        r.func = frame.func;
+        ec.pushStackFrame(r, state);
+        let level = 0;
+        for (let s of ec.stack) {
+          const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
+          s.stackAddressStart = stackAddressStart;
         }
       }
     }
+  }
+
+  async #onStopped(payload) {
+    log(getFunctionName(), payload);
     let reason;
     try {
       reason = payload.reason.join(",");
@@ -1046,9 +1038,9 @@ class GDB extends GDBMixin(GDBBase) {
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
       for (let frame of frames) {
-        const stackFrameArgsIdentifier = this.nextFrameRef;
-        const stackFrameIdentifier = this.nextFrameRef;
-        const registerScopeVariablesReference = this.nextFrameRef;
+        const stackFrameArgsIdentifier = this.nextVarRef;
+        const stackFrameIdentifier = this.nextVarRef;
+        const registerScopeVariablesReference = this.nextVarRef;
         this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId, +frame.level));
         let state = new StackFrameState(stackFrameIdentifier, threadId);
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
@@ -1056,7 +1048,6 @@ class GDB extends GDBMixin(GDBBase) {
 
         ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
         ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
-        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
         let src = null;
         if (frame.file && frame.line) {
           src = new Source(frame.file, frame.fullname);

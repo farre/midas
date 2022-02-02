@@ -317,6 +317,7 @@ void variablesRequestTestPointer(Struct* s) {
 
 int main(int argc, const char **argv) {
   const auto somelocal = 42;
+  constexpr int array[42] = {};
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
   auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
 
