@@ -14,6 +14,7 @@ class ExecutionState {
   #frameVariablesReferences = new Map();
   /** @type {Map<string, VSCodeVariable>} */
   #debugNameMap = new Map();
+  states = [];
   constructor(threadId) {
     this.threadId = threadId;
   }
@@ -37,11 +38,11 @@ class ExecutionState {
       for (const variableReference of referencedByFrame) {
         gdb.references.delete(variableReference);
       }
-
     }
     this.#frameVariablesReferences.clear();
     this.stack = [];
     this.#stackFrameLevelsToStackFrameIdentifiers = [];
+    this.states = [];
   }
   /**
    *
@@ -58,6 +59,7 @@ class ExecutionState {
       }
       this.#frameVariablesReferences.delete(stack.id);
     }
+    this.states = this.states.slice(selected.length);
   }
 
   updateTopFrame(frame, gdb) {
@@ -123,6 +125,12 @@ class ExecutionState {
   }
   deleteMapping(variableObjectName) {
     this.#debugNameMap.delete(variableObjectName);
+  }
+
+  pushStackFrame(stackFrame, state) {
+    this.stack.push(stackFrame);
+    this.states.push(state);
+    this.pushFrameLevel(stackFrame.id);
   }
 }
 

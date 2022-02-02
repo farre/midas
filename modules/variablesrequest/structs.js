@@ -111,6 +111,7 @@ class StructsReference extends VariablesReference {
 
   async cleanUp(gdb) {
     // we don't need to do clean up; we're always managed by either a LocalsReference or a WatchReference
+    gdb.references.delete(this.variablesReferenceId);
   }
 
   /**

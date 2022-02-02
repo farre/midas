@@ -20,7 +20,9 @@ const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn, isReplaySession } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/mod");
 const { ExecutionState } = require("./executionState");
-
+const { RegistersReference } = require("./variablesrequest/registers");
+const {StackFrameState} = require("./variablesrequest/stackFramestate");
+const {ArgsReference} = require("./variablesrequest/args");
 let trace = true;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -124,8 +126,7 @@ class GDB extends GDBMixin(GDBBase) {
   // loaded libraries
   #loadedLibraries;
   // variablesReferences bookkeeping
-  #nextVarRef = 1000 * 1000;
-  #nextFrameRef = 1000;
+  #nextVarRef = 1;
 
   /**
    * reference to the DebugSession that talks to VSCode
@@ -139,8 +140,8 @@ class GDB extends GDBMixin(GDBBase) {
 
   /** @type { Map<ThreadId, ExecutionState> } */
   executionContexts = new Map();
-
-  /** @type { Map<number, import("./variablesrequest/variablesReference").VariablesReference >} */
+  /** @typedef {import("./variablesrequest/registers").RegistersReference | import("./variablesrequest/args").ArgsReference | import("./variablesrequest/locals").LocalsReference | import("./variablesrequest/structs").StructsReference } VariablesReferenceHandler*/
+  /** @type { Map<number, VariablesReferenceHandler >} */
   references = new Map();
 
   /** @type {Map<string, VariablesReference>} */
@@ -183,7 +184,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   get nextFrameRef() {
-    return this.#nextFrameRef++;
+    return this.#nextVarRef++;
   }
 
   async startWithRR(program, stopOnEntry, doTrace) {
@@ -384,12 +385,13 @@ class GDB extends GDBMixin(GDBBase) {
    * @property {string} name
    * @property {string} type
    * @property {string | null} value
+   * @property {string | null} [arg]
    * @returns {Promise<Local[]>}
    */
   async getStackLocals(threadId, frameLevel) {
     const command = `-stack-list-variables --thread ${threadId} --frame ${frameLevel ?? 0} --simple-values`;
     const { variables } = await this.execMI(command);
-    return variables.map(({ name, type, value }) => ({ name, type, value }));
+    return variables;
   }
 
   /**
@@ -521,20 +523,26 @@ class GDB extends GDBMixin(GDBBase) {
       } else {
         try {
           const start = await ec.setNewContext(stackStartAddress, frame.func, this);
-          // await ec.clear(this);
           let frames = await this.getStack(start, 20 - start, threadId);
           for (let frame of frames) {
-            const stackFrameIdentifier = this.nextFrameRef;
-            this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
+            const argsVarRef = this.nextFrameRef;
+            const frameIdVarRef = this.nextFrameRef;
+            const registerVarRef = this.nextFrameRef;
+            let state = new StackFrameState(frameIdVarRef, threadId);
+            this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
+            this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
+            this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
+            ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
+            ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
 
             let src = null;
             if (frame.file && frame.line) {
               src = new Source(frame.file, frame.fullname);
             }
-            let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+
+            let r = new StackFrame(frameIdVarRef, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
             r.func = frame.func;
-            ec.stack.push(r);
-            ec.pushFrameLevel(stackFrameIdentifier);
+            ec.pushStackFrame(r, state);
             let level = 0;
             for (let s of ec.stack) {
               const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
@@ -543,6 +551,7 @@ class GDB extends GDBMixin(GDBBase) {
           }
         } catch (e) {
           // do nothing. We already have top
+          console.log(e);
         }
       }
     }
@@ -1037,24 +1046,31 @@ class GDB extends GDBMixin(GDBBase) {
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
       for (let frame of frames) {
+        const stackFrameArgsIdentifier = this.nextFrameRef;
         const stackFrameIdentifier = this.nextFrameRef;
-        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
+        const registerScopeVariablesReference = this.nextFrameRef;
+        this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId, +frame.level));
+        let state = new StackFrameState(stackFrameIdentifier, threadId);
+        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
+        this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, +frame.level, state));
 
+        ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
+        ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
+        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level));
         let src = null;
         if (frame.file && frame.line) {
           src = new Source(frame.file, frame.fullname);
         }
         let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
         r.func = frame.func;
-        result.push(r);
+        result.push({ frame: r, state });
       }
 
       let level = ec.stack.length;
-      for (let s of result) {
+      for (let {frame, state} of result) {
         const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-        s.stackAddressStart = stackAddressStart;
-        ec.stack.push(s);
-        ec.pushFrameLevel(s.id);
+        frame.stackAddressStart = stackAddressStart;
+        ec.pushStackFrame(frame, state);
       }
       return result;
     } catch (e) {
