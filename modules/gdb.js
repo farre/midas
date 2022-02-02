@@ -18,7 +18,7 @@ const {
 const { GDBMixin } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn, isReplaySession } = require("./utils");
-const { LocalsReference } = require("./variablesrequest/mod");
+const { LocalsReference } = require("./variablesrequest/locals");
 const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
 const {StackFrameState} = require("./variablesrequest/stackFramestate");
