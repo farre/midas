@@ -9,7 +9,6 @@ const { GDB, VSCodeVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { RegistersReference } = require("./variablesrequest/registers");
 const { isReplaySession, diff } = require("./utils");
 
 let server;
@@ -207,7 +206,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
-  async stackTraceRequest(response, args, request) {
+
+  async stackTraceRequest(response, args) {
+    await this.gdb.buildExecutionState(args.threadId);
     let exec_ctx = this.gdb.executionContexts.get(args.threadId);
     if (args.startFrame == 0) {
       response.body = {

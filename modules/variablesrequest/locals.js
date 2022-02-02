@@ -1,17 +1,10 @@
 const { VariablesReference, err_response } = require("./variablesReference");
-const { StructsReference } = require("./structs");
-const GDB = require("../gdb");
-const { StackFrameState } = require("./stackFramestate");
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("../gdb").GDB } GDB
  * @typedef { import("../gdb").VSCodeVariable } VSCodeVariable
  */
-
-const isPrimitiveType = (value, childrenCount) => value && (childrenCount == 0);
-const isStructuredOrPointer = (value, childrenCount) => value && (childrenCount > 0);
-const isNotVariable = (value, childrenCount) => !value && (childrenCount == 0);
 
 class LocalsReference extends VariablesReference {
   /** @type {VSCodeVariable[]}  */
@@ -21,11 +14,12 @@ class LocalsReference extends VariablesReference {
 
   argScopeIdentifier;
   registerScopeIdentifier;
-  /** @type {StackFrameState} */
+  /** @type {import("./stackFramestate").StackFrameState }*/
   state;
 
   constructor(stackFrameId, threadId, frameLevel, argScopeIdentifer, registerScopeIdentifier, state) {
     super(stackFrameId, threadId, frameLevel);
+    if(!state) debugger;
     this.#variables = [];
     this.argScopeIdentifier = argScopeIdentifer;
     this.registerScopeIdentifier = registerScopeIdentifier;
