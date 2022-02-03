@@ -15,6 +15,8 @@ class ExecutionState {
   /** @type {Map<string, VSCodeVariable>} */
   #debugNameMap = new Map();
   states = [];
+  // Our stack trace request "queue".
+  pendingStackTrace = Promise.resolve();
   constructor(threadId) {
     this.threadId = threadId;
   }
@@ -89,7 +91,7 @@ class ExecutionState {
 
   // debug info logging
   dumpContext() {
-    const logLines = this.stack.map((frame, idx) => `[${idx}] ${frame.name}           - 0x${frame.stackAddressStart.toString(16)}`)
+    const logLines = this.stack.map((frame, idx) => `[${idx}] ${frame.name}           - 0x${(frame.stackAddressStart ?? 0).toString(16)}`)
     console.log(JSON.stringify(logLines, null, 2));
   }
 

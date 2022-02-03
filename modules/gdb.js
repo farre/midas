@@ -363,7 +363,7 @@ class GDB extends GDBMixin(GDBBase) {
   async getStackDepth(threadId, maxDepth) {
     const cmd = `-stack-info-depth ${maxDepth}`;
     const depth = await this.execMI(cmd, threadId);
-    return depth.depth;
+    return +depth.depth;
   }
 
   async getCurrentFrameInfo(threadId) {
@@ -508,7 +508,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async buildExecutionState(threadId) {
-    let frame = await this.getCurrentFrameInfo()
+    let frame = await this.getCurrentFrameInfo(threadId);
     let stackStartAddress = await this.readRBP(threadId);
     let ec = this.getExecutionContext(threadId);
     if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
@@ -543,6 +543,7 @@ class GDB extends GDBMixin(GDBBase) {
         }
       }
     }
+    await this.selectStackFrame(0, threadId);
   }
 
   async #onStopped(payload) {
@@ -1037,6 +1038,7 @@ class GDB extends GDBMixin(GDBBase) {
       // getStack throws if we're trying to request frames that do not exist.
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
+      let states = [];
       for (let frame of frames) {
         const stackFrameArgsIdentifier = this.nextVarRef;
         const stackFrameIdentifier = this.nextVarRef;
@@ -1054,17 +1056,20 @@ class GDB extends GDBMixin(GDBBase) {
         }
         let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
         r.func = frame.func;
-        result.push({ frame: r, state });
+        result.push(r);
+        states.push(state);
       }
 
       let level = ec.stack.length;
-      for (let {frame, state} of result) {
+
+      for (let i = 0; i < result.length; i++) {
         const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-        frame.stackAddressStart = stackAddressStart;
-        ec.pushStackFrame(frame, state);
+        result[i].stackAddressStart = stackAddressStart;
+        ec.pushStackFrame(result[i], states[i]);
       }
       return result;
     } catch (e) {
+      console.log(e);
       return [];
     }
   }
