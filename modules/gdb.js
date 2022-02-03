@@ -512,7 +512,6 @@ class GDB extends GDBMixin(GDBBase) {
     let stackStartAddress = await this.readRBP(threadId);
     let ec = this.getExecutionContext(threadId);
     if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
-      if(!frame.line) debugger;
       ec.stack[0].line = frame.line;
     } else {
       const start = await ec.setNewContext(stackStartAddress, frame.func, this);
