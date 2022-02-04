@@ -37,8 +37,14 @@ class LocalsReference extends VariablesReference {
    * @param { GDB } gdb - reference to the GDB backend
    */
   async cleanUp(gdb) {
-    this.state.cleanUp(gdb);
+    await this.state.cleanUp(gdb);
     gdb.references.delete(this.variablesReferenceId);
+  }
+
+  releaseVariableReferences(gdb) {
+    gdb.delete(this.variablesReferenceId);
+    gdb.delete(this.argScopeIdentifier);
+    gdb.delete(this.registerScopeIdentifier);
   }
   /**
    * Sets a new value of a named object (variable object) that this reference tracks or manages.

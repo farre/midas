@@ -32,6 +32,8 @@ class ExecutionState {
     this.#frameVariablesReferences.set(stackFrameIdentifier, frameReferences);
   }
 
+  // When threadExiting = true, any state built up in the GDB "backend" will be handled by GDB. So variable objects
+  // should be destroyed by GDB.
   async clear(gdb) {
     for (let stack of this.stack) {
       let item = gdb.references.get(stack.id);
@@ -45,6 +47,13 @@ class ExecutionState {
     this.stack = [];
     this.#stackFrameLevelsToStackFrameIdentifiers = [];
     this.states = [];
+  }
+
+  releaseVariableReferences(gdb) {
+    for(let stack of this.stack) {
+      let item = gdb.references.get(stack.id);
+      item.releaseVariableReferences(gdb);
+    }
   }
   /**
    *
@@ -72,7 +81,7 @@ class ExecutionState {
     } else {
       // if the files are the same, the stack pointer will always differ, if we are in different
       // functions, therefore, this will be caught in stackTraceRequest() in MidasDebugSession
-      this.stack[0].line = frame.line;
+      this.stack[0].line = +frame.line;
     }
   }
 

@@ -153,6 +153,7 @@ class GDB extends GDBMixin(GDBBase) {
   #threads = new Map();
   userRequestedInterrupt = false;
   allStopMode;
+  hardwareWatchPoints = [];
 
   constructor(target, args) {
     super(
@@ -512,8 +513,7 @@ class GDB extends GDBMixin(GDBBase) {
     let stackStartAddress = await this.readRBP(threadId);
     let ec = this.getExecutionContext(threadId);
     if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
-      if(!frame.line) debugger;
-      ec.stack[0].line = frame.line;
+      ec.stack[0].line = +frame.line;
     } else {
       const start = await ec.setNewContext(stackStartAddress, frame.func, this);
       let frames = await this.getStack(start, 20 - start, threadId);
@@ -589,8 +589,10 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendEvent(newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
         break;
       }
-      default:
-        console.log(`stopped for other reason: ${payload.reason}`);
+      default: {
+        console.log(`stopped for other reason: ${JSON.stringify(payload, null, 2)}`);
+        this.sendEvent(new StoppedEvent("Unknown reason", payload.thread.id));
+      }
     }
   }
 
@@ -614,15 +616,11 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
-    if (!this.#rrSession) {
-      let ec = this.executionContexts.get(payload.id);
-      if (ec) ec.clear(this);
-      this.executionContexts.delete(payload.id);
-    } else {
-      // just clear state - user might decide to rewind.
-      let ec = this.executionContexts.get(payload.id);
-      if (ec) ec.clear(this);
+    let ec = this.executionContexts.get(payload.id);
+    if (ec) {
+      ec.releaseVariableReferences(this);
     }
+    this.executionContexts.delete(payload.id);
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
 
@@ -825,7 +823,7 @@ class GDB extends GDBMixin(GDBBase) {
     };
     stopEvent.body = body;
     let exec_ctx = this.executionContexts.get(thread.id);
-    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = thread.frame.line;
+    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = +thread.frame.line;
     this.sendEvent(stopEvent);
   }
 
@@ -999,6 +997,7 @@ class GDB extends GDBMixin(GDBBase) {
     const nextRef = this.generateVariableReference();
     const varObjectName = `vr_${nextRef}`;
     const cmd = `-var-create ${varObjectName} * ${name}`;
+
     const result = await this.execMI(cmd, threadId);
     return { nextRef, varObjectName, result };
   }
@@ -1067,6 +1066,7 @@ class GDB extends GDBMixin(GDBBase) {
         result[i].stackAddressStart = stackAddressStart;
         ec.pushStackFrame(result[i], states[i]);
       }
+      await this.selectStackFrame(0, ec.threadId);
       return result;
     } catch (e) {
       console.log(e);
@@ -1079,3 +1079,4 @@ class GDB extends GDBMixin(GDBBase) {
 exports.GDB = GDB;
 exports.VSCodeVariable = VSCodeVariable;
 exports.VSCodeStackFrame = VSCodeStackFrame;
+exports.trace = trace;

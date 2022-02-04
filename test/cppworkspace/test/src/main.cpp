@@ -341,8 +341,28 @@ void variablesRequestTestPointer(Struct* s) {
   variablesRequestTestReference(*s);
   local_ptr = nullptr;
 }
+static Todo static_todo = Todo{"Static Todo", Date{.day = 4, .month = 2, .year = 2022}};
+static int oneIntStatic = 1337;
+struct Big {
+  static Todo* todo;
+  static int* oneInt;
+  Todo* myTodo;
+  Number<double> dbl;
+  Big(double da, double db) : myTodo(new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}}), dbl(add_two(da, db)) {
 
-int main(int argc, const char **argv) {
+  }
+
+  ~Big() {
+    delete myTodo;
+  }
+};
+
+Todo* Big::todo = &static_todo;
+int* Big::oneInt = &oneIntStatic;
+
+int main(int argc, const char **argv) {  
+  auto big = new Big{1.550795, 1.590795};
+
   const auto somelocal = 42;
   constexpr int array[42] = {};
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
