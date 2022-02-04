@@ -13,7 +13,6 @@ async function initialize(gdb) {
         throw err;
       }
 
-      // Add files to the test suite
       files.forEach((file) => {
         let script = fs.readFileSync(path.join(commandPath, file));
         scripts.push(gdb.execPy(script));
