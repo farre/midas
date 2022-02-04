@@ -47,7 +47,6 @@ class ExecutionState {
     this.stack = [];
     this.#stackFrameLevelsToStackFrameIdentifiers = [];
     this.states = [];
-  }
 
   releaseVariableReferences(gdb) {
     for(let stack of this.stack) {
