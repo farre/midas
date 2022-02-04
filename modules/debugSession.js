@@ -208,19 +208,24 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async stackTraceRequest(response, args) {
-    await this.gdb.buildExecutionState(args.threadId);
-    let exec_ctx = this.gdb.executionContexts.get(args.threadId);
-    if (args.startFrame == 0) {
-      response.body = {
-        stackFrames: exec_ctx.stack,
-      };
-    } else {
-      const frames = await this.gdb.requestMoreFrames(args.threadId, args.levels);
-      response.body = {
-        stackFrames: frames,
-      };
-    }
-    await this.sendResponse(response);
+    let ec = this.gdb.getExecutionContext(args.threadId);
+    await ec.pendingStackTrace;
+    ec.pendingStackTrace = new Promise(async resolve => {
+      await this.gdb.buildExecutionState(args.threadId);
+      let exec_ctx = this.gdb.executionContexts.get(args.threadId);
+      if (args.startFrame == 0) {
+        response.body = {
+          stackFrames: exec_ctx.stack,
+        };
+      } else {
+        const frames = await this.gdb.requestMoreFrames(args.threadId, args.levels);
+        response.body = {
+          stackFrames: frames,
+        };
+      }
+      this.sendResponse(response);
+      resolve();
+    });
   }
 
   async variablesRequest(response, args) {

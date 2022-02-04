@@ -56,7 +56,8 @@ function GDBMixin(GDBBase) {
       }
     }
 
-    async finishExecution(threadId, reverse = false) {
+    async finishExecution(threadId, reverse = false, frameLevel = 0) {
+      await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
       if (reverse) {
         await this.execMI("-exec-finish --reverse", threadId);
       } else {

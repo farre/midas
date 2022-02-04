@@ -1,6 +1,14 @@
 const GDB = require("../gdb");
 const { VariablesReference, err_response } = require("./variablesReference");
 
+let LOG_ID = 0;
+function log(reason, message) {
+  if (!GDB.trace) {
+    return;
+  }
+  console.log(`[LOG #${LOG_ID++}: ${reason}] - ${message}`);
+}
+
 /**
  * Creates a variable object for variableObjectName and create children for all it's members. This function "flattens"
  * the variable object, by creating children until it finds no more base types. Direct "struct" descendants
@@ -17,6 +25,7 @@ async function parseStructVariable(gdb, variableObjectName) {
     this.threadId
   );
   if(!structAccessModifierList.children) {
+    log("VARIABLE OBJECT CREATION", `Variable object unexpectedly had no children. \n${variableObjectName}: ${JSON.stringify(structAccessModifierList, null, 2)}`);
     return [];
   }
   for (const accessModifier of structAccessModifierList.children) {

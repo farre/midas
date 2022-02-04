@@ -363,7 +363,7 @@ class GDB extends GDBMixin(GDBBase) {
   async getStackDepth(threadId, maxDepth) {
     const cmd = `-stack-info-depth ${maxDepth}`;
     const depth = await this.execMI(cmd, threadId);
-    return depth.depth;
+    return +depth.depth;
   }
 
   async getCurrentFrameInfo(threadId) {
@@ -508,11 +508,11 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async buildExecutionState(threadId) {
-    let frame = await this.getCurrentFrameInfo()
+    let frame = await this.getCurrentFrameInfo(threadId);
     let stackStartAddress = await this.readRBP(threadId);
     let ec = this.getExecutionContext(threadId);
     if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
-      ec.stack[0].line = frame.line;
+      ec.stack[0].line = +frame.line;
     } else {
       const start = await ec.setNewContext(stackStartAddress, frame.func, this);
       let frames = await this.getStack(start, 20 - start, threadId);
@@ -540,6 +540,7 @@ class GDB extends GDBMixin(GDBBase) {
           const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
           s.stackAddressStart = stackAddressStart;
         }
+        await this.selectStackFrame(0, ec.threadId);
       }
     }
   }
@@ -589,6 +590,7 @@ class GDB extends GDBMixin(GDBBase) {
       }
       default:
         console.log(`stopped for other reason: ${payload.reason}`);
+        this.sendEvent(new StoppedEvent("Unknown reason", payload.thread.id));
     }
   }
 
@@ -612,15 +614,11 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onThreadExited(payload) {
     this.#threads.delete(payload.id);
-    if (!this.#rrSession) {
-      let ec = this.executionContexts.get(payload.id);
-      if (ec) ec.clear(this);
-      this.executionContexts.delete(payload.id);
-    } else {
-      // just clear state - user might decide to rewind.
-      let ec = this.executionContexts.get(payload.id);
-      if (ec) ec.clear(this);
+    let ec = this.executionContexts.get(payload.id);
+    if (ec) {
+      ec.releaseVariableReferences(this);
     }
+    this.executionContexts.delete(payload.id);
     this.#target.sendEvent(new ThreadEvent("exited", payload.id));
   }
 
@@ -823,7 +821,7 @@ class GDB extends GDBMixin(GDBBase) {
     };
     stopEvent.body = body;
     let exec_ctx = this.executionContexts.get(thread.id);
-    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = thread.frame.line;
+    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = +thread.frame.line;
     this.sendEvent(stopEvent);
   }
 
@@ -1036,6 +1034,7 @@ class GDB extends GDBMixin(GDBBase) {
       // getStack throws if we're trying to request frames that do not exist.
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
+      let states = [];
       for (let frame of frames) {
         const stackFrameArgsIdentifier = this.nextVarRef;
         const stackFrameIdentifier = this.nextVarRef;
@@ -1053,17 +1052,20 @@ class GDB extends GDBMixin(GDBBase) {
         }
         let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
         r.func = frame.func;
-        result.push({ frame: r, state });
+        result.push(r);
+        states.push(state);
       }
 
       let level = ec.stack.length;
-      for (let {frame, state} of result) {
+      for (let i = 0; i < result.length; i++) {
         const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-        frame.stackAddressStart = stackAddressStart;
-        ec.pushStackFrame(frame, state);
+        result[i].stackAddressStart = stackAddressStart;
+        ec.pushStackFrame(result[i], states[i]);
       }
+      await this.selectStackFrame(0, ec.threadId);
       return result;
     } catch (e) {
+      console.log(e);
       return [];
     }
   }
@@ -1073,3 +1075,4 @@ class GDB extends GDBMixin(GDBBase) {
 exports.GDB = GDB;
 exports.VSCodeVariable = VSCodeVariable;
 exports.VSCodeStackFrame = VSCodeStackFrame;
+exports.trace = trace;

@@ -40,6 +40,13 @@ class LocalsReference extends VariablesReference {
     this.state.cleanUp(gdb);
     gdb.references.delete(this.variablesReferenceId);
   }
+
+  releaseVariableReferences(gdb) {
+    gdb.delete(this.variablesReferenceId);
+    gdb.delete(this.argScopeIdentifier);
+    gdb.delete(this.registerScopeIdentifier);
+  }
+
   /**
    * Sets a new value of a named object (variable object) that this reference tracks or manages.
    * @param { SetVariableResponse } response - The response initialized by VSCode which we should return
