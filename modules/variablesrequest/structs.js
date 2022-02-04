@@ -88,7 +88,7 @@ class StructsReference extends VariablesReference {
           try {
             v.value.type.charAt(v.value.type.length - 1);
           } catch(e) {
-            debugger;
+            console.log(e);
           }
           if (v.value.type.charAt(v.value.type.length - 1) == "*") {
             displayValue = `<${v.value.value}> ${v.value.type}`;
