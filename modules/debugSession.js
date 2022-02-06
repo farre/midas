@@ -9,7 +9,7 @@ const { GDB, VSCodeVariable } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isReplaySession, diff } = require("./utils");
+const { isReplaySession } = require("./utils");
 
 let server;
 

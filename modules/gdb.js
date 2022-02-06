@@ -15,9 +15,9 @@ const {
   StackFrame,
 } = require("@vscode/debugadapter");
 
-const { GDBMixin } = require("./gdb-mixin");
+const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
-const { getFunctionName, spawn, isReplaySession } = require("./utils");
+const { getFunctionName, spawn, isReplaySession, cleanJsonString } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/locals");
 const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
@@ -107,7 +107,8 @@ function spawnRRGDB(gdbPath, binary, replayConfig) {
 }
 
 function spawnGDB(gdbPath, binary, ...args) {
-  let params = !args ? ["-i=mi3", "-ex", "set print object on", "-iex", "set print static-members off", binary] : ["-i=mi3", "-ex", "set print object on", "-iex", "set print static-members off", "--args", binary, ...args];
+  console.log(`GDB path: ${gdbPath}`);
+  let params = !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args];
   let gdb = spawn(gdbPath, params);
   return gdb;
 }
@@ -158,11 +159,11 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.gdbPath, args.program, args.replay);
+          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.replay);
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.gdbPath, args.program, ...(args.debugeeArgs ?? []));
+          let gdb = spawnGDB(args.debuggerPath, args.program, ...(args.debugeeArgs ?? []));
           gdbProcess = gdb;
           return gdb;
         }
@@ -189,6 +190,12 @@ class GDB extends GDBMixin(GDBBase) {
     await this.init();
     // await this.attachOnFork();
     this.registerAsAllStopMode();
+    const { getVar, midasPy } = require("./scripts");
+    // const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' })
+    await this.execPy(midasPy);
+    // const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' })
+    await this.execPy(getVar);
+
     this.#rrSession = true;
     await this.#setUpRegistersInfo();
     if (stopOnEntry) {
@@ -205,13 +212,25 @@ class GDB extends GDBMixin(GDBBase) {
     trace = doTrace;
     this.allStopMode = allStopMode;
     await this.init();
-
+    const { getVar, midasPy } = require("./scripts");
+    // const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' })
+    await this.execPy(midasPy);
+    // const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' })
+    await this.execPy(getVar);
     if (!allStopMode) {
       await this.enableAsync();
     } else {
       await this.execMI(`-gdb-set mi-async on`);
     }
+
     await this.#setUpRegistersInfo();
+    const printOptions = [
+      printOption(PrintOptions.HideStaticMembers),
+      // printOption(PrintOptions.SetDepthMinimum),
+      // printOption(PrintOptions.AddressOff),
+      printOption(PrintOptions.PrettyStruct)
+    ];
+    await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -1070,6 +1089,33 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
+  /**
+   * 
+   * @param {string} name - name of variable
+   * @returns { Promise<string[]> } - Returns the names of the members as a string array, wrapped in a Promise
+   */
+  async getNonStaticMembers(name, threadId) {
+    return await this.execCMD(`members ${name}`, threadId);
+  }
+
+  /**
+   * 
+   * @param {string} varObjName - variable object name of the struct we want to list children for
+   * @param {*} evaluateName - variable's expression
+   * @returns { Promise<{ variableObjectName: string, path: string }[]> }
+   */
+  async listVarObjChildren(varObjName, evaluateName) {
+    return this.execCMD(`create-varobj ${varObjName} ${evaluateName}`)
+  }
+
+  async getVar(varExpression) {
+    return await this.execCMD(`getvar ${varExpression}`);
+  }
+}
+
+const FallBackMemberRegex = {
+  Member: /\w+(?= = )/g,
+  Separator: /( = )/
 }
 
 exports.GDB = GDB;

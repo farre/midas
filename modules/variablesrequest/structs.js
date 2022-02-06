@@ -9,6 +9,20 @@ function log(reason, message) {
   console.log(`[LOG #${LOG_ID++}: ${reason}] - ${message}`);
 }
 
+function getBaseTypesFromVarListChildren(miResult) {
+  return miResult.filter(({value}) => {
+    switch(value.exp ?? "") {
+      case "private":
+      case "public":
+      case "protected":
+      case "":
+        return false;
+      default:
+        return true;
+    }
+  });
+}
+
 /**
  * Creates a variable object for variableObjectName and create children for all it's members. This function "flattens"
  * the variable object, by creating children until it finds no more base types. Direct "struct" descendants
@@ -55,10 +69,14 @@ async function parseStructVariable(gdb, variableObjectName) {
 class StructsReference extends VariablesReference {
   /** @type {VSCodeVariable[]} */
   #memberVariables;
+
+  #fallbackMemberVariables = [];
   /** @type {string} */
   variableObjectName;
   /** @type {string} */
   evaluateName;
+
+  subStructs = new Map();
 
   stackFrameIdentifier;
 
@@ -76,48 +94,81 @@ class StructsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    if (this.#memberVariables.length == 0) {
-      let requests = await parseStructVariable(gdb, this.variableObjectName);
-      for (let v of requests.flatMap((i) => i.children)) {
-        let nextRef = 0;
-        let displayValue = "";
-        let isStruct = false;
-        if (!v.value.value || v.value.value == "{...}" || +v.value.numchild > 0) {
-          nextRef = gdb.generateVariableReference();
+    let miResults = [];
+
+    const result = await gdb.getVar(this.evaluateName);
+    let res = [];
+    for(const member of result) {
+      const path = `${this.evaluateName}.${member.member}`;
+      if(member.isPrimitive) {
+        let v = new GDB.VSCodeVariable(member.member, member.value, 0, path, false, path);
+        res.push(v);
+      } else {
+        const subStruct = this.subStructs.get(path);
+        if(subStruct) {
+          res.push(subStruct);
+        } else {
+          let nextRef = gdb.generateVariableReference();
           gdb.references.set(
             nextRef,
             new StructsReference(nextRef, this.threadId, this.frameLevel, {
-              variableObjectName: v.value.name,
-              evaluateName: `${this.evaluateName}.${v.value.exp}`
+              variableObjectName: path,
+              evaluateName: path,
             }, this.stackFrameIdentifier)
           );
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
-          try {
-            v.value.type.charAt(v.value.type.length - 1);
-          } catch(e) {
-            console.log(e);
-          }
-          if (v.value.type.charAt(v.value.type.length - 1) == "*") {
-            displayValue = `<${v.value.value}> ${v.value.type}`;
-          } else {
-            displayValue = v.value.type;
-          }
-          isStruct = true;
-        } else {
-          displayValue = v.value.value;
-          isStruct = false;
+          let v = new GDB.VSCodeVariable(member.member, member.value, nextRef, path, true, path);
+          this.subStructs.set(path, v);
+          res.push(v);
         }
-        this.#memberVariables.push(
-          new GDB.VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
-        );
-        gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length - 1]);
       }
     }
+
     response.body = {
-      variables: this.#memberVariables,
+      variables: res,
     };
     return response;
+    // if (this.#memberVariables.length == 0) {
+    //   let requests = await parseStructVariable(gdb, this.variableObjectName);
+    //   for (let v of requests.flatMap((i) => i.children)) {
+    //     let nextRef = 0;
+    //     let displayValue = "";
+    //     let isStruct = false;
+    //     if (!v.value.value || v.value.value == "{...}" || +v.value.numchild > 0) {
+    //       nextRef = gdb.generateVariableReference();
+    //       gdb.references.set(
+    //         nextRef,
+    //         new StructsReference(nextRef, this.threadId, this.frameLevel, {
+    //           variableObjectName: v.value.name,
+    //           evaluateName: `${this.evaluateName}.${v.value.exp}`
+    //         }, this.stackFrameIdentifier)
+    //       );
+    //       gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
+    //       try {
+    //         v.value.type.charAt(v.value.type.length - 1);
+    //       } catch(e) {
+    //         console.log(e);
+    //       }
+    //       if (v.value.type.charAt(v.value.type.length - 1) == "*") {
+    //         displayValue = `<${v.value.value}> ${v.value.type}`;
+    //       } else {
+    //         displayValue = v.value.type;
+    //       }
+    //       isStruct = true;
+    //     } else {
+    //       displayValue = v.value.value;
+    //       isStruct = false;
+    //     }
+    //     this.#memberVariables.push(
+    //       new GDB.VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
+    //     );
+    //     gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length - 1]);
+    //   }
+    // }
+    // response.body = {
+    //   variables: this.#memberVariables,
+    // };
+    // return response;
   }
 
   async cleanUp(gdb) {

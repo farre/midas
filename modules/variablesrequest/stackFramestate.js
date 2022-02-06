@@ -73,6 +73,7 @@ class StackFrameState {
  * @param {import("../gdb").GDB} gdb
  */
   async initialise(gdb) {
+    console.log("initializing stackframe state");
     if(this.#initialized) return;
     let ec = gdb.getExecutionContext(this.#threadId);
     const frameLevel = ec.getFrameLevel(this.#stackFrameVariableReference);
