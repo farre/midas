@@ -1,12 +1,51 @@
 "use strict";
 
 const { Thread, ThreadGroup } = require("gdb-js");
+const { trace } = require("./gdb");
 
 const WatchPointType = {
   ACCESS: "-a",
   READ: "-r",
   WRITE: "",
 };
+
+function printOption(opt, value = null) {
+  switch(opt) {
+    case PrintOptionType.ShowStaticMembers:
+      return {name: opt, description: "Show static members" };
+    case PrintOptionType.HideStaticMembers:
+      return {name: opt, description: "Hide static members" };
+    case PrintOptionType.MaxDepth:
+      return {name: opt, description: "Set max depth", value};
+    case PrintOptionType.SetDepthMinimum:
+      return {name: PrintOptionType.MaxDepth, description: "Set max depth to 1", value: 1 };
+    case PrintOptionType.PrintObjectOn:
+      return {name: opt, description: "Set print objects on" };
+    case PrintOptionType.PrintObjectOff:
+      return {name: opt, description: "Set print objects off" };
+    case PrintOptionType.AddressOff:
+      return {name: opt, description: "Don't print address of pointers / values" };
+    case PrintOptionType.AddressOn:
+      return {name: opt, description: "Print address of pointers / values" };
+    case PrintOptionType.CharLength:
+      return {name: opt, description: "Print only N elements of an array or string", value };;
+    case PrintOptionType.PrettyStruct:
+      return {name: opt, description: "Pretty layout of printed struct" };
+  }
+}
+
+const PrintOptionType = {
+  ShowStaticMembers: 0,
+  HideStaticMembers: 1,
+  MaxDepth: 2,
+  SetDepthMinimum: 3,
+  PrintObjectOn: 4,
+  PrintObjectOff: 5,
+  AddressOff: 6,
+  AddressOn: 7,
+  CharLength: 8,
+  PrettyStruct: 9,
+}
 
 /**
  * @param {typeof import("gdb-js").GDB} GDBBase
@@ -96,9 +135,53 @@ function GDBMixin(GDBBase) {
     setAccessWatchPoint(location) {
       return this.#setWatchPoint(location, WatchPointType.ACCESS);
     }
+
+    async setPrintOptions(printOptions) {
+      let cmd_list = [];
+      for(const opt of printOptions) {
+        switch(opt.name) {
+          case PrintOptionType.ShowStaticMembers:
+            cmd_list.push(`set print static-members on`);
+            break;
+          case PrintOptionType.HideStaticMembers:
+            cmd_list.push(`set print static-members off`);
+            break;
+          case PrintOptionType.MaxDepth:
+            cmd_list.push(`set print max-depth ${opt.value}`);
+            break;
+          case PrintOptionType.PrintObjectOn:
+            cmd_list.push(`set print object on`);
+            break;
+          case PrintOptionType.PrintObjectOff:
+            cmd_list.push(`set print object off`);
+            break;
+          case PrintOptionType.AddressOff:
+            cmd_list.push("set print address off");
+            break;
+          case PrintOptionType.AddressOn:
+            cmd_list.push("set print address on");
+            break;
+          case PrintOptionType.CharLength:
+            cmd_list.push(`set print elements ${opt.value}`);
+            break;
+          case PrintOptionType.PrettyStruct:
+            cmd_list.push(`set print pretty on`);
+            break;
+          default:
+            throw new Error(`Unknown or unsupported print option: ${opt.name} [${opt.description}]`);
+        }
+      }
+      let optIndex = 0;
+      for(const cmd of cmd_list) {
+        if(trace) console.log(`Setting: ${printOptions[optIndex++].description}`);
+        await this.execCLI(cmd);
+      }
+    }
   };
 }
 
 module.exports = {
   GDBMixin,
+  PrintOptions: PrintOptionType,
+  printOption
 };

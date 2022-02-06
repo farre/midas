@@ -10,7 +10,7 @@
  * @param { Response } response
  * @returns { any } the `response` object with it's error fields set
  */
-function err_response(response, msg) {
+ function err_response(response, msg) {
   response.message = msg;
   response.success = false;
   response.body = null;

@@ -315,15 +315,49 @@ void variablesRequestTestPointer(Struct* s) {
   local_ptr = nullptr;
 }
 
+struct Statics {
+  int i;
+  int j;
+  
+  Statics(int i, int j, std::string name) : i(i), j(j), m_name{std::move(name)} {}
+
+  static int sk;
+  static int* p_sk;
+  static Todo stodo;
+  static Todo* p_stodo;
+
+  const std::string& get_name() const {
+    return this->m_name;
+  }
+
+private:
+  std::string m_name;
+};
+
+int Statics::sk = 42;
+int* Statics::p_sk = new int{142};
+
+Todo Statics::stodo = Todo{"Static Todo", Date{.day = 4, .month = 2, .year = 2022}};
+Todo* Statics::p_stodo = new Todo{"Static pointer to Todo", Date{.day = 4, .month = 2, .year = 2022}};
+
+struct Foo {
+  const char* name;
+  int k;
+};
+
 int main(int argc, const char **argv) {
   const auto somelocal = 42;
   constexpr int array[42] = {};
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
   auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
-
+  Foo f{.name = "hello world", .k = 10};
+  
   auto Double = add_two(1.550795, 1.590795);
   auto Float = add_two(668.19685f, 668.93685f);
   auto Int = add_two(20, 22);
+
+  Statics* sOne = new Statics{1,2, "Statics one"};
+  Statics* sTwo = new Statics{100,200, "Statics Two"};
 
   std::cout << "Value of " << Double << std::endl;
   std::cout << "Value of " << Float << std::endl;
