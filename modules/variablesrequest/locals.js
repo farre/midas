@@ -27,8 +27,9 @@ class LocalsReference extends VariablesReference {
   }
 
   async handleRequest(response, gdb) {
+    let v = await this.state.getStackLocals(gdb);
     response.body = {
-      variables: await this.state.getStackLocals(gdb),
+      variables: v,
     };
     return response;
   }
@@ -56,6 +57,7 @@ class LocalsReference extends VariablesReference {
    * @returns { Promise<SetVariableResponse> } prepared VSCode response
    */
   async update(response, gdb, namedObject, value) {
+    debugger;
     for (const v of this.#variables) {
       if (v.name == namedObject) {
         let res = await gdb.execMI(`-var-assign ${v.variableObjectName} "${value}"`, this.threadId);
