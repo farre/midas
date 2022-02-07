@@ -176,6 +176,30 @@ function GDBMixin(GDBBase) {
         if(trace) console.log(`Setting: ${printOptions[optIndex++].description}`);
         await this.execCLI(cmd);
       }
+    
+    }
+    // Must be called after gdb.init()
+    async setup() {
+      // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
+      const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' });
+      const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' });
+      let cmds = [getMembers, getVar];
+      for(const init of cmds) {
+        if(!init || init.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
+        await this.execPy(init);
+      }
+    }
+    
+    // todo(simon): when we've implemented thread id and framelevel selection for backend
+    //  it also needs parameters passed here
+    async getFrameLocalsAndArgs(threadId, frameLevel) {
+      return await this.execCMD(`localsargs`);
+    }
+    
+    // todo(simon): when we've implemented thread id and framelevel selection for backend
+    //  it also needs parameters passed here
+    async inspectVariable(variableToInspect, threadId, frameLevel) {
+      return await this.execCMD(`inspect ${variableToInspect}`);
     }
   };
 }
