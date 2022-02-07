@@ -133,6 +133,11 @@
               "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
               "default": "gdb"
             },
+            "cwd": {
+              "type": "string",
+              "description": "Current working directory of GDB",
+              "default": "${workspaceFolder}"
+            },
             "replay": {
               "type": "object",
               "properties": {
@@ -166,7 +171,8 @@
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
-            "allStopMode": false
+            "allStopMode": false,
+            "cwd": "${workspaceFolder}"
           },
           {
             "type": "midas",
@@ -175,6 +181,7 @@
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
+            "cwd": "${workspaceFolder}",
             "replay": {
               "rrPath": "rr",
               "rrServerAddress": "localhost:50505",
@@ -192,6 +199,7 @@
               "request": "launch",
               "name": "${1:Launch Debug}",
               "program": "^\"\\${workspaceFolder}/${2:binary}\"",
+              "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,
               "allStopMode": false
@@ -206,6 +214,7 @@
               "request": "launch",
               "name": "${1:Launch Debug}",
               "program": "^\"\\${workspaceFolder}/${2:binary}\"",
+              "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,
               "debuggerPath": "gdb",
