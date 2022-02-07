@@ -9,6 +9,7 @@ const {StackFrameState} = require("./stackFramestate");
  */
 
 class ArgsReference extends VariablesReference {
+  /** @type {StackFrameState} */
   #stackFrameState;
 
   constructor(argScopeVariableReference, threadId, frameLevel, stackFrameState) {

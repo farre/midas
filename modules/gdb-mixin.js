@@ -195,11 +195,15 @@ function GDBMixin(GDBBase) {
     async getFrameLocalsAndArgs(threadId, frameLevel) {
       return await this.execCMD(`localsargs`);
     }
-    
+
     // todo(simon): when we've implemented thread id and framelevel selection for backend
     //  it also needs parameters passed here
     async inspectVariable(variableToInspect, threadId, frameLevel) {
       return await this.execCMD(`inspect ${variableToInspect}`);
+    }
+    
+    async getChildren(struct) {
+      return await this.execCMD(`getchildren ${struct}`);
     }
   };
 }

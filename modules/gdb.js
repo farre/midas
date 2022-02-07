@@ -101,8 +101,8 @@ const DefaultRRSpawnArgs = [
   "set sysroot /",
 ];
 
-function spawnRRGDB(gdbPath, binary, replayConfig) {
-  const args = [...DefaultRRSpawnArgs, "-ex", "set print static-members off", "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary];
+function spawnRRGDB(gdbPath, binary, replayConfig, cwd) {
+  const args = [...DefaultRRSpawnArgs, "-ex", "set print static-members off", "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
   return spawn(gdbPath, args);
 }
 
@@ -159,7 +159,7 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.replay);
+          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.replay, args.cwd);
           gdbProcess = gdb;
           return gdb;
         } else {
@@ -190,12 +190,8 @@ class GDB extends GDBMixin(GDBBase) {
     await this.init();
     // await this.attachOnFork();
     this.registerAsAllStopMode();
-    const { getVar, midasPy } = require("./scripts");
-    // const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' })
-    await this.execPy(midasPy);
-    // const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' })
-    await this.execPy(getVar);
-
+    // const { getVar, midasPy } = require("./scripts");
+    this.setup();
     this.#rrSession = true;
     await this.#setUpRegistersInfo();
     if (stopOnEntry) {
@@ -212,11 +208,7 @@ class GDB extends GDBMixin(GDBBase) {
     trace = doTrace;
     this.allStopMode = allStopMode;
     await this.init();
-    const { getVar, midasPy } = require("./scripts");
-    // const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' })
-    await this.execPy(midasPy);
-    // const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' })
-    await this.execPy(getVar);
+    this.setup();
     if (!allStopMode) {
       await this.enableAsync();
     } else {
@@ -1089,28 +1081,8 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  /**
-   * 
-   * @param {string} name - name of variable
-   * @returns { Promise<string[]> } - Returns the names of the members as a string array, wrapped in a Promise
-   */
-  async getNonStaticMembers(name, threadId) {
-    return await this.execCMD(`members ${name}`, threadId);
-  }
 
-  /**
-   * 
-   * @param {string} varObjName - variable object name of the struct we want to list children for
-   * @param {*} evaluateName - variable's expression
-   * @returns { Promise<{ variableObjectName: string, path: string }[]> }
-   */
-  async listVarObjChildren(varObjName, evaluateName) {
-    return this.execCMD(`create-varobj ${varObjName} ${evaluateName}`)
-  }
 
-  async getVar(varExpression) {
-    return await this.execCMD(`getvar ${varExpression}`);
-  }
 }
 
 const FallBackMemberRegex = {

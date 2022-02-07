@@ -80,12 +80,24 @@ class StructsReference extends VariablesReference {
 
   stackFrameIdentifier;
 
-  constructor(variablesReference, threadId, frameLevel, names, stackFrameIdentifier) {
+  managed;
+
+  /**
+   * 
+   * @param { number } variablesReference 
+   * @param { number } threadId 
+   * @param { number } frameLevel 
+   * @param { { variableObjectName: string, evaluateName: string } } names 
+   * @param { number } stackFrameIdentifier 
+   * @param { {managed: boolean} } options 
+   */
+  constructor(variablesReference, threadId, frameLevel, names, stackFrameIdentifier, options = { managed: false }) {
     super(variablesReference, threadId, frameLevel);
     this.#memberVariables = [];
     this.stackFrameIdentifier = stackFrameIdentifier;
     this.variableObjectName = names.variableObjectName;
     this.evaluateName = names.evaluateName;
+    this.managed = options.managed;
   }
 
   /**
@@ -94,86 +106,84 @@ class StructsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    let miResults = [];
-
-    const result = await gdb.getVar(this.evaluateName);
-    let res = [];
-    for(const member of result) {
-      const path = `${this.evaluateName}.${member.member}`;
-      if(member.isPrimitive) {
-        let v = new GDB.VSCodeVariable(member.member, member.value, 0, path, false, path);
-        res.push(v);
-      } else {
-        const subStruct = this.subStructs.get(path);
-        if(subStruct) {
-          res.push(subStruct);
+    if(!this.managed) {
+      const children = await gdb.getChildren(this.evaluateName);
+      let res = [];
+      for(const member of children) {
+        const path = `${this.evaluateName}.${member.name}`;
+        if(member.isPrimitive) {
+          let v = new GDB.VSCodeVariable(member.name, member.display, 0, path, false, path);
+          res.push(v);
         } else {
-          let nextRef = gdb.generateVariableReference();
-          gdb.references.set(
-            nextRef,
-            new StructsReference(nextRef, this.threadId, this.frameLevel, {
+          const subStruct = this.subStructs.get(path);
+          if(subStruct) {
+            res.push(subStruct);
+          } else {
+            let nextRef = gdb.generateVariableReference();
+            const options = { managed: true };
+            let subStructHandler = new StructsReference(nextRef, this.threadId, this.frameLevel, {
               variableObjectName: path,
               evaluateName: path,
-            }, this.stackFrameIdentifier)
-          );
-          gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
-          let v = new GDB.VSCodeVariable(member.member, member.value, nextRef, path, true, path);
-          this.subStructs.set(path, v);
-          res.push(v);
+            }, this.stackFrameIdentifier, options);
+            subStructHandler.setVariablesOfManaged(gdb, member.payload);
+            gdb.references.set(
+              nextRef,
+              subStructHandler
+            );
+            gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
+            let v = new GDB.VSCodeVariable(member.name, member.display, nextRef, path, true, path);
+            this.subStructs.set(path, v);
+            res.push(v);
+          }
         }
       }
+      response.body = {
+        variables: res,
+      };
+    } else {
+      response.body = {
+        variables: this.#memberVariables,
+      };
     }
 
-    response.body = {
-      variables: res,
-    };
     return response;
-    // if (this.#memberVariables.length == 0) {
-    //   let requests = await parseStructVariable(gdb, this.variableObjectName);
-    //   for (let v of requests.flatMap((i) => i.children)) {
-    //     let nextRef = 0;
-    //     let displayValue = "";
-    //     let isStruct = false;
-    //     if (!v.value.value || v.value.value == "{...}" || +v.value.numchild > 0) {
-    //       nextRef = gdb.generateVariableReference();
-    //       gdb.references.set(
-    //         nextRef,
-    //         new StructsReference(nextRef, this.threadId, this.frameLevel, {
-    //           variableObjectName: v.value.name,
-    //           evaluateName: `${this.evaluateName}.${v.value.exp}`
-    //         }, this.stackFrameIdentifier)
-    //       );
-    //       gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
-    //       try {
-    //         v.value.type.charAt(v.value.type.length - 1);
-    //       } catch(e) {
-    //         console.log(e);
-    //       }
-    //       if (v.value.type.charAt(v.value.type.length - 1) == "*") {
-    //         displayValue = `<${v.value.value}> ${v.value.type}`;
-    //       } else {
-    //         displayValue = v.value.type;
-    //       }
-    //       isStruct = true;
-    //     } else {
-    //       displayValue = v.value.value;
-    //       isStruct = false;
-    //     }
-    //     this.#memberVariables.push(
-    //       new GDB.VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct, `${this.evaluateName}.${v.value.exp}`)
-    //     );
-    //     gdb.executionContexts.get(this.threadId).addMapping(v.value.name, this.#memberVariables[this.#memberVariables.length - 1]);
-    //   }
-    // }
-    // response.body = {
-    //   variables: this.#memberVariables,
-    // };
-    // return response;
   }
 
   async cleanUp(gdb) {
     // we don't need to do clean up; we're always managed by either a LocalsReference or a WatchReference
     gdb.references.delete(this.variablesReferenceId);
+  }
+
+  setVariablesOfManaged(gdb, variables) {
+    this.#memberVariables = []; 
+    for(const member of variables) {
+      const path = `${this.evaluateName}.${member.name}`;
+      if(member.isPrimitive) {
+        let v = new GDB.VSCodeVariable(member.name, member.display, 0, path, false, path);
+        this.#memberVariables.push(v);
+      } else {
+        const subStruct = this.subStructs.get(path);
+        if(subStruct) {
+          this.#memberVariables.push(subStruct);
+        } else {
+          let nextRef = gdb.generateVariableReference();
+          const options = { managed: true };
+          let subStructHandler = new StructsReference(nextRef, this.threadId, this.frameLevel, {
+            variableObjectName: path,
+            evaluateName: path,
+          }, this.stackFrameIdentifier, options);
+          subStructHandler.setVariablesOfManaged(gdb, member.payload);
+          gdb.references.set(
+            nextRef,
+            subStructHandler
+          );
+          gdb.getExecutionContext(this.threadId).addTrackedVariableReference(nextRef, this.stackFrameIdentifier);
+          let v = new GDB.VSCodeVariable(member.name, member.display, nextRef, path, true, path);
+          this.subStructs.set(path, v);
+          this.#memberVariables.push(v);
+        }
+      }
+    }
   }
 
   /**

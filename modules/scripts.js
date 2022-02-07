@@ -79,7 +79,7 @@ GetMembers()
 CreateVariableObject()
 `;
 
-const getVar = `
+const getVar = `from pickletools import long1
 import gdb
 import sys
 import json
@@ -94,7 +94,7 @@ def getMembersRecursively(field, memberList):
             for f in field.type.fields():
                 getMembersRecursively(f, memberList)
         else:
-            if not field.name.startswith("_vptr$"):
+            if field.name is not None and not field.name.startswith("_vptr$"):
                 memberList.append(field.name)
     
 
@@ -112,7 +112,6 @@ def memberIsReference(type):
 
 
 class GetVariableContents(gdb.Command):
-
     def __init__(self):
         super(GetVariableContents, self).__init__("gdbjs-getvar", gdb.COMMAND_USER)
         self.name = "getvar"
@@ -128,9 +127,9 @@ class GetVariableContents(gdb.Command):
             subt = value[member].type
             try:
                 subt.fields()
-                result.append({ "member": member, "value": "{0}".format(value[member].type), "isPrimitive": False })
+                result.append({ "name": member, "value": "{0}".format(value[member].type), "isPrimitive": False })
             except TypeError:
-                result.append({ "member": member, "value": "{0}".format(value[member]), "isPrimitive": True })
+                result.append({ "name": member, "value": "{0}".format(value[member]), "isPrimitive": True })
 
 
         res = json.dumps(result, ensure_ascii=False)
@@ -138,7 +137,119 @@ class GetVariableContents(gdb.Command):
         sys.stdout.write(msg)
         sys.stdout.flush()
 
-GetVariableContents()
+
+getVariableContentsCommand = GetVariableContents()
+
+def recursivelyBuild(value, lst):
+    tmp = value
+    if memberIsReference(value.type) and value != 0:
+        try:
+            v = value.referenced_value()
+            value = v
+        except gdb.MemoryError:
+            value = tmp
+    
+    membersOfValue = getMembersList(value)
+    for member in membersOfValue:
+        subt = value[member].type
+        try:
+            subt.fields()
+            lst.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False, "payload":  recursivelyBuild(value[member], []) })
+        except TypeError:
+            lst.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": True })
+
+    return lst
+
+
+
+class GetChildren(gdb.Command):
+    def __init__(self):
+        super(GetChildren, self).__init__("gdbjs-getchildren", gdb.COMMAND_USER)
+        self.name = "getchildren"
+
+    def invoke(self, var, from_tty):
+        result = []
+        value = gdb.parse_and_eval(var)
+        if memberIsReference(value.type):
+            value = value.referenced_value()
+        
+        membersOfValue = getMembersList(value)
+        for member in membersOfValue:
+            subt = value[member].type
+            try:
+                subt.fields()
+                result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False, "payload": recursivelyBuild(value[member], []) })
+            except TypeError:
+                result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": True })
+
+
+        res = json.dumps(result, ensure_ascii=False)
+        msg = prepare_output(self.name, res)
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+
+getChildrenCommand = GetChildren()
+
+
+def typeIsPrimitive(valueType):
+    try:
+        valueType.fields()
+        return False
+    except TypeError:
+        return True
+
+def getValue(value):
+    print("Trying to get value of {0}".format(value))
+    if memberIsReference(value.type):
+        try:
+            v = value.referenced_value()
+            return v
+        except gdb.MemoryError:
+            return value
+    else:
+        return value
+
+class LocalsAndArgs(gdb.Command):
+
+    def __init__(self):
+        super(LocalsAndArgs, self).__init__("gdbjs-localsargs", gdb.COMMAND_USER)
+        self.name = "localsargs"
+
+    def invoke(self, arg, from_tty):
+        frame = gdb.selected_frame()
+        block = frame.block()
+        names = set()
+        variables = []
+        for symbol in block:
+            name = symbol.name
+            if (name not in names) and (symbol.is_argument or
+                symbol.is_variable):
+                names.add(name)
+                value = symbol.value(frame)
+                if typeIsPrimitive(value.type):
+                    v = {
+                        "name": symbol.name,
+                        "display": str(value),
+                        "isPrimitive": True
+                    }
+                    variables.append(v)
+                else:
+                    v = {
+                        "name": symbol.name,
+                        "display": str(value.type),
+                        "isPrimitive": False
+                    }
+                    variables.append(v)
+
+
+        res = json.dumps(variables, ensure_ascii=False)
+        msg = prepare_output(self.name, res)
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+
+localsAndArgsCommand = LocalsAndArgs()
 `
 
 module.exports = {
