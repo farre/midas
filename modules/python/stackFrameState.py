@@ -150,49 +150,36 @@ class FrameState:
             logging.error(traceback.format_exc())
         return result
 
-class ExecutionContext:
+class EC:
     # Currently, we don't care about threads. We *will* care about it though.
-    Threads = 1
-    def __init__(self, threadId):
-        self.frames = {}
-        self.threadId = ExecutionContext.Threads
-        ExecutionContext.Threads += 1
+    def __init__(self):
+        self.framesStates = {}
 
-    def add_frame(self, frameId, frame):
-        self.frames[frameId] = frame
+    def add_frame(self, frameId, threadId, frame):
+        logging.info("Adding frame {} for thread {}. Frame state: {}".format(frameId, threadId, frame))
+        if self.framesStates.get(threadId) is None:
+            self.framesStates[threadId] = {}
+        self.framesStates[threadId][frameId] = frame
 
-    def remove_frames(self, frameIds):
-        for id in frameIds:
-            del self.frames[id]
+    def get_frame(self, threadId, frameId):
+        return self.framesStates.get(threadId).get(frameId)
 
-    def get_frame(self, frameId):
-        print(self.frames)
-        return self.frames.get("{0}".format(frameId))
+    def log_ec(self):
+        for key in self.framesStates:
+            frameStatesOf = self.framesStates[key]
+            logging.info("Thread ID {} \n\tFrame states: {} \n\tFrames in thread id = {}\n".format(key, len(frameStatesOf), ec.framesStates[key]))
 
-    def getUpdated(self, frameId):
-        frame = self.frames.get(frameId)
-        if frame is None:
-            return None
-        return frame.serialize_updates()
 
-    def getUpdated(self, frameId, varRef):
-        frame = self.frames.get(frameId)
-        if frame is None:
-            return None
-        return frame.serialize_updates()
-
-frameStates = ExecutionContext(0)
+ec = EC()
 
 class Update(gdb.Command):
-
     def __init__(self):
         super(Update, self).__init__("gdbjs-update", gdb.COMMAND_USER)
         self.name = "update"
 
     def invoke(self, arguments, from_tty):
-        
-        [frameId, varRef] = parse_string_args(arguments)
-        frame = frameStates.get_frame(frameId)
+        [frameId, varRef, threadId] = parse_string_args(arguments)
+        frame = ec.get_frame(threadId, frameId)
 
         updateList = frame.getUpdateListOf(varRef)
         res = json.dumps(updateList, ensure_ascii=False)
@@ -202,6 +189,7 @@ class Update(gdb.Command):
 
 updateCommand = Update()
 
+
 class GetChildren(gdb.Command):
 
     def __init__(self):
@@ -209,8 +197,9 @@ class GetChildren(gdb.Command):
         self.name = "get-children"
 
     def invoke(self, arguments, from_tty):
-        [frameId, path, assignedVarRef, request] = parse_string_args(arguments)
-        frame = frameStates.get_frame("{0}".format(frameId))
+        [frameId, path, assignedVarRef, request, threadId] = parse_string_args(arguments)
+        logging.info("get children {} {} {} {} {}".format(frameId, path, assignedVarRef, request, threadId))
+        frame = ec.get_frame(threadId, frameId)
         try:
             result = []
             result = frame.getChildrenOf(path, assignedVarRef, request)
@@ -231,6 +220,14 @@ class GetChildren(gdb.Command):
 
 getChildrenCommand = GetChildren()
 
+def getFunctionBlock(frame) -> gdb.Block:
+    block = frame.block()
+    while not block.superblock.is_static and not block.superblock.is_global:
+        block = block.superblock
+    if block.is_static or block.is_global:
+        return None
+    return block
+
 class LocalsAndArgs(gdb.Command):
 
     def __init__(self):
@@ -239,55 +236,62 @@ class LocalsAndArgs(gdb.Command):
 
     def invoke(self, arguments, from_tty):
         [frameId, argsId, threadId, frameLevel] = parse_string_args(arguments)
-        frameState = FrameState(frameId, argsId)
-        frame = gdb.selected_frame()
-        block = frame.block()
-        names = set()
-        variables = []
-        args = []
-        name = None
-        for symbol in block:
-            name = symbol.name
-            if (name not in names) and (symbol.is_argument or
-                symbol.is_variable):
-                names.add(name)
-                try:
-                    value = symbol.value(frame)
-                    if typeIsPrimitive(value.type):
-                        v = {
-                            "name": symbol.name,
-                            "display": str(value),
-                            "isPrimitive": True
-                        }
-                        if symbol.is_argument:
-                            frameState.add_arg(symbol.name, value, True, True)
-                            args.append(v)
+        gdb.execute("thread {}".format(threadId))
+        logging.info("localsargs: frame id {0} argsId: {1} threadId: {2} frameLevel: {3}".format(frameId, argsId, threadId, frameLevel))
+        try:
+            frameState = FrameState(frameId, argsId)
+            frame = gdb.selected_frame()
+            block = getFunctionBlock(frame)
+            names = set()
+            variables = []
+            args = []
+            name = None
+            for symbol in block:
+                name = symbol.name
+                if (name not in names) and (symbol.is_argument or
+                    symbol.is_variable):
+                    names.add(name)
+                    try:
+                        value = symbol.value(frame)
+                        if typeIsPrimitive(value.type):
+                            v = {
+                                "name": symbol.name,
+                                "display": str(value),
+                                "isPrimitive": True
+                            }
+                            if symbol.is_argument:
+                                frameState.add_arg(symbol.name, value, True, True)
+                                args.append(v)
+                            else:
+                                frameState.add_local(symbol.name, value, True, True)
+                                variables.append(v)
                         else:
-                            frameState.add_local(symbol.name, value, True, True)
-                            variables.append(v)
-                    else:
-                        v = {
-                            "name": symbol.name,
-                            "display": str(value.type),
-                            "isPrimitive": False
-                        }
-                        if symbol.is_argument:
-                            frameState.add_arg(symbol.name, value, True, False)
-                            args.append(v)
-                        else:
-                            frameState.add_local(symbol.name, value, True, False)
-                            variables.append(v)
-                except Exception as e:
-                    logging.error("Err was thrown in LocalsAndArgs (gdbjs-localsargs) {0}. Name of symbol that caused error: {1}\nStack: {2}".format(e, name, traceback.format_exc()))
-                    names.remove(name)
-
-        frameStates.add_frame(frameId, frameState)
-
-        result = {"args": args, "variables": variables }
-        res = json.dumps(result, ensure_ascii=False)
-        msg = prepare_output(self.name, res)
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+                            v = {
+                                "name": symbol.name,
+                                "display": str(value.type),
+                                "isPrimitive": False
+                            }
+                            if symbol.is_argument:
+                                frameState.add_arg(symbol.name, value, True, False)
+                                args.append(v)
+                            else:
+                                frameState.add_local(symbol.name, value, True, False)
+                                variables.append(v)
+                    except Exception as e:
+                        logging.error("Err was thrown in LocalsAndArgs (gdbjs-localsargs) {0}. Name of symbol that caused error: {1}\nStack: {2}".format(e, name, traceback.format_exc()))
+                        names.remove(name)
+            ec.add_frame(frameId, threadId, frameState)
+            ec.log_ec()
+            result = {"args": args, "variables": variables }
+            res = json.dumps(result, ensure_ascii=False)
+            msg = prepare_output(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+        except Exception as e:
+            logging.error("Failed because exception: {}".format(e))
+            logging.error(traceback.format_exc())
+            for fs in ec.framesStates:
+                logging.info("frame state: {}".format(fs))
 
 
 localsAndArgsCommand = LocalsAndArgs()

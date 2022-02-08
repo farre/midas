@@ -221,8 +221,18 @@ function GDBMixin(GDBBase) {
       return await this.execCMD(`getlocals ${threadId} ${frameLevel}`)
     }
 
-    async get_children(frameId, path, assignedVarRef, request) {
-      return await this.execCMD(`get-children ${frameId} ${path} ${assignedVarRef} ${request ? "args" : "locals"}`)
+    async get_children(frameId, path, assignedVarRef, request, threadId) {
+      return await this.execCMD(`get-children ${frameId} ${path} ${assignedVarRef} ${request ? "args" : "locals"} ${threadId}`)
+    }
+
+    async create_ec(threadId) {
+      let r = await this.execCMD(`create-ec ${threadId}`)
+      console.log(`execution context created`);
+    }
+
+    async delete_ec(threadId) {
+      await this.execCMD(`delete-ec ${threadId}`)
+      console.log(`execution context deleted`);
     }
 
   };

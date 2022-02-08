@@ -16,10 +16,11 @@ class StackFrameState {
   argSymbolNames = [];
   localSymbolNames = [];
 
-  constructor(stackFrameVariableReference, argsVariableReference, threadId) {
+  constructor(stackFrameVariableReference, argsVariableReference, threadId, frameLevel) {
     this.#argsVariableReference = argsVariableReference;
     this.#stackFrameVariableReference = stackFrameVariableReference;
     this.#threadId = threadId;
+    this.frameLevel = frameLevel;
   }
 
   /**
@@ -33,7 +34,7 @@ class StackFrameState {
     await this.#initialized;
     if(this.staleLocal) {
       // needs update
-      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#stackFrameVariableReference);
+      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#stackFrameVariableReference, this.#threadId);
       if(updateList) {
         for(const update of updateList) {
           for(let a of this.#locals) {
@@ -62,7 +63,7 @@ class StackFrameState {
     await this.#initialized;
     if(this.staleArgs) {
       // needs update
-      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#argsVariableReference);
+      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#argsVariableReference, this.#threadId);
       if(updateList) {
         for(const update of updateList) {
           for(const a of this.#args) {
@@ -86,7 +87,7 @@ class StackFrameState {
   async initialise(gdb) {
     console.log("initializing stackframe state");
     if(this.#initialized) return;
-    let res = await gdb.getFrameLocalsAndArgs(this.#stackFrameVariableReference, this.#argsVariableReference);
+    let res = await gdb.getFrameLocalsAndArgs(this.#stackFrameVariableReference, this.#argsVariableReference, this.#threadId, 0);
     
     for(const arg of res.args) {
       if(arg.isPrimitive) {
