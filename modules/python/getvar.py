@@ -3,30 +3,7 @@ import sys
 import json
 import gdb.types
 
-def prepare_output(cmdName, contents):
-    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
-
-def getMembersRecursively(field, memberList):
-    if hasattr(field, 'bitpos'):
-        if field.is_base_class:
-            for f in field.type.fields():
-                getMembersRecursively(f, memberList)
-        else:
-            if field.name is not None and not field.name.startswith("_vptr$"):
-                memberList.append(field.name)
-    
-
-
-def getMembersList(value):
-    members = []
-    fields = value.type.fields()
-    for f in fields:
-        getMembersRecursively(f, members)
-    return members
-
-def memberIsReference(type):
-    code = type.code
-    return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
+from utils import parse_string_args, getMembersList, memberIsReference, prepare_output, typeIsPrimitive, getMemberValue, recursivelyBuild
 
 
 class GetVariableContents(gdb.Command):
@@ -57,27 +34,6 @@ class GetVariableContents(gdb.Command):
 
 
 getVariableContentsCommand = GetVariableContents()
-
-def recursivelyBuild(value, lst):
-    tmp = value
-    if memberIsReference(value.type) and value != 0:
-        try:
-            v = value.referenced_value()
-            value = v
-        except gdb.MemoryError:
-            value = tmp
-    
-    membersOfValue = getMembersList(value)
-    for member in membersOfValue:
-        subt = value[member].type
-        try:
-            subt.fields()
-            lst.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False, "payload":  recursivelyBuild(value[member], []) })
-        except TypeError:
-            lst.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": True })
-
-    return lst
-
 
 
 class GetChildren(gdb.Command):
@@ -110,29 +66,11 @@ class GetChildren(gdb.Command):
 getChildrenCommand = GetChildren()
 
 
-def typeIsPrimitive(valueType):
-    try:
-        valueType.fields()
-        return False
-    except TypeError:
-        return True
-
-def getValue(value):
-    print("Trying to get value of {0}".format(value))
-    if memberIsReference(value.type):
-        try:
-            v = value.referenced_value()
-            return v
-        except gdb.MemoryError:
-            return value
-    else:
-        return value
-
-class LocalsAndArgs(gdb.Command):
+class Locals(gdb.Command):
 
     def __init__(self):
-        super(LocalsAndArgs, self).__init__("gdbjs-localsargs", gdb.COMMAND_USER)
-        self.name = "localsargs"
+        super(Locals, self).__init__("gdbjs-getlocals", gdb.COMMAND_USER)
+        self.name = "getlocals"
 
     def invoke(self, arg, from_tty):
         frame = gdb.selected_frame()
@@ -142,8 +80,7 @@ class LocalsAndArgs(gdb.Command):
         args = []
         for symbol in block:
             name = symbol.name
-            if (name not in names) and (symbol.is_argument or
-                symbol.is_variable):
+            if (name not in names) and (symbol.is_variable and not symbol.is_argument):
                 names.add(name)
                 value = symbol.value(frame)
                 if typeIsPrimitive(value.type):
@@ -174,33 +111,94 @@ class LocalsAndArgs(gdb.Command):
         sys.stdout.flush()
 
 
-localsAndArgsCommand = LocalsAndArgs()
+localsCommand = Locals()
 
-def getElement(key, map):
-    try:
-        r = map[key]
-        return r
-    except KeyError:
-        return None
+class Args(gdb.Command):
 
-def getMemberValue(path):
-    pathComponents = path.split(".")
-    parent = pathComponents[0]
-    try:
-        it = gdb.parse_and_eval(parent)
-        pathComponents = pathComponents[1:]
-        if len(pathComponents):
-            return it
-        for path in pathComponents:
-            curr = getElement(path, it)
-            if curr is None:
-                return None
-            it = curr
-        
-        return it
-    except gdb.error:
-        return None
-    
+    def __init__(self):
+        super(Args, self).__init__("gdbjs-getargs", gdb.COMMAND_USER)
+        self.name = "getargs"
+
+    def invoke(self, arg, from_tty):
+        # [frameLevel, threadId] = parse_string_args(arg)
+        frame = gdb.selected_frame()
+        block = frame.block()
+        names = set()
+        variables = []
+        for symbol in block:
+            name = symbol.name
+            if (name not in names) and (symbol.is_variable and symbol.is_argument):
+                names.add(name)
+                value = symbol.value(frame)
+                if typeIsPrimitive(value.type):
+                    v = {
+                        "name": symbol.name,
+                        "display": str(value),
+                        "isPrimitive": True
+                    }
+                    variables.append(v)
+                else:
+                    v = {
+                        "name": symbol.name,
+                        "display": str(value.type),
+                        "isPrimitive": False
+                    }
+                    variables.append(v)
+
+        res = json.dumps(variables, ensure_ascii=False)
+        msg = prepare_output(self.name, res)
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+argsCommand = Args()
+
+# class LocalsAndArgs(gdb.Command):
+
+#     def __init__(self):
+#         super(LocalsAndArgs, self).__init__("gdbjs-localsargs", gdb.COMMAND_USER)
+#         self.name = "localsargs"
+
+#     def invoke(self, arg, from_tty):
+#         frame = gdb.selected_frame()
+#         block = frame.block()
+#         names = set()
+#         variables = []
+#         args = []
+#         for symbol in block:
+#             name = symbol.name
+#             if (name not in names) and (symbol.is_argument or
+#                 symbol.is_variable):
+#                 names.add(name)
+#                 value = symbol.value(frame)
+#                 if typeIsPrimitive(value.type):
+#                     v = {
+#                         "name": symbol.name,
+#                         "display": str(value),
+#                         "isPrimitive": True
+#                     }
+#                     if symbol.is_argument:
+#                         args.append(v)
+#                     else:
+#                         variables.append(v)
+#                 else:
+#                     v = {
+#                         "name": symbol.name,
+#                         "display": str(value.type),
+#                         "isPrimitive": False
+#                     }
+#                     if symbol.is_argument:
+#                         args.append(v)
+#                     else:
+#                         variables.append(v)
+
+#         result = {"args": args, "variables": variables }
+#         res = json.dumps(result, ensure_ascii=False)
+#         msg = prepare_output(self.name, res)
+#         sys.stdout.write(msg)
+#         sys.stdout.flush()
+
+
+# localsAndArgsCommand = LocalsAndArgs()
 
 
 class InspectVariable(gdb.Command):
