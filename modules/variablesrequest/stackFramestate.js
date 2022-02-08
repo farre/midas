@@ -2,10 +2,6 @@ const { StructsReference } = require("./structs");
 const { Subject } = require("await-notify");
 const GDB = require("../gdb");
 
-const isPrimitiveType = (value, childrenCount) => value && (childrenCount == 0);
-const isStructuredOrPointer = (value, childrenCount) => value && (childrenCount > 0);
-const isNotVariable = (value, childrenCount) => !value && (childrenCount == 0);
-
 class StackFrameState {
   #threadId;
   #stackFrameVariableReference;
@@ -20,14 +16,6 @@ class StackFrameState {
 
     this.#stackFrameVariableReference = stackFrameVariableReference;
     this.#threadId = threadId;
-  }
-
-  async maybeInit(gdb) {
-    if (!this.#initialized) {
-      await this.initialise(gdb);
-      return true;
-    }
-    return false;
   }
 
   async getStackLocals(gdb) {
@@ -46,20 +34,20 @@ class StackFrameState {
     return this.#args;
   }
 
-  /**
+/**
  * @param {import("../gdb").GDB} gdb
- */
+*/
   async initialise(gdb) {
     console.log("initializing stackframe state");
     if(this.#initialized) return;
-    let res = await gdb.getFrameLocalsAndArgs();
+    let res = await gdb.getFrameLocalsAndArgs(this.#stackFrameVariableReference);
     
     for(const arg of res.args) {
       if(arg.isPrimitive) {
         this.#args.push(new GDB.VSCodeVariable(arg.name, arg.display, 0, arg.name, false, arg.name))
       } else {
         let nextRef = gdb.generateVariableReference();
-        const options = { managed: false };
+        const options = { managed: false, isArg: true };
         let topLevelStruct = new StructsReference(nextRef, this.#threadId, 0, {
           variableObjectName: arg.name,
           evaluateName: arg.name,
@@ -80,7 +68,7 @@ class StackFrameState {
         this.#locals.push(new GDB.VSCodeVariable(local.name, local.display, 0, local.name, false, local.name))
       } else {
         let nextRef = gdb.generateVariableReference();
-        const options = { managed: false };
+        const options = { managed: false, isArg: false };
         let topLevelStruct = new StructsReference(nextRef, this.#threadId, 0, {
           variableObjectName: local.name,
           evaluateName: local.name,
@@ -94,7 +82,8 @@ class StackFrameState {
         this.#locals.push(v);
         this.argSymbolNames.push(local.name);
       }
-    }    
+    }
+    this.#initialized = true;    
   }
   /**
    * @param { GDB.GDB } gdb - reference to the GDB backend

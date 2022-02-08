@@ -348,10 +348,13 @@ struct Foo {
 int main(int argc, const char **argv) {
   const auto somelocal = 42;
   constexpr int array[42] = {};
+
+  int i = 10;
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
   auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
   Foo f{.name = "hello world", .k = 10};
-  
+  i += 1;
+  // set breakpoint here.
   auto Double = add_two(1.550795, 1.590795);
   auto Float = add_two(668.19685f, 668.93685f);
   auto Int = add_two(20, 22);

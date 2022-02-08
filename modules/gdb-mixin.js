@@ -181,19 +181,19 @@ function GDBMixin(GDBBase) {
     // Must be called after gdb.init()
     async setup() {
       // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
-      const getMembers = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/midas.py', { encoding: 'utf8' });
-      const getVar = require("fs").readFileSync('/home/cx/dev/opensource/farrese/midas/modules/getvar.py', { encoding: 'utf8' });
-      let cmds = [getMembers, getVar];
-      for(const init of cmds) {
-        if(!init || init.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
-        await this.execPy(init);
+      const scripts = ["midas.py", "getvar.py", "stackFrameState.py"]
+      const dir = '/home/cx/dev/opensource/farrese/midas/modules/python';
+
+      for(const script of scripts.map(f => require("fs").readFileSync(`${dir}/${f}`, { encoding: 'utf8' }))) {
+        if(!script || script.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
+        await this.execPy(script);
       }
     }
     
     // todo(simon): when we've implemented thread id and framelevel selection for backend
     //  it also needs parameters passed here
-    async getFrameLocalsAndArgs(threadId, frameLevel) {
-      return await this.execCMD(`localsargs`);
+    async getFrameLocalsAndArgs(stackFrameId, threadId, frameLevel) {
+      return await this.execCMD(`localsargs ${stackFrameId} ${threadId}`);
     }
 
     // todo(simon): when we've implemented thread id and framelevel selection for backend
@@ -205,6 +205,30 @@ function GDBMixin(GDBBase) {
     async getChildren(struct) {
       return await this.execCMD(`getchildren ${struct}`);
     }
+
+    /**
+     * @param {number} frameId 
+     * @param {string} path 
+     * @param {boolean} isArg 
+     * @returns {Promise< { name: string, display: string, isPrimitive: boolean }[] >}
+     */
+    async getChildrenOf(frameId, path, isArg) {
+      return await this.execCMD(`get-children-of ${frameId} ${path} ${isArg}`);
+    }
+
+    async getArgs(threadId, frameLevel) {
+      // NB: threadId and frameLevel params not yet implemented
+      return await this.execCMD(`getargs ${threadId} ${frameLevel}`)
+    }
+
+    async getLocals(threadId, frameLevel) {
+      return await this.execCMD(`getlocals ${threadId} ${frameLevel}`)
+    }
+
+    async getUpdates(stackFrameId) {
+      return await this.execCMD(`request-frame-update ${stackFrameId}`);
+    }
+    
   };
 }
 

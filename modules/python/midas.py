@@ -3,26 +3,7 @@ import sys
 import json
 import gdb.types
 
-def getMembersRecursively(field, memberList):
-    if hasattr(field, 'bitpos'):
-        if field.is_base_class:
-            for f in field.type.fields():
-                getMembersRecursively(f, memberList)
-        else:
-            memberList.append(field.name)
-    
-
-
-def getMembersList(expr):
-    members = []
-    value = gdb.parse_and_eval(expr).referenced_value()
-    fields = value.type.fields()
-    for f in fields:
-        getMembersRecursively(f, members)
-    return members
-
-def prepare_output(cmdName, contents):
-    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
+from utils import getMembersList, prepare_output
 
 class GetMembers(gdb.Command):
 
