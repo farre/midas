@@ -62,8 +62,8 @@ class VSCodeVariable extends Variable {
     this.isStruct = isStructureType;
     if (isStructureType) {
       this.presentationHint = { kind: "class" };
-      this.evaluateName = evaluateName;
     }
+    this.evaluateName = evaluateName;
   }
 }
 
@@ -531,7 +531,7 @@ class GDB extends GDBMixin(GDBBase) {
         const argsVarRef = this.nextVarRef;
         const frameIdVarRef = this.nextVarRef;
         const registerVarRef = this.nextVarRef;
-        let state = new StackFrameState(frameIdVarRef, threadId);
+        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
         this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
         this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
         this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
@@ -1081,7 +1081,15 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-
+  /**
+     * 
+     * @param {*} stackFrameId 
+     * @param {*} varRef 
+     * @returns {Promise<{ name: string, display: string, isPrimitive: boolean }[]>}
+  */
+  async getUpdates(stackFrameId, varRef) {
+    return await this.execCMD(`update ${stackFrameId} ${varRef}`);
+  }
 
 }
 

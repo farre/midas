@@ -181,7 +181,7 @@ function GDBMixin(GDBBase) {
     // Must be called after gdb.init()
     async setup() {
       // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
-      const scripts = ["midas.py", "getvar.py", "stackFrameState.py"]
+      const scripts = ["stackFrameState.py"]
       const dir = '/home/cx/dev/opensource/farrese/midas/modules/python';
 
       for(const script of scripts.map(f => require("fs").readFileSync(`${dir}/${f}`, { encoding: 'utf8' }))) {
@@ -192,18 +192,14 @@ function GDBMixin(GDBBase) {
     
     // todo(simon): when we've implemented thread id and framelevel selection for backend
     //  it also needs parameters passed here
-    async getFrameLocalsAndArgs(stackFrameId, threadId, frameLevel) {
-      return await this.execCMD(`localsargs ${stackFrameId} ${threadId}`);
+    async getFrameLocalsAndArgs(stackFrameId, argsId, threadId, frameLevel) {
+      return await this.execCMD(`localsargs ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
     }
 
     // todo(simon): when we've implemented thread id and framelevel selection for backend
     //  it also needs parameters passed here
     async inspectVariable(variableToInspect, threadId, frameLevel) {
-      return await this.execCMD(`inspect ${variableToInspect}`);
-    }
-    
-    async getChildren(struct) {
-      return await this.execCMD(`getchildren ${struct}`);
+      return await this.execCMD(`inspect ${variableToInspect} ${threadId} ${frameLevel}`);
     }
 
     /**
@@ -225,10 +221,10 @@ function GDBMixin(GDBBase) {
       return await this.execCMD(`getlocals ${threadId} ${frameLevel}`)
     }
 
-    async getUpdates(stackFrameId) {
-      return await this.execCMD(`request-frame-update ${stackFrameId}`);
+    async get_children(frameId, path, assignedVarRef, request) {
+      return await this.execCMD(`get-children ${frameId} ${path} ${assignedVarRef} ${request ? "args" : "locals"}`)
     }
-    
+
   };
 }
 

@@ -5,42 +5,88 @@ const GDB = require("../gdb");
 class StackFrameState {
   #threadId;
   #stackFrameVariableReference;
+  #argsVariableReference;
   #args = [];
   #locals = [];
   #initialized = null;
 
+  staleLocal = false;
+  staleArgs = false;
+
   argSymbolNames = [];
   localSymbolNames = [];
 
-  constructor(stackFrameVariableReference, threadId) {
-
+  constructor(stackFrameVariableReference, argsVariableReference, threadId) {
+    this.#argsVariableReference = argsVariableReference;
     this.#stackFrameVariableReference = stackFrameVariableReference;
     this.#threadId = threadId;
   }
 
+  /**
+   * @param {GDB.GDB} gdb 
+   * @returns 
+   */
   async getStackLocals(gdb) {
     if (!this.#initialized)  {
       this.#initialized = this.initialise(gdb)
     }
     await this.#initialized;
-    return this.#locals;
+    if(this.staleLocal) {
+      // needs update
+      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#stackFrameVariableReference);
+      if(updateList) {
+        for(const update of updateList) {
+          for(let a of this.#locals) {
+            if(a.evaluateName == update.name) {
+              a.value = update.display;
+              break;
+            }
+          }
+        }
+      }
+      return this.#locals;
+    } else {
+      this.staleLocal = true;
+      return this.#locals;
+    }
   }
 
+  /**
+   * @param {GDB.GDB} gdb 
+   * @returns 
+   */
   async getStackArgs(gdb) {
     if (!this.#initialized)  {
       this.#initialized = this.initialise(gdb)
     }
     await this.#initialized;
-    return this.#args;
+    if(this.staleArgs) {
+      // needs update
+      let updateList = await gdb.getUpdates(this.#stackFrameVariableReference, this.#argsVariableReference);
+      if(updateList) {
+        for(const update of updateList) {
+          for(const a of this.#args) {
+            if(a.evaluateName == update.name) {
+              a.value = update.display;
+              break;
+            }
+          }
+        }
+      }
+      return this.#args;
+    } else {
+      this.staleArgs = true;
+      return this.#args;
+    }
   }
 
-/**
+  /**
  * @param {import("../gdb").GDB} gdb
 */
   async initialise(gdb) {
     console.log("initializing stackframe state");
     if(this.#initialized) return;
-    let res = await gdb.getFrameLocalsAndArgs(this.#stackFrameVariableReference);
+    let res = await gdb.getFrameLocalsAndArgs(this.#stackFrameVariableReference, this.#argsVariableReference);
     
     for(const arg of res.args) {
       if(arg.isPrimitive) {

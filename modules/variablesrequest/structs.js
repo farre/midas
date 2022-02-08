@@ -69,8 +69,6 @@ async function parseStructVariable(gdb, variableObjectName) {
 class StructsReference extends VariablesReference {
   /** @type {VSCodeVariable[]} */
   #memberVariables;
-
-  #fallbackMemberVariables = [];
   /** @type {string} */
   variableObjectName;
   /** @type {string} */
@@ -111,7 +109,7 @@ class StructsReference extends VariablesReference {
    */
   async handleRequest(response, gdb) {
     if(!this.initialized) {
-      let children = await gdb.getChildrenOf(this.stackFrameIdentifier, this.evaluateName, this.isArgScope);
+      let children = await gdb.get_children(this.stackFrameIdentifier, this.evaluateName, this.variablesReferenceId, this.isArgScope)
       console.log(`result of children: ${children}`);
       for(const child of children) {
         const path = `${this.evaluateName}.${child.name}`;
@@ -136,7 +134,20 @@ class StructsReference extends VariablesReference {
       }
       this.initialized = true;
     } else {
-      gdb.requestMoreFrames
+      let updateList = await gdb.getUpdates(this.stackFrameIdentifier, this.variablesReferenceId);
+      if(updateList) {
+        for(const update of updateList) {
+          for(const item of this.#memberVariables) {
+            if(update.name == item.name) {
+              item.value = update.display;
+              break;
+            }
+          }
+        }
+      }
+    }
+    response.body = {
+      variables: this.#memberVariables
     }
     return response;
   }

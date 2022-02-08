@@ -2,129 +2,152 @@ import gdb
 import sys
 import json
 import gdb.types
+import traceback
+import logging
 
-from utils import parse_string_args, prepare_output, typeIsPrimitive, getMembersList, recursivelyBuild, memberIsReference, getStructMembers
+logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
+
+def parse_string_args(arg):
+    return gdb.string_to_argv(arg)
+
+def prepare_output(cmdName, contents):
+    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
+
+def typeIsPrimitive(valueType):
+    try:
+        valueType.fields()
+        return False
+    except TypeError:
+        return True
+
+def memberIsReference(type):
+    code = type.code
+    return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
+
+def getMembersRecursively(field, memberList):
+    if hasattr(field, 'bitpos'):
+        if field.is_base_class:
+            for f in field.type.fields():
+                getMembersRecursively(f, memberList)
+        else:
+            if field.name is not None and not field.name.startswith("_vptr"):
+                memberList.append(field.name)
+
 
 class VariableState:
-    def __init__(self, owningVariableReference, v):
+    def __init__(self, name, v, isPrimitive):
         # expression path; e.g. tmp.m_date.m_day
-        self.owningVariableReference = owningVariableReference
+        try:
+            self.value_ref = v.reference_value()
+        except:
+            self.value = v
+            self.value_ref = self.value
+
         self.value = v
-        self.value_ref = v.reference_value()
+        self.name = name
+        # if isPrimitive = false, we do not update through this handle, we update through it's child handles, otherwise
+        # we might unnecessarily update things "unseen" by the UI
+        self.isPrimitive = isPrimitive
 
     def refresh(self):
-        v = self.value_ref.referenced_value()
-        if v == self.value:
-            return None
-        self.value = v
+        try:
+            v = self.value_ref.referenced_value()
+            self.value = v
+        except:
+            self.value
         return self.value
 
+    def log(self):
+        logging.info("VariableState: {0}".format(self.name))
+
 class FrameState:
-    def __init__(self):
+    def __init__(self, frameId, argsId):
+        self.frameId = frameId
+        self.argsId = argsId
         self.args = {}
         self.locals = {}
         self.varRef = {}
+        self.varRef[self.frameId] = []
+        self.varRef[self.argsId] = []
+
+    def log_error(self):
+        logging.error("Frame id: {0}".format(self.frameId))
+        logging.error(" args id: {0}".format(self.argsId))
+        logging.error("     args: {0}".format(self.args))
+        logging.error("     locals: {0}".format(self.locals))
+        logging.error("     varRef: {0}".format(self.varRef))
+
     
-    def add_arg(self, path, variableReference, val):
-        self.args[path] = VariableState(variableReference, val)
+    def addArgument(self, path, vs):
+        self.args[path] = vs
+
+    def addLocal(self, path, vs):
+        self.locals[path] = vs
+
+    def add_arg(self, path, val, top, isPrimitive):
+        self.args[path] = VariableState(path, val, isPrimitive)
+        if top:
+            self.varRef.get(self.argsId).append(self.args[path])
     
-    def add_local(self, path, variableReference, val):
-        self.locals[path] = VariableState(variableReference, val)
+    def add_local(self, path, val, top, isPrimitive):
+        self.locals[path] = VariableState(path, val, isPrimitive)
+        if top:
+            self.varRef.get(self.frameId).append(self.locals[path])
     
     def getVariable(self, path):
         value = self.locals.get(path)
         if value is not None:
             return value
         return self.args.get(path)
-        
 
-    def serialize_updates(self):
-        updatedArgs = []
-        updatedLocals = []
-        for path in self.args:
-            value = self.args[path].refresh()
-            if value is not None:
-                updatedArgs.append({ "owningVarRef": value.owningVariableReference, "path": path, "display": "{0}".format(value) })
+    def getVariableReference(self, varref):
+        return self.varRef.get(varref)
 
-        for path in self.locals:
-            value = self.locals[path].refresh()
-            if value is not None:
-                updatedLocals.append({ "owningVarRef": value.owningVariableReference, "path": path, "display": "{0}".format(value) })
+    def getChildrenOf(self, pPath, assignedVarRef, scopeType):
+        map = self.locals if scopeType == "locals" else self.args
+        vref = map[pPath]
+        referencedByAssignedVarRef = []
+        value = vref.value
+        if memberIsReference(value.type):
+            value = value.referenced_value()
 
-        if len(updatedArgs) == 0 and len(updatedLocals) == 0:
-            return None
-        
-        res = json.dumps({"args": updatedArgs, "locals": updatedLocals}, ensure_ascii=False)
-        return res
+        members = []
+        fields = value.type.fields()
+        for f in fields:
+            getMembersRecursively(f, members)
 
-    # def recursivelyBuild(self, parent_path, value, lst, isArg):
-    #     tmp = value
-    #     if memberIsReference(value.type) and value != 0:
-    #         try:
-    #             v = value.referenced_value()
-    #             value = v
-    #         except gdb.MemoryError:
-    #             value = tmp
-        
-    #     membersOfValue = getMembersList(value)
-    #     for member in membersOfValue:
-    #         subt = value[member].type
-    #         name = "{0}.{1}".format(parent_path, member)
-    #         try:
-    #             subt.fields()
-    #             lst.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False, "payload":  self.recursivelyBuild(name, value[member], [], isArg) })
-    #         except TypeError:
-    #             lst.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": True })
-    #         if isArg:
-    #             self.add_arg(name, value[member])
-    #         else:
-    #             self.add_local(name, value[member])
-
-    #     return lst
-    
-    # def getChildren(self, var, isArg):
-    #     result = []
-    #     value = self.getVariable(var)
-    #     if value is None:
-    #         return None
-        
-    #     if memberIsReference(value.type):
-    #         value = value.referenced_value()
-        
-    #     membersOfValue = getMembersList(value)
-    #     for member in membersOfValue:
-    #         subt = value[member].type
-    #         try:
-    #             subt.fields()
-    #             result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False, "payload": self.recursivelyBuild("{0}".format(member), value[member], [], isArg) })
-    #         except TypeError:
-    #             result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": True })
-    #         if isArg:
-    #             self.add_arg("{0}.{1}".format(var, member), value[member])
-    #         else:
-    #             self.add_local("{0}.{1}".format(var, member), value[member])
-    
-
-    def getChildrenOf(self, owningVariableReference, var, isArg):
         result = []
-        
-        value = self.getVariable(var)
-        # if memberIsReference(value.type):
-        #    value = value.referenced_value()
-        membersOfValue = getStructMembers(var, isArg)
-
-        for member in membersOfValue:
+        for member in members:
             subt = value[member].type
+            path = "{0}.{1}".format(pPath, member)
+            isPrimitive = False
             try:
                 subt.fields()
                 result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False })
             except TypeError:
                 result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": True })
-            if isArg:
-                self.add_arg("{0}.{1}".format(var, member), owningVariableReference, value[member])
-            else:
-                self.add_local("{0}.{1}".format(var, member), owningVariableReference, value[member])
+                isPrimitive = True
+            vs = VariableState(member, value[member], isPrimitive)
+            map[path] = vs
+            referencedByAssignedVarRef.append(vs)
         
+        self.varRef[assignedVarRef] = referencedByAssignedVarRef
+        return result
+
+    def getUpdateListOf(self, varRef):
+        result = []        
+        children = self.varRef.get(varRef)
+        try:
+            for child in children:
+                if child.isPrimitive:
+                    r = child.refresh()
+                    result.append({ "name": child.name, "display": "{0}".format(r), "isPrimitive": True })
+            
+            if len(result) == 0:
+                return None
+        except Exception as e:
+            logging.error("Exception thrown {0}".format(e))
+            logging.error(traceback.format_exc())
         return result
 
 class ExecutionContext:
@@ -143,7 +166,8 @@ class ExecutionContext:
             del self.frames[id]
 
     def get_frame(self, frameId):
-        return self.frames.get(frameId)
+        print(self.frames)
+        return self.frames.get("{0}".format(frameId))
 
     def getUpdated(self, frameId):
         frame = self.frames.get(frameId)
@@ -151,55 +175,61 @@ class ExecutionContext:
             return None
         return frame.serialize_updates()
 
-    def getUpdated(self, frameId, owningVariableReference):
+    def getUpdated(self, frameId, varRef):
         frame = self.frames.get(frameId)
         if frame is None:
             return None
         return frame.serialize_updates()
 
-frameStates = ExecutionContext()
+frameStates = ExecutionContext(0)
 
-class RequestMore(gdb.Command):
+class Update(gdb.Command):
+
     def __init__(self):
-        super(RequestMore, self).__init__("gdbjs-request-more", gdb.COMMAND_USER)
-        self.name = "request-more"
+        super(Update, self).__init__("gdbjs-update", gdb.COMMAND_USER)
+        self.name = "update"
 
-    def invoke(self, arg, from_tty):
-        [frameId, forVariableReference, path, isArg] = parse_string_args(arg)
+    def invoke(self, arguments, from_tty):
+        
+        [frameId, varRef] = parse_string_args(arguments)
         frame = frameStates.get_frame(frameId)
-        isArg = isArg == "true"
-        res = frame.getChildrenOf(path, isArg)
+
+        updateList = frame.getUpdateListOf(varRef)
+        res = json.dumps(updateList, ensure_ascii=False)
         msg = prepare_output(self.name, res)
         sys.stdout.write(msg)
         sys.stdout.flush()
 
-requestMore = RequestMore()
+updateCommand = Update()
 
-class RequestVariableReferenceUpdate(gdb.Command):
+class GetChildren(gdb.Command):
+
     def __init__(self):
-        super(RequestVariableReferenceUpdate, self).__init__("gdbjs-request-varref-update", gdb.COMMAND_USER)
-        self.name = "request-varref-update"
+        super(GetChildren, self).__init__("gdbjs-get-children", gdb.COMMAND_USER)
+        self.name = "get-children"
 
-    def invoke(self, arg, from_tty):
-        updates = frameStates.getUpdated(arg)
-        msg = prepare_output(self.name, updates)
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+    def invoke(self, arguments, from_tty):
+        [frameId, path, assignedVarRef, request] = parse_string_args(arguments)
+        frame = frameStates.get_frame("{0}".format(frameId))
+        try:
+            result = []
+            result = frame.getChildrenOf(path, assignedVarRef, request)
+            # if request == "args":
+            #     result = frame.getChildrenOfArg(path, assignedVarRef)
+            # elif request == "locals":
+            #     result = frame.getChildrenOfLocal(path, assignedVarRef)
 
-requestVarRefUpdateCommand = RequestVariableReferenceUpdate()
+            res = json.dumps(result, ensure_ascii=False)
+            msg = prepare_output(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+        except Exception as e:
+            logging.error("Exception thrown {0}".format(e))
+            logging.error(traceback.format_exc())
+            frame.log_error()
 
-class RequestStackFrameUpdate(gdb.Command):
-    def __init__(self):
-        super(RequestStackFrameUpdate, self).__init__("gdbjs-request-frame-update", gdb.COMMAND_USER)
-        self.name = "request-frame-update"
 
-    def invoke(self, arg, from_tty):
-        updates = frameStates.getUpdated(arg)
-        msg = prepare_output(self.name, updates)
-        sys.stdout.write(msg)
-        sys.stdout.flush()
-
-requestUpdateCommand = RequestStackFrameUpdate()
+getChildrenCommand = GetChildren()
 
 class LocalsAndArgs(gdb.Command):
 
@@ -208,43 +238,48 @@ class LocalsAndArgs(gdb.Command):
         self.name = "localsargs"
 
     def invoke(self, arguments, from_tty):
-        frameState = FrameState()
-        [frameId, threadId] = parse_string_args(arguments)
+        [frameId, argsId, threadId, frameLevel] = parse_string_args(arguments)
+        frameState = FrameState(frameId, argsId)
         frame = gdb.selected_frame()
         block = frame.block()
         names = set()
         variables = []
         args = []
+        name = None
         for symbol in block:
             name = symbol.name
             if (name not in names) and (symbol.is_argument or
                 symbol.is_variable):
                 names.add(name)
-                value = symbol.value(frame)
-                if typeIsPrimitive(value.type):
-                    v = {
-                        "name": symbol.name,
-                        "display": str(value),
-                        "isPrimitive": True
-                    }
-                    if symbol.is_argument:
-                        frameState.add_arg(symbol.name, frameId, v)
-                        args.append(v)
+                try:
+                    value = symbol.value(frame)
+                    if typeIsPrimitive(value.type):
+                        v = {
+                            "name": symbol.name,
+                            "display": str(value),
+                            "isPrimitive": True
+                        }
+                        if symbol.is_argument:
+                            frameState.add_arg(symbol.name, value, True, True)
+                            args.append(v)
+                        else:
+                            frameState.add_local(symbol.name, value, True, True)
+                            variables.append(v)
                     else:
-                        frameState.add_local(symbol.name, frameId, v)
-                        variables.append(v)
-                else:
-                    v = {
-                        "name": symbol.name,
-                        "display": str(value.type),
-                        "isPrimitive": False
-                    }
-                    if symbol.is_argument:
-                        frameState.add_arg(symbol.name, frameId, v)
-                        args.append(v)
-                    else:
-                        frameState.add_local(symbol.name, frameId, v)
-                        variables.append(v)
+                        v = {
+                            "name": symbol.name,
+                            "display": str(value.type),
+                            "isPrimitive": False
+                        }
+                        if symbol.is_argument:
+                            frameState.add_arg(symbol.name, value, True, False)
+                            args.append(v)
+                        else:
+                            frameState.add_local(symbol.name, value, True, False)
+                            variables.append(v)
+                except Exception as e:
+                    logging.error("Err was thrown in LocalsAndArgs (gdbjs-localsargs) {0}. Name of symbol that caused error: {1}\nStack: {2}".format(e, name, traceback.format_exc()))
+                    names.remove(name)
 
         frameStates.add_frame(frameId, frameState)
 
