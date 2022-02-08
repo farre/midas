@@ -222,6 +222,7 @@ function GDBMixin(GDBBase) {
     }
 
     async get_children(frameId, path, assignedVarRef, request, threadId) {
+      if(threadId == undefined) debugger;
       return await this.execCMD(`get-children ${frameId} ${path} ${assignedVarRef} ${request ? "args" : "locals"} ${threadId}`)
     }
 
