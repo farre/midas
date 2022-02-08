@@ -10,3 +10,4 @@ test/cppworkspace/thread/.vscode/
 test/cppworkspace/thread/build
 .vscode/settings.json
 
+update.log
