@@ -60,7 +60,7 @@ class StructsReference extends VariablesReference {
    */
   async handleRequest(response, gdb) {
     if(!this.initialized) {
-      let children = await gdb.get_children(this.stackFrameIdentifier, this.evaluateName, this.variablesReferenceId, this.isArgScope)
+      let children = await gdb.get_children(this.stackFrameIdentifier, this.evaluateName, this.variablesReferenceId, this.isArgScope, this.threadId)
       console.log(`result of children: ${children}`);
       for(const child of children) {
         const path = `${this.evaluateName}.${child.name}`;
