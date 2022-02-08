@@ -7,10 +7,10 @@ import logging
 
 logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
 
-def parse_string_args(arg):
+def parseStringArgs(arg):
     return gdb.string_to_argv(arg)
 
-def prepare_output(cmdName, contents):
+def prepareOutput(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
 
 def typeIsPrimitive(valueType):
@@ -70,7 +70,7 @@ class FrameState:
         self.varRef[self.frameId] = []
         self.varRef[self.argsId] = []
 
-    def log_error(self):
+    def logError(self):
         logging.error("Frame id: {0}".format(self.frameId))
         logging.error(" args id: {0}".format(self.argsId))
         logging.error("     args: {0}".format(self.args))
@@ -178,12 +178,12 @@ class Update(gdb.Command):
         self.name = "update"
 
     def invoke(self, arguments, from_tty):
-        [frameId, varRef, threadId] = parse_string_args(arguments)
+        [frameId, varRef, threadId] = parseStringArgs(arguments)
         frame = ec.get_frame(threadId, frameId)
 
         updateList = frame.getUpdateListOf(varRef)
         res = json.dumps(updateList, ensure_ascii=False)
-        msg = prepare_output(self.name, res)
+        msg = prepareOutput(self.name, res)
         sys.stdout.write(msg)
         sys.stdout.flush()
 
@@ -197,7 +197,7 @@ class GetChildren(gdb.Command):
         self.name = "get-children"
 
     def invoke(self, arguments, from_tty):
-        [frameId, path, assignedVarRef, request, threadId] = parse_string_args(arguments)
+        [frameId, path, assignedVarRef, request, threadId] = parseStringArgs(arguments)
         logging.info("get children {} {} {} {} {}".format(frameId, path, assignedVarRef, request, threadId))
         frame = ec.get_frame(threadId, frameId)
         try:
@@ -209,7 +209,7 @@ class GetChildren(gdb.Command):
             #     result = frame.getChildrenOfLocal(path, assignedVarRef)
 
             res = json.dumps(result, ensure_ascii=False)
-            msg = prepare_output(self.name, res)
+            msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
             sys.stdout.flush()
         except Exception as e:
@@ -235,7 +235,7 @@ class LocalsAndArgs(gdb.Command):
         self.name = "localsargs"
 
     def invoke(self, arguments, from_tty):
-        [frameId, argsId, threadId, frameLevel] = parse_string_args(arguments)
+        [frameId, argsId, threadId, frameLevel] = parseStringArgs(arguments)
         gdb.execute("thread {}".format(threadId))
         logging.info("localsargs: frame id {0} argsId: {1} threadId: {2} frameLevel: {3}".format(frameId, argsId, threadId, frameLevel))
         try:
@@ -284,7 +284,7 @@ class LocalsAndArgs(gdb.Command):
             ec.log_ec()
             result = {"args": args, "variables": variables }
             res = json.dumps(result, ensure_ascii=False)
-            msg = prepare_output(self.name, res)
+            msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
             sys.stdout.flush()
         except Exception as e:
