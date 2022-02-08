@@ -9,55 +9,6 @@ function log(reason, message) {
   console.log(`[LOG #${LOG_ID++}: ${reason}] - ${message}`);
 }
 
-function getBaseTypesFromVarListChildren(miResult) {
-  return miResult.filter(({value}) => {
-    switch(value.exp ?? "") {
-      case "private":
-      case "public":
-      case "protected":
-      case "":
-        return false;
-      default:
-        return true;
-    }
-  });
-}
-
-/**
- * Creates a variable object for variableObjectName and create children for all it's members. This function "flattens"
- * the variable object, by creating children until it finds no more base types. Direct "struct" descendants
- * live under .public .protected and .private, but derived from, lives "directly under" so, foo.Derived instead of
- * foo.public.Derived. This function makes sure that all of Derived's members also get created as var-object listed children
- * @param { GDB.GDB } gdb
- * @param { string } variableObjectName
- */
-async function parseStructVariable(gdb, variableObjectName) {
-  let requests = [];
-  // all variable objects for structured types, begin with .public, .protected or private, or the derived type
-  let structAccessModifierList = await gdb.execMI(
-    `-var-list-children --all-values "${variableObjectName}"`,
-    this.threadId
-  );
-  if(!structAccessModifierList.children) {
-    log("VARIABLE OBJECT CREATION", `Variable object unexpectedly had no children. \n${variableObjectName}: ${JSON.stringify(structAccessModifierList, null, 2)}`);
-    return [];
-  }
-  for (const accessModifier of structAccessModifierList.children) {
-    let e = accessModifier.value.exp;
-    if(e == "public" || e == "protected" || e == "private") {
-      const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
-      let members = await gdb.execMI(membersCommands, this.threadId);
-      if(members.children && members.children[0].value.exp) {
-        requests.push(members);
-      }
-    } else if(e) {
-      let r = await parseStructVariable(gdb, accessModifier.value.name);
-      requests.push(...r);
-    }
-  }
-  return requests;
-}
-
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
@@ -134,7 +85,7 @@ class StructsReference extends VariablesReference {
       }
       this.initialized = true;
     } else {
-      let updateList = await gdb.getUpdates(this.stackFrameIdentifier, this.variablesReferenceId);
+      let updateList = await gdb.getUpdates(this.stackFrameIdentifier, this.variablesReferenceId, this.threadId);
       if(updateList) {
         for(const update of updateList) {
           for(const item of this.#memberVariables) {

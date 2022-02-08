@@ -531,7 +531,7 @@ class GDB extends GDBMixin(GDBBase) {
         const argsVarRef = this.nextVarRef;
         const frameIdVarRef = this.nextVarRef;
         const registerVarRef = this.nextVarRef;
-        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
+        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId, +frame.level);
         this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
         this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
         this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
@@ -616,21 +616,21 @@ class GDB extends GDBMixin(GDBBase) {
     this.userRequestedInterrupt = false;
   }
 
-  #onThreadCreated(thread) {
+  async #onThreadCreated(thread) {
     thread.name = this.#program;
     this.#threads.set(thread.id, thread);
     this.executionContexts.set(thread.id, new ExecutionState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
   }
 
-  #onThreadExited(payload) {
-    this.#threads.delete(payload.id);
-    let ec = this.executionContexts.get(payload.id);
+  async #onThreadExited(thread) {
+    this.#threads.delete(thread.id);
+    let ec = this.executionContexts.get(thread.id);
     if (ec) {
-      ec.releaseVariableReferences(this);
+      // ec.releaseVariableReferences(this);
     }
-    this.executionContexts.delete(payload.id);
-    this.#target.sendEvent(new ThreadEvent("exited", payload.id));
+    this.executionContexts.delete(thread.id);
+    this.#target.sendEvent(new ThreadEvent("exited", thread.id));
   }
 
   #onThreadGroupStarted(payload) {
@@ -1087,8 +1087,8 @@ class GDB extends GDBMixin(GDBBase) {
      * @param {*} varRef 
      * @returns {Promise<{ name: string, display: string, isPrimitive: boolean }[]>}
   */
-  async getUpdates(stackFrameId, varRef) {
-    return await this.execCMD(`update ${stackFrameId} ${varRef}`);
+  async getUpdates(stackFrameId, varRef, threadId) {
+    return await this.execCMD(`update ${stackFrameId} ${varRef} ${threadId}`);
   }
 
 }
