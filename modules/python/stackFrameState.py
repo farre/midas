@@ -7,6 +7,25 @@ import logging
 
 logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
 
+def getFunctionBlock(frame) -> gdb.Block:
+    block = frame.block()
+    while not block.superblock.is_static and not block.superblock.is_global:
+        block = block.superblock
+    if block.is_static or block.is_global:
+        return None
+    return block
+
+def logExceptionBacktrace(errmsg, exception):
+        logging.error("{} Exception info: {}".format(errmsg, exception))
+        logging.error(traceback.format_exc())
+
+def selectThreadAndFrame(threadId, frameLevel):
+    try:
+        gdb.execute("thread {}".format(threadId))
+        gdb.execute("frame {}".format(frameLevel))
+    except Exception as e:
+        logExceptionBacktrace("Selecting thread and frame failed.", e)
+
 def parseStringArgs(arg):
     return gdb.string_to_argv(arg)
 
@@ -146,8 +165,7 @@ class FrameState:
             if len(result) == 0:
                 return None
         except Exception as e:
-            logging.error("Exception thrown {0}".format(e))
-            logging.error(traceback.format_exc())
+            logExceptionBacktrace("Exception thrown.", e)
         return result
 
 class EC:
@@ -162,12 +180,20 @@ class EC:
         self.framesStates[threadId][frameId] = frame
 
     def get_frame(self, threadId, frameId):
+        if self.framesStates.get(threadId) is None:
+            self.framesStates[threadId] = {}
         return self.framesStates.get(threadId).get(frameId)
 
     def log_ec(self):
         for key in self.framesStates:
             frameStatesOf = self.framesStates[key]
             logging.info("Thread ID {} \n\tFrame states: {} \n\tFrames in thread id = {}\n".format(key, len(frameStatesOf), ec.framesStates[key]))
+    
+    def initialize_frame(self, frameId, threadId, argsId):
+        if self.framesStates.get(threadId) is None:
+            self.framesStates[threadId] = {}
+        if self.framesStates.get(threadId).get(frameId) is None:
+            self.framesStates.get(threadId)[frameId] = FrameState(frameId = frameId, argsId=argsId)
 
 
 ec = EC()
@@ -213,43 +239,39 @@ class GetChildren(gdb.Command):
             sys.stdout.write(msg)
             sys.stdout.flush()
         except Exception as e:
-            logging.error("Exception thrown {0}".format(e))
-            logging.error(traceback.format_exc())
+            logExceptionBacktrace("Exception thrown.", e)
             frame.log_error()
 
 
 getChildrenCommand = GetChildren()
 
-def getFunctionBlock(frame) -> gdb.Block:
-    block = frame.block()
-    while not block.superblock.is_static and not block.superblock.is_global:
-        block = block.superblock
-    if block.is_static or block.is_global:
-        return None
-    return block
 
-class LocalsAndArgs(gdb.Command):
+
+class FrameLocals(gdb.Command):
 
     def __init__(self):
-        super(LocalsAndArgs, self).__init__("gdbjs-localsargs", gdb.COMMAND_USER)
-        self.name = "localsargs"
+        super(FrameLocals, self).__init__("gdbjs-frame-locals", gdb.COMMAND_USER)
+        self.name = "frame-locals"
 
     def invoke(self, arguments, from_tty):
         [frameId, argsId, threadId, frameLevel] = parseStringArgs(arguments)
-        gdb.execute("thread {}".format(threadId))
-        logging.info("localsargs: frame id {0} argsId: {1} threadId: {2} frameLevel: {3}".format(frameId, argsId, threadId, frameLevel))
+        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
+        logging.info("frame-locals: frame id {0} argsId: {1} threadId: {2} frameLevel: {3}".format(frameId, argsId, threadId, frameLevel))
         try:
-            frameState = FrameState(frameId, argsId)
+            frameState = ec.get_frame(threadId=threadId, frameId=frameId)
+            if frameState is None:
+                ec.initialize_frame(frameId=frameId, threadId=threadId, argsId=argsId)
+                frameState = ec.get_frame(threadId=threadId, frameId=frameId)
+            if frameState is None:
+                logging.error("Failed to get initialized frame state. ThreadId: {} - FrameId: {} Level: {}".format(threadId, frameId, frameLevel))
             frame = gdb.selected_frame()
             block = getFunctionBlock(frame)
             names = set()
-            variables = []
-            args = []
+            result = []
             name = None
             for symbol in block:
                 name = symbol.name
-                if (name not in names) and (symbol.is_argument or
-                    symbol.is_variable):
+                if (name not in names) and symbol.is_variable and not symbol.is_argument:
                     names.add(name)
                     try:
                         value = symbol.value(frame)
@@ -259,39 +281,88 @@ class LocalsAndArgs(gdb.Command):
                                 "display": str(value),
                                 "isPrimitive": True
                             }
-                            if symbol.is_argument:
-                                frameState.add_arg(symbol.name, value, True, True)
-                                args.append(v)
-                            else:
-                                frameState.add_local(symbol.name, value, True, True)
-                                variables.append(v)
+                            frameState.add_local(symbol.name, value, True, True)
+                            result.append(v)
                         else:
                             v = {
                                 "name": symbol.name,
                                 "display": str(value.type),
                                 "isPrimitive": False
                             }
-                            if symbol.is_argument:
-                                frameState.add_arg(symbol.name, value, True, False)
-                                args.append(v)
-                            else:
-                                frameState.add_local(symbol.name, value, True, False)
-                                variables.append(v)
+                            frameState.add_local(symbol.name, value, True, False)
+                            result.append(v)
                     except Exception as e:
-                        logging.error("Err was thrown in LocalsAndArgs (gdbjs-localsargs) {0}. Name of symbol that caused error: {1}\nStack: {2}".format(e, name, traceback.format_exc()))
+                        logExceptionBacktrace("Err was thrown in FrameLocals (gdbjs-frame-locals). Name of symbol that caused error: {0}\n".format(name), e)
                         names.remove(name)
             ec.add_frame(frameId, threadId, frameState)
             ec.log_ec()
-            result = {"args": args, "variables": variables }
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
             sys.stdout.flush()
         except Exception as e:
-            logging.error("Failed because exception: {}".format(e))
-            logging.error(traceback.format_exc())
+            logExceptionBacktrace("Exception thrown in FrameLocals.invoke", e)
             for fs in ec.framesStates:
                 logging.info("frame state: {}".format(fs))
 
+frameLocalsCommand = FrameLocals()
 
-localsAndArgsCommand = LocalsAndArgs()
+class FrameArgs(gdb.Command):
+
+    def __init__(self):
+        super(FrameArgs, self).__init__("gdbjs-frame-args", gdb.COMMAND_USER)
+        self.name = "frame-args"
+
+    def invoke(self, arguments, from_tty):
+        [frameId, argsId, threadId, frameLevel] = parseStringArgs(arguments)
+        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
+        logging.info("frame-args: frame id {0} argsId: {1} threadId: {2} frameLevel: {3}".format(frameId, argsId, threadId, frameLevel))
+        try:
+            frameState = ec.get_frame(threadId, frameId)
+            if frameState is None:
+                ec.initialize_frame(frameId=frameId, threadId= threadId, argsId=argsId)
+                frameState = ec.get_frame(threadId, frameId)
+            if frameState is None:
+                logging.error("Failed to get initialized frame state. ThreadId: {} - FrameId: {} Level: {}".format(threadId, frameId, frameLevel))
+            frame = gdb.selected_frame()
+            block = getFunctionBlock(frame)
+            names = set()
+            result = []
+            name = None
+            for symbol in block:
+                name = symbol.name
+                if (name not in names) and symbol.is_argument:
+                    names.add(name)
+                    try:
+                        value = symbol.value(frame)
+                        if typeIsPrimitive(value.type):
+                            v = {
+                                "name": symbol.name,
+                                "display": str(value),
+                                "isPrimitive": True
+                            }
+                            frameState.add_arg(symbol.name, value, True, True)
+                            result.append(v)
+                        else:
+                            v = {
+                                "name": symbol.name,
+                                "display": str(value.type),
+                                "isPrimitive": False
+                            }
+                            frameState.add_arg(symbol.name, value, True, False)
+                            result.append(v)
+                    except Exception as e:
+                        logExceptionBacktrace("Err was thrown in FrameArgs (gdbjs-frame-args). Name of symbol that caused error: {0}\n".format(name), e)
+                        names.remove(name)
+            ec.add_frame(frameId, threadId, frameState)
+            ec.log_ec()
+            res = json.dumps(result, ensure_ascii=False)
+            msg = prepareOutput(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+        except Exception as e:
+            logExceptionBacktrace("Exception thrown in FrameArgs.invoke", e)
+            for fs in ec.framesStates:
+                logging.info("frame state: {}".format(fs))
+
+frameArgsCommand = FrameArgs()
