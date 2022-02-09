@@ -65,6 +65,7 @@ class VariableState:
             self.value = v
             self.value_ref = self.value
 
+        self.address = v.address
         self.value = v
         self.name = name
         # if isPrimitive = false, we do not update through this handle, we update through it's child handles, otherwise
@@ -130,8 +131,12 @@ class FrameState:
         vref = map[pPath]
         referencedByAssignedVarRef = []
         value = vref.value
-        if memberIsReference(value.type):
-            value = value.referenced_value()
+        try:
+            if memberIsReference(value.type):
+                value = value.referenced_value()
+        except Exception as e:
+            logging.error("Couldn't dereference value {}".format(pPath))
+            raise e
 
         members = []
         fields = value.type.fields()
@@ -143,11 +148,16 @@ class FrameState:
             subt = value[member].type
             path = "{0}.{1}".format(pPath, member)
             isPrimitive = typeIsPrimitive(subt)
-            if isPrimitive:
-                result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": isPrimitive })
-            else:
-                result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": isPrimitive })
-                
+            try:
+                if isPrimitive:
+                    result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": isPrimitive })
+                else:
+                    result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": isPrimitive })
+            except Exception as e:
+                logging.error("Couldn't retrieve value for {} in {}".format(member, pPath))
+                logging.error("Address of parent: {} and of child: {}".format(value.address, value[member].address))
+                raise e
+            
             vs = VariableState(member, value[member], isPrimitive)
             map[path] = vs
             referencedByAssignedVarRef.append(vs)
@@ -156,7 +166,7 @@ class FrameState:
         return result
 
     def getUpdateListOf(self, varRef):
-        result = []        
+        result = []
         children = self.varRef.get(varRef)
         try:
             for child in children:
@@ -186,17 +196,20 @@ class EC:
             self.framesStates[threadId] = {}
         return self.framesStates.get(threadId).get(frameId)
 
-    def log_ec(self):
+    def log_ec(self, contextTitle):
+        logging.info("\n== in {} ==".format(contextTitle))
         for key in self.framesStates:
             frameStatesOf = self.framesStates[key]
-            logging.info("Thread ID {} \n\tFrame states: {} \n\tFrames in thread id = {}\n".format(key, len(frameStatesOf), ec.framesStates[key]))
+            logging.info("\n\tThread ID {} \n\tFrame states: {} \n\tFrames in thread id = {}\n".format(key, len(frameStatesOf), ec.framesStates[key]))
     
     def initialize_frame(self, frameId, threadId, argsId):
         if self.framesStates.get(threadId) is None:
             self.framesStates[threadId] = {}
         if self.framesStates.get(threadId).get(frameId) is None:
             self.framesStates.get(threadId)[frameId] = FrameState(frameId = frameId, argsId=argsId)
-
+    
+    def clear_frame_state(self, threadId):
+        self.framesStates[threadId] = {}
 
 ec = EC()
 
@@ -238,7 +251,7 @@ class GetChildren(gdb.Command):
             sys.stdout.flush()
         except Exception as e:
             logExceptionBacktrace("Exception thrown.", e)
-            frame.log_error()
+            frame.logError()
             res = json.dumps(None, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
@@ -297,7 +310,7 @@ class FrameLocals(gdb.Command):
                         logExceptionBacktrace("Err was thrown in FrameLocals (gdbjs-frame-locals). Name of symbol that caused error: {0}\n".format(name), e)
                         names.remove(name)
             ec.add_frame(frameId, threadId, frameState)
-            ec.log_ec()
+            ec.log_ec("FrameLocals")
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
@@ -361,7 +374,7 @@ class FrameArgs(gdb.Command):
                         logExceptionBacktrace("Err was thrown in FrameArgs (gdbjs-frame-args). Name of symbol that caused error: {0}\n".format(name), e)
                         names.remove(name)
             ec.add_frame(frameId, threadId, frameState)
-            ec.log_ec()
+            ec.log_ec("FrameLocals")
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
@@ -376,3 +389,19 @@ class FrameArgs(gdb.Command):
             sys.stdout.flush()
 
 frameArgsCommand = FrameArgs()
+
+# here on out, all state related commands, that are accessed from the frontend, but don't produce results, are prefixed with "state-"
+class ClearFrameState(gdb.Command):
+
+    def __init__(self):
+        super(ClearFrameState, self).__init__("gdbjs-state-clear-framestate", gdb.COMMAND_USER)
+        self.name = "state-clear-framestate"
+
+    def invoke(self, threadId, from_tty):
+        ec.clear_frame_state(threadId=threadId)
+        res = json.dumps(None, ensure_ascii=False)
+        msg = prepareOutput(self.name, res)
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+clearFrameStateCommand = ClearFrameState()
