@@ -4,18 +4,7 @@
  * @typedef { import("vscode").Disposable } Disposable
  */
 const vscode = require("vscode");
-const subprocess = require("child_process");
-const { showErrorMessage } = require("vscode").window;
 const { registerCommand } = require("vscode").commands;
-
-/**
- * Helper function (sorta like unimplemented!(...) in rust, only we don't panic)
- * @param {string} commandName
- * @param { string | undefined } msg
- */
-const unimplemented = (commandName, msg = "No message provided") => {
-  showErrorMessage(`midas.${commandName} not yet implemented: ${msg}`);
-};
 
 /**
  * Returns VS Code commands that are to be registered

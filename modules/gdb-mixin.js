@@ -2,6 +2,7 @@
 
 const { Thread, ThreadGroup } = require("gdb-js");
 const { trace } = require("./gdb");
+const vscode = require("vscode");
 
 const WatchPointType = {
   ACCESS: "-a",
@@ -178,22 +179,43 @@ function GDBMixin(GDBBase) {
       }
     
     }
-    // Must be called after gdb.init()
+    
     async setup() {
       // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
-      const scripts = ["stackFrameState.py"]
-      const dir = '/home/cx/dev/opensource/farrese/midas/modules/python';
+      const ext = vscode.extensions.getExtension("farrese.midas");
+      const dir = `${ext.extensionPath}/modules/python`;
+      const scripts = ["utils.py", "stackFrameState.py"]
 
       for(const script of scripts.map(f => require("fs").readFileSync(`${dir}/${f}`, { encoding: 'utf8' }))) {
         if(!script || script.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
         await this.execPy(script);
       }
     }
-    
-    // todo(simon): when we've implemented thread id and framelevel selection for backend
-    //  it also needs parameters passed here
-    async getFrameLocalsAndArgs(stackFrameId, argsId, threadId, frameLevel) {
-      return await this.execCMD(`localsargs ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
+
+    /**
+     * Get frame locals and also initializes frame state in the backend if it hasn't already.
+     * This is why argsId is required to pass to this function as well as `getFrameArgs`
+     * @param { number } stackFrameId - the "locals" scope id of VSCode for this frame
+     * @param { number } argsId - the "args" scope id of VSCode for this frame
+     * @param { number } threadId - the thread we're inspecting
+     * @param { number } frameLevel - the frame level we're on
+     * @returns 
+     */
+    async getFrameLocals(stackFrameId, argsId, threadId, frameLevel) {
+      return await this.execCMD(`frame-locals ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
+    }
+
+    /**
+     * Get frame arguments and also initializes frame state in the backend if it hasn't already.
+     * This is why argsId is required to pass to this function as well as `getFrameArgs`
+     * @param { number } stackFrameId - the "locals" scope id of VSCode for this frame
+     * @param { number } argsId - the "args" scope id of VSCode for this frame
+     * @param { number } threadId - the thread we're inspecting
+     * @param { number } frameLevel - the frame level we're on
+     * @returns 
+     */
+    async getFrameArgs(stackFrameId, argsId, threadId, frameLevel) {
+      return await this.execCMD(`frame-args ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
     }
 
     // todo(simon): when we've implemented thread id and framelevel selection for backend
