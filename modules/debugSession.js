@@ -312,15 +312,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     const scopes = [];
     let locals = this.gdb.getReferenceContext(args.frameId);
     // @ts-ignore
-    let registers = this.createScope("Register", "registers", locals.registerScopeIdentifier, false);
-    let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
-    // @ts-ignore
-    let args_scope = this.createScope("Args", "arguments", locals.argScopeIdentifier, false);
-
-    scopes.push(args_scope, locals_scope, registers);
-    response.body = {
-      scopes: scopes,
-    };
+    if(locals) {
+      let registers = this.createScope("Register", "registers", locals.registerScopeIdentifier, false);
+      let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
+      // @ts-ignore
+      let args_scope = this.createScope("Args", "arguments", locals.argScopeIdentifier, false);
+  
+      scopes.push(args_scope, locals_scope, registers);
+      response.body = {
+        scopes: scopes,
+      };
+    }
     this.sendResponse(response);
   }
 

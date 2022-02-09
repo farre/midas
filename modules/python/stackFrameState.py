@@ -34,8 +34,11 @@ def prepareOutput(cmdName, contents):
 
 def typeIsPrimitive(valueType):
     try:
-        valueType.fields()
-        return False
+        for f in valueType.fields():
+            if hasattr(f, "enumval"):
+                return True
+            else:
+                return False
     except TypeError:
         return True
 
@@ -139,13 +142,12 @@ class FrameState:
         for member in members:
             subt = value[member].type
             path = "{0}.{1}".format(pPath, member)
-            isPrimitive = False
-            try:
-                subt.fields()
-                result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": False })
-            except TypeError:
-                result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": True })
-                isPrimitive = True
+            isPrimitive = typeIsPrimitive(subt)
+            if isPrimitive:
+                result.append({ "name": member, "display": "{0}".format(value[member]), "isPrimitive": isPrimitive })
+            else:
+                result.append({ "name": member, "display": "{0}".format(value[member].type), "isPrimitive": isPrimitive })
+                
             vs = VariableState(member, value[member], isPrimitive)
             map[path] = vs
             referencedByAssignedVarRef.append(vs)
@@ -229,11 +231,7 @@ class GetChildren(gdb.Command):
         try:
             result = []
             result = frame.getChildrenOf(path, assignedVarRef, request)
-            # if request == "args":
-            #     result = frame.getChildrenOfArg(path, assignedVarRef)
-            # elif request == "locals":
-            #     result = frame.getChildrenOfLocal(path, assignedVarRef)
-
+            logging.info("found {} children for {}".format(len(result), path))
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
@@ -241,6 +239,10 @@ class GetChildren(gdb.Command):
         except Exception as e:
             logExceptionBacktrace("Exception thrown.", e)
             frame.log_error()
+            res = json.dumps(None, ensure_ascii=False)
+            msg = prepareOutput(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
 
 
 getChildrenCommand = GetChildren()
@@ -304,6 +306,10 @@ class FrameLocals(gdb.Command):
             logExceptionBacktrace("Exception thrown in FrameLocals.invoke", e)
             for fs in ec.framesStates:
                 logging.info("frame state: {}".format(fs))
+            res = json.dumps(None, ensure_ascii=False)
+            msg = prepareOutput(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
 
 frameLocalsCommand = FrameLocals()
 
@@ -364,5 +370,9 @@ class FrameArgs(gdb.Command):
             logExceptionBacktrace("Exception thrown in FrameArgs.invoke", e)
             for fs in ec.framesStates:
                 logging.info("frame state: {}".format(fs))
+            res = json.dumps(None, ensure_ascii=False)
+            msg = prepareOutput(self.name, res)
+            sys.stdout.write(msg)
+            sys.stdout.flush()
 
 frameArgsCommand = FrameArgs()
