@@ -3,6 +3,7 @@
 #include <string>
 #include <number.hpp>
 #include <todo.hpp>
+#include "test_ptrs.hpp"
 
 int overload(int a) { 
   return a * 2; 
@@ -409,4 +410,5 @@ int main(int argc, const char **argv) {
   auto barptr = new Bar{.j = 100, .s = new Struct { .i = 10, .f = 10.10f, .name = "somestruct_refByBar" }};
   testSubChildUpdate(barptr);
   testFinalDerived();
+  test_ptrs_main();
 }
