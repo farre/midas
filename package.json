@@ -99,65 +99,72 @@
         ],
         "configurationAttributes": {
           "launch": {
-            "type": "object",
-            "default": {},
             "required": [
-              "program"
+              "program",
+              "mode"
             ],
-            "program": {
-              "type": "string",
-              "description": "binary to debug"
-            },
-            "stopOnEntry": {
-              "type": "boolean",
-              "description": "Set breakpoint on main",
-              "default": true
-            },
-            "trace": {
-              "type": "boolean",
-              "description": "Turns logging on or off",
-              "default": false
-            },
-            "debugeeArgs": {
-              "type": "string[]",
-              "description": "Command line arguments passed to debuggee",
-              "default": []
-            },
-            "allStopMode": {
-              "type": "boolean",
-              "description": "Whether or not GDB should run in all stop mode",
-              "default": false
-            },
-            "debuggerPath": {
-              "type": "string",
-              "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
-              "default": "gdb"
-            },
-            "cwd": {
-              "type": "string",
-              "description": "Current working directory of GDB",
-              "default": "${workspaceFolder}"
-            },
-            "replay": {
-              "type": "object",
-              "properties": {
-                "rrPath": {
-                  "type": "string",
-                  "description": "Path to rr. Defaults to trying to execute rr in $PATH",
-                  "default": "rr"
-                },
-                "rrServerAddress": {
-                  "type": "string",
-                  "description": "Connection string to GDB server; format host:port"
-                },
-                "tracePath": {
-                  "type": "string",
-                  "description": "trace workspace. Can be found running the rr command `rr ls`"
-                },
-                "startEventRequest": {
-                  "type": "boolean",
-                  "description": "Request event to start debugging from with user input",
-                  "default": false
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Binary to debug"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Set breakpoint on main",
+                "default": true
+              },
+              "trace": {
+                "type": "boolean",
+                "description": "Turns logging on or off",
+                "default": false
+              },
+              "args": {
+                "type": "string[]",
+                "description": "Command line arguments passed to debuggee program",
+                "default": []
+              },
+              "allStopMode": {
+                "type": "boolean",
+                "description": "Whether or not GDB should run in all stop mode",
+                "default": true
+              },
+              "debuggerPath": {
+                "type": "string",
+                "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
+                "default": "gdb"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Current working directory of GDB",
+                "default": "${workspaceFolder}"
+              },
+              "mode": {
+                "type": ["string"],
+                "default": "gdb",
+                "enum": ["gdb", "rr"],
+                "enumDescriptions": [
+                  "Launch normal GDB debug session",
+                  "Launch GDB debug session against rr replay. To run in this mode you need to set the 'replay' field's values."
+                ]
+              },
+              "replay": {
+                "type": "object",
+                "required": ["rrPath", "rrServerAddress"],
+                "properties": {
+                  "rrPath": {
+                    "type": "string",
+                    "description": "Path to rr. Defaults to trying to execute rr in $PATH",
+                    "default": "rr"
+                  },
+                  "rrServerAddress": {
+                    "type": "string",
+                    "description": "Connection string to GDB server that rr spawns. Format is host:port",
+                    "default": "127.0.0.1:50505"
+                  },
+                  "traceWorkspace": {
+                    "type": "string",
+                    "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
+                  }
                 }
               }
             }
@@ -172,7 +179,8 @@
             "stopOnEntry": true,
             "trace": false,
             "allStopMode": false,
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "mode": "gdb"
           },
           {
             "type": "midas",
@@ -182,42 +190,44 @@
             "stopOnEntry": true,
             "trace": false,
             "cwd": "${workspaceFolder}",
+            "mode": "rr",
             "replay": {
               "rrPath": "rr",
-              "rrServerAddress": "localhost:50505",
-              "startEventRequest": false
+              "rrServerAddress": "localhost:50505"
             }
           }
         ],
         "configurationSnippets": [
           {
             "name": "midas",
-            "label": "midas: Launch",
-            "description": "Launches midas debugging session for binary selected by user",
+            "label": "midas: Debug",
+            "description": "Launch midas debugging session for binary selected by user",
             "body": {
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "program": "^\"\\${workspaceFolder}/${2:binary}\"",
+              "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,
-              "allStopMode": false
+              "allStopMode": false,
+              "mode": "gdb"
             }
           },
           {
             "name": "midas",
-            "label": "midas with rr: Launch",
+            "label": "midas: rr Debug",
             "description": "Launches midas debugging session against an rr replay",
             "body": {
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "program": "^\"\\${workspaceFolder}/${2:binary}\"",
+              "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,
               "debuggerPath": "gdb",
+              "mode": "rr",
               "replay": {
                 "rrPath": "rr",
                 "rrServerAddress": "localhost:50505",

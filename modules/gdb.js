@@ -163,7 +163,7 @@ class GDB extends GDBMixin(GDBBase) {
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.debuggerPath, args.program, ...(args.debugeeArgs ?? []));
+          let gdb = spawnGDB(args.debuggerPath, args.program, ...(args.args ?? []));
           gdbProcess = gdb;
           return gdb;
         }
