@@ -192,70 +192,18 @@ function GDBMixin(GDBBase) {
       }
     }
 
-    /**
-     * Get frame locals and also initializes frame state in the backend if it hasn't already.
-     * This is why argsId is required to pass to this function as well as `getFrameArgs`
-     * @param { number } stackFrameId - the "locals" scope id of VSCode for this frame
-     * @param { number } argsId - the "args" scope id of VSCode for this frame
-     * @param { number } threadId - the thread we're inspecting
-     * @param { number } frameLevel - the frame level we're on
-     * @returns 
-     */
-    async getFrameLocals(stackFrameId, argsId, threadId, frameLevel) {
-      return await this.execCMD(`frame-locals ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
-    }
-
-    /**
-     * Get frame arguments and also initializes frame state in the backend if it hasn't already.
-     * This is why argsId is required to pass to this function as well as `getFrameArgs`
-     * @param { number } stackFrameId - the "locals" scope id of VSCode for this frame
-     * @param { number } argsId - the "args" scope id of VSCode for this frame
-     * @param { number } threadId - the thread we're inspecting
-     * @param { number } frameLevel - the frame level we're on
-     * @returns 
-     */
-    async getFrameArgs(stackFrameId, argsId, threadId, frameLevel) {
-      return await this.execCMD(`frame-args ${stackFrameId} ${argsId} ${threadId} ${frameLevel}`);
-    }
-
     // todo(simon): when we've implemented thread id and framelevel selection for backend
     //  it also needs parameters passed here
     async inspectVariable(variableToInspect, threadId, frameLevel) {
       return await this.execCMD(`inspect ${variableToInspect} ${threadId} ${frameLevel}`);
     }
 
-    /**
-     * @param {number} frameId 
-     * @param {string} path 
-     * @param {boolean} isArg 
-     * @returns {Promise< { name: string, display: string, isPrimitive: boolean }[] >}
-     */
-    async getChildrenOf(frameId, path, isArg) {
-      return await this.execCMD(`get-children-of ${frameId} ${path} ${isArg}`);
+    async getLocalsOf(threadId, frameLevel, scopeType) {
+      return await this.execCMD(`get-locals ${threadId} ${frameLevel} ${scopeType}`);
     }
-
-    async getArgs(threadId, frameLevel) {
-      // NB: threadId and frameLevel params not yet implemented
-      return await this.execCMD(`getargs ${threadId} ${frameLevel}`)
-    }
-
-    async getLocals(threadId, frameLevel) {
-      return await this.execCMD(`getlocals ${threadId} ${frameLevel}`)
-    }
-
-    async getChildren(frameId, path, assignedVarRef, request, threadId) {
-      if(threadId == undefined) debugger;
-      return await this.execCMD(`get-children ${frameId} ${path} ${assignedVarRef} ${request ? "args" : "locals"} ${threadId}`)
-    }
-
-    async createExecutionContext(threadId) {
-      let r = await this.execCMD(`create-ec ${threadId}`)
-      console.log(`execution context created`);
-    }
-
-    async deleteExecutionContext(threadId) {
-      await this.execCMD(`delete-ec ${threadId}`)
-      console.log(`execution context deleted`);
+  
+    async getContentsOf(threadId, frameLevel, expression) {
+      return await this.execCMD(`get-contents-of ${threadId} ${frameLevel} ${expression}`);
     }
 
   };

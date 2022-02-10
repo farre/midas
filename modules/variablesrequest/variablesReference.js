@@ -10,7 +10,7 @@
  * @param { Response } response
  * @returns { any } the `response` object with it's error fields set
  */
- function err_response(response, msg) {
+function err_response(response, msg) {
   response.message = msg;
   response.success = false;
   response.body = null;
@@ -65,12 +65,25 @@ class VariablesReference {
    * Sets a new value of a named object (variable object) that this reference tracks or manages.
    * @param { SetVariableResponse } response - The response initialized by VSCode which we should return
    * @param {GDB} gdb - GDB backend instance
-   * @param {string} namedObject - a named object this VariablesReference tracks, which should be updated
+   * @param {string} namedObject - a named object's name, that this VariablesReference tracks, which should be updated
    * @param {string} value - The `value` in string form which the named object should be updated to hold
    * @returns { Promise<SetVariableResponse> } prepared VSCode response
    */
   async update(response, gdb, namedObject, value) {
-    throw new Error("Base class VariablesReference should not be instantiated. Merely for documentation purposes");
+    let res = await gdb.execMI(`-var-create ASSIGN_TEMPORARY_${namedObject} * ${namedObject}`);
+    try {
+      res = await gdb.execMI(`-var-assign ASSIGN_TEMPORARY_${namedObject} "${value}"`, this.threadId);
+      await gdb.execMI(`-var-delete ASSIGN_TEMPORARY_${namedObject}`);
+      if (res.value) {
+        response.body = {
+          value: res.value
+        };
+        return response;
+      }
+    } catch(err) {
+      await gdb.execMI(`-var-delete ASSIGN_TEMPORARY_${namedObject}`);
+      return err_response(response, `${namedObject} is not editable`);
+    }
   }
 }
 

@@ -1081,16 +1081,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  /**
-     * 
-     * @param {*} stackFrameId 
-     * @param {*} varRef 
-     * @returns {Promise<{ name: string, display: string, isPrimitive: boolean }[]>}
-  */
-  async getUpdates(stackFrameId, varRef, threadId) {
-    return await this.execCMD(`update ${stackFrameId} ${varRef} ${threadId}`);
-  }
-
 }
 
 const FallBackMemberRegex = {

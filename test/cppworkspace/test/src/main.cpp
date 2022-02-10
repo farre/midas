@@ -352,6 +352,7 @@ int main(int argc, const char **argv) {
 
   int i = 10;
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
+  const auto j = i;
   auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
   Foo f{.name = "hello world", .k = 10};
   i += 1;
