@@ -107,33 +107,33 @@ class ConfigurationProvider {
       return null;
     }
     setDefaults(config);
+    if (!config.program) {
+      await vscode.window.showErrorMessage("A path to the binary to debug is missing in the launch settings");
+      return null;
+    }
 
-    if (isReplaySession(config)) {
-      if (!config.program) {
-        await vscode.window.showErrorMessage("A path to a binary containing the symbols for the replay session was not provided");
+    if(config.mode == "rr") {
+      if(!config.replay) {
+        await vscode.window.showErrorMessage("You need to set replay settings rrPath and rrServerAddress");
         return null;
       }
-
-      vscode.commands.executeCommand("setContext", "midas.rrSession", true);
-
       const options = {
         canPickMany: false,
         ignoreFocusOut: true,
         title: "Select process to debug",
       };
-
-      const tracePicked = async (tracePath) => {
-        return await vscode.window.showQuickPick(getTraceInfo(tracePath), options).then((selection) => {
+      const tracePicked = async (traceWorkspace) => {
+        return await vscode.window.showQuickPick(getTraceInfo(traceWorkspace), options).then((selection) => {
           if (selection) {
-            const replay_parameters = { pid: selection.value, tracePath: tracePath, cmd: selection.detail };
+            const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.detail };
             return replay_parameters;
           }
           return null;
         });
       };
-
-      if (config.replay.tracePath && !config.replay.pid) {
-        return await tracePicked(config.replay.tracePath).then((replay_parameters) => {
+      
+      if (config.replay.traceWorkspace && !config.replay.pid) {
+        config = await tracePicked(config.replay.traceWorkspace).then((replay_parameters) => {
           if (replay_parameters) {
             config.replay.parameters = replay_parameters;
             return config;
@@ -142,8 +142,8 @@ class ConfigurationProvider {
             return null;
           }
         });
-      } else if (!config.replay.tracePath && !config.replay.pid) {
-        return await vscode.window
+      } else if (!config.replay.traceWorkspace && !config.replay.pid) {
+        config = await vscode.window
           .showQuickPick(getTraces(), options)
           .then(tracePicked)
           .then((replay_parameters) => {
@@ -155,19 +155,22 @@ class ConfigurationProvider {
               return null;
             }
           });
-      } else {
-        return config;
       }
-    }
+      vscode.commands.executeCommand("setContext", "midas.rrSession", true);
+      return config;
+    } else if(config.mode == "gdb") {
     // without rr
-    if (!config.program) {
-      await vscode.window.showInformationMessage("Cannot find a program to debug");
+      if (!config.program) {
+        await vscode.window.showInformationMessage("Cannot find a program to debug");
+        return null;
+      }
+      vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
+      vscode.commands.executeCommand("setContext", "midas.rrSession", false);
+      return config;
+    } else {
+      vscode.window.showErrorMessage("You have not set mode. Supported values: 'rr' or 'gdb'");
       return null;
     }
-
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
-    vscode.commands.executeCommand("setContext", "midas.rrSession", false);
-    return config;
   }
 
   // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
@@ -178,31 +181,20 @@ class ConfigurationProvider {
 
 class DebugAdapterFactory {
   /**
-   *
    * @param { vscode.DebugSession } session
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
   async createDebugAdapterDescriptor(session) {
-    if (isReplaySession(session.configuration)) {
+    if(session.configuration.mode == "rr") {
       let miServerAddress = session.configuration.replay.rrServerAddress;
       const rrPath = session.configuration.replay.rrPath;
       const pid = session.configuration.replay.parameters.pid;
-      const tracePath = session.configuration.replay.parameters.tracePath;
+      const traceWorkspace = session.configuration.replay.parameters.traceWorkspace;
       const inet_addr = miServerAddress.split(":");
-      let startEvent = "";
-      if (session.configuration.replay.startEventRequest) {
-        const input = await vscode.window.showInputBox({prompt: " Input start event to debug from "});
-        if(input) {
-          let num = Number.parseInt(input);
-          if(!Number.isNaN(num)) {
-            startEvent = ` -g ${num}`;
-          }
-        }
-      }
-      // turns out, gdb doesn't recognize "localhost" as a parameter.
+      // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
       const addr = inet_addr[0] == "localhost" ? "127.0.0.1" : inet_addr[0];
       const port = inet_addr[1];
-      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${tracePath}${startEvent}`;
+      const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
       let term = vscode.window.createTerminal("rr terminal");
       term.sendText(cmd_str);
       term.show(true);
@@ -218,5 +210,5 @@ class DebugAdapterFactory {
 
 module.exports = {
   ConfigurationProvider,
-  DebugAdapterFactory,
+  DebugAdapterFactory
 };
