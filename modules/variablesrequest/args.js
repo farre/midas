@@ -1,7 +1,5 @@
 const DebugAdapter = require("@vscode/debugadapter");
 const { VariablesReference } = require("./variablesReference");
-const GDB = require("../gdb");
-const {StackFrameState} = require("./stackFramestate");
 /**
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("../gdb").GDB } GDB
@@ -9,7 +7,7 @@ const {StackFrameState} = require("./stackFramestate");
  */
 
 class ArgsReference extends VariablesReference {
-  /** @type {StackFrameState} */
+  /** @type {import("./stackFramestate").StackFrameState}*/
   #stackFrameState;
 
   constructor(argScopeVariableReference, threadId, frameLevel, stackFrameState) {
@@ -19,7 +17,7 @@ class ArgsReference extends VariablesReference {
 
   /**
    * @param { VariablesResponse } response - response which we prepare, to be sent back to VSCode
-   * @param { GDB } gdb - reference to the GDB backend
+   * @param { import("../gdb").GDB } gdb - reference to the GDB backend
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
