@@ -7,69 +7,7 @@ import logging
 
 logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
 
-def getFunctionBlock(frame) -> gdb.Block:
-    block = frame.block()
-    while not block.superblock.is_static and not block.superblock.is_global:
-        block = block.superblock
-    if block.is_static or block.is_global:
-        return None
-    return block
-
-def logExceptionBacktrace(errmsg, exception):
-        logging.error("{} Exception info: {}".format(errmsg, exception))
-        logging.error(traceback.format_exc())
-
-def selectThreadAndFrame(threadId, frameLevel):
-    try:
-        gdb.execute("thread {}".format(threadId))
-        gdb.execute("frame {}".format(frameLevel))
-    except Exception as e:
-        logExceptionBacktrace("Selecting thread and frame failed.", e)
-
-def parseStringArgs(arg):
-    return gdb.string_to_argv(arg)
-
-def prepareOutput(cmdName, contents):
-    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
-
-def typeIsPrimitive(valueType):
-    try:
-        for f in valueType.fields():
-            if hasattr(f, "enumval"):
-                return True
-            else:
-                return False
-    except TypeError:
-        return True
-
-def memberIsReference(type):
-    code = type.code
-    return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
-
-def getMembersRecursively(field, memberList):
-    if hasattr(field, 'bitpos'):
-        if field.is_base_class:
-            for f in field.type.fields():
-                getMembersRecursively(f, memberList)
-        else:
-            if field.name is not None and not field.name.startswith("_vptr"):
-                memberList.append(field.name)
-
-def display(name, value, isPrimitive):
-    try:
-        if value.type.code == gdb.TYPE_CODE_PTR:
-            if isPrimitive:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value), "isPrimitive": isPrimitive }
-            else:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value.type), "isPrimitive": isPrimitive }
-        else:
-            if isPrimitive:
-                return { "name": name, "display": "{}".format(value), "isPrimitive": isPrimitive }
-            else:
-                return { "name": name, "display": "{}".format(value.type), "isPrimitive": isPrimitive }
-    except:
-        return { "name": name, "display": "<invalid address> {}".format(value.type), "isPrimitive": isPrimitive }
-
+staticsTracker = {}
 
 class ContentsOf(gdb.Command):
     def __init__(self):
@@ -95,10 +33,23 @@ class ContentsOf(gdb.Command):
             raise e
 
         members = []
+        statics = []
         fields = it.type.fields()
         for f in fields:
-            getMembersRecursively(f, members)
-        result = []            
+            getMembersRecursively(f, members, statics=statics)
+        result = []
+        # register the static members we've seen
+        if staticsTracker.get(components[0]) is None:
+            staticsTracker[components[0]] = {}
+        iter = staticsTracker[components[0]]
+        for component in components[1:]:
+            if iter.get(component) is None:
+                iter[component] = { "statics": None }
+            iter = iter[component]
+        
+        if len(statics) != 0:
+            iter["statics"] = statics
+        
         for member in members:
             item = display(member, it[member], typeIsPrimitive(it[member].type))
             result.append(item)
