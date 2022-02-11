@@ -1046,12 +1046,13 @@ class GDB extends GDBMixin(GDBBase) {
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
       let states = [];
+      let frameLevel = ec.stack.length;
       for (let frame of frames) {
         const stackFrameArgsIdentifier = this.nextVarRef;
         const stackFrameIdentifier = this.nextVarRef;
         const registerScopeVariablesReference = this.nextVarRef;
         this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId, +frame.level));
-        let state = new StackFrameState(stackFrameIdentifier, threadId);
+        let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId, +frame.level);
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
         this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, +frame.level, state));
 
