@@ -206,6 +206,29 @@ function GDBMixin(GDBBase) {
       return await this.execCMD(`get-contents-of ${threadId} ${frameLevel} ${expression}`);
     }
 
+    async getContentsOfStatic(threadId, frameLevel, expression) { 
+      return await this.execCMD(`get-contents-of-static ${threadId} ${frameLevel} ${expression}`);
+    }
+
+    /**
+     * Returns member fields of a base class belonging to the type that `expression` represents, or in other words
+     * returns the member fields of the type of `expression` defined in it's base class.
+     * @param {number} threadId 
+     * @param {number} frameLevel 
+     * @param {number} expression 
+     * @param {string[]} baseClassHierarchy - a list of base classes, in ascending order of the hierarchy.
+     * @returns 
+     */
+    async getContentsOfBaseClass(threadId, frameLevel, expression, baseClassHierarchy) { 
+      let baseClassHierarchyParameter = "";
+      if(baseClassHierarchy.length == 1) {
+        baseClassHierarchyParameter = `'${baseClassHierarchy[0].replaceAll(" ", "_*_*_")}'`;
+      } else {
+        baseClassHierarchyParameter = `'${baseClassHierarchy.map(name => `${name.replaceAll(" ", "_*_*_")}`).join(" ")}'`
+      }
+      return await this.execCMD(`get-contents-of-base-class ${threadId} ${frameLevel} ${expression} ${baseClassHierarchyParameter}`);
+    }
+
   };
 }
 

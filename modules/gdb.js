@@ -102,7 +102,7 @@ const DefaultRRSpawnArgs = [
 ];
 
 function spawnRRGDB(gdbPath, binary, replayConfig, cwd) {
-  const args = [...DefaultRRSpawnArgs, "-ex", "set print static-members off", "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
+  const args = [...DefaultRRSpawnArgs, "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
   return spawn(gdbPath, args);
 }
 

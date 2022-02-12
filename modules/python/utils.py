@@ -97,13 +97,16 @@ def display(name, value, isPrimitive):
     try:
         if value.type.code == gdb.TYPE_CODE_PTR:
             if isPrimitive:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value), "isPrimitive": isPrimitive }
+                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value), "isPrimitive": isPrimitive, "static": False }
             else:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value.type), "isPrimitive": isPrimitive }
+                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value.type), "isPrimitive": isPrimitive, "static": False }
         else:
             if isPrimitive:
-                return { "name": name, "display": "{}".format(value), "isPrimitive": isPrimitive }
+                return { "name": name, "display": "{}".format(value), "isPrimitive": isPrimitive, "static": False }
             else:
-                return { "name": name, "display": "{}".format(value.type), "isPrimitive": isPrimitive }
+                return { "name": name, "display": "{}".format(value.type), "isPrimitive": isPrimitive, "static": False }
     except:
-        return { "name": name, "display": "<invalid address> {}".format(value.type), "isPrimitive": isPrimitive }
+        return { "name": name, "display": "<invalid address> {}".format(value.type), "isPrimitive": isPrimitive, "static": False }
+
+def static_display(name, value, isPrimitive):
+    return { "name": name, "display": "{} (static)".format(value.type), "isPrimitive": isPrimitive, "static": True }
