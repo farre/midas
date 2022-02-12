@@ -353,6 +353,10 @@ int main(int argc, const char **argv) {
   constexpr int array[42] = {};
 
   int i = 10;
+  {
+    int i = 20;
+    float f = 2.0f;
+  }
   Todo tmp{"Test local struct", Date{.day = 3, .month = 11, .year = 2021}};
   const auto j = i;
   auto tmpptr = new Todo{"Pointer to Todo", Date{.day = 25, .month = 1, .year = 2022}};
