@@ -46,10 +46,14 @@ class StructsReference extends VariablesReference {
    */
   async handleRequest(response, gdb) {
     let cmd_result = await gdb.getContentsOf(this.threadId, this.frameLevel, this.evaluateName);
-    response.body = {
-      variables: this.processCommandResult(gdb, cmd_result)
+    if(cmd_result) {
+      response.body = {
+        variables: this.processCommandResult(gdb, cmd_result)
+      }
+      return response;
+    } else {
+      return err_response(response, `Couldn't get value of ${this.evaluateName}`)
     }
-    return response;
   }
 
   processCommandResult(gdb, cmd_result) {
@@ -75,6 +79,9 @@ class StructsReference extends VariablesReference {
         gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
       }
       let v = new GDB.VSCodeVariable(base_class.name, base_class.display, ref, path, true, path);
+      v.presentationHint = {
+        kind: "baseClasss"
+      }
       result.push(v);
     }
     return result;
@@ -114,10 +121,10 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let subStructHandler = new StaticsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          let subScopeHandler = new StaticsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
-            subStructHandler
+            subScopeHandler
           );
           this.namesRegistered.set(member.name, ref);
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
@@ -128,10 +135,10 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let subStructHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          let subScopeHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
-            subStructHandler
+            subScopeHandler
           );
           this.namesRegistered.set(member.name, ref);
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
@@ -189,14 +196,14 @@ class BaseClassReference extends StructsReference {
    * @param { number } stackFrameIdentifier - stack frame id for which this variable lives in
    * @param { string[] } baseClassNames - base class name hierarchy
    */
-  baseClassNames;
+  baseClassHierarchy;
   constructor(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier, baseClassNames) {
     super(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier);
-    this.baseClassNames = baseClassNames;
+    this.baseClassHierarchy = baseClassNames;
   }
 
   async handleRequest(response, gdb) {
-    let cmd_result = await gdb.getContentsOfBaseClass(this.threadId, this.frameLevel, this.evaluateName, this.baseClassNames);
+    let cmd_result = await gdb.getContentsOfBaseClass(this.threadId, this.frameLevel, this.evaluateName, this.baseClassHierarchy);
     response.body = {
       variables: this.processCommandResult(gdb, cmd_result)
     }
@@ -217,10 +224,10 @@ class BaseClassReference extends StructsReference {
       let ref = this.namesRegistered.get(base_class.name);
       if(!ref) {
         ref = gdb.generateVariableReference();
-        let subStructHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassNames, base_class.name]);
+        let subScopeHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassHierarchy, base_class.name]);
         gdb.references.set(
           ref,
-          subStructHandler
+          subScopeHandler
         );
         this.namesRegistered.set(base_class.name, ref);
         gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);

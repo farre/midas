@@ -68,7 +68,7 @@ def getMembers(field, memberList, statics, baseclasses):
         memberList.append(field.name)
     elif field.is_base_class:
         baseclasses.append(field.name)
-    else:
+    elif not hasattr(field, "bitpos"):
         statics.append(field.name)
 
 
