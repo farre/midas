@@ -70,7 +70,7 @@ class StructsReference extends VariablesReference {
       let ref = this.namesRegistered.get(base_class.name);
       if(!ref) {
         ref = gdb.generateVariableReference();
-        let subStructHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [base_class.name]);
+        const subStructHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [base_class.name]);
         gdb.references.set(
           ref,
           subStructHandler
@@ -98,7 +98,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let subStructHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subStructHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subStructHandler
@@ -106,7 +106,7 @@ class StructsReference extends VariablesReference {
           this.namesRegistered.set(member.name, ref);
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
         }
-        let v = new GDB.VSCodeVariable(member.name, member.display, ref, path, true, path);
+        const v = new GDB.VSCodeVariable(member.name, member.display, ref, path, true, path);
         result.push(v);
       }
     }
@@ -121,7 +121,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let subScopeHandler = new StaticsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subScopeHandler = new StaticsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subScopeHandler
@@ -135,7 +135,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let subScopeHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subScopeHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subScopeHandler
@@ -143,7 +143,7 @@ class StructsReference extends VariablesReference {
           this.namesRegistered.set(member.name, ref);
           gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
         }
-        let v = new GDB.VSCodeVariable(member.name, member.display, ref, path, true, path);
+        const v = new GDB.VSCodeVariable(member.name, member.display, ref, path, true, path);
         result.push(v);
       }
     }
@@ -224,7 +224,7 @@ class BaseClassReference extends StructsReference {
       let ref = this.namesRegistered.get(base_class.name);
       if(!ref) {
         ref = gdb.generateVariableReference();
-        let subScopeHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassHierarchy, base_class.name]);
+        const subScopeHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassHierarchy, base_class.name]);
         gdb.references.set(
           ref,
           subScopeHandler
@@ -232,7 +232,7 @@ class BaseClassReference extends StructsReference {
         this.namesRegistered.set(base_class.name, ref);
         gdb.getExecutionContext(this.threadId).addTrackedVariableReference(ref, this.stackFrameIdentifier);
       }
-      let v = new GDB.VSCodeVariable(base_class.name, base_class.display, ref, path, true, path);
+      const v = new GDB.VSCodeVariable(base_class.name, base_class.display, ref, path, true, path);
       result.push(v);
     }
     return result;
