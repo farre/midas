@@ -337,21 +337,23 @@ class GetLocals(gdb.Command):
         selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
         try:
             frame = gdb.selected_frame()
-            block = getFunctionBlock(frame)
+            block = frame.block()
             names = set()
             result = []
             name = None
-            for symbol in block:
-                name = symbol.name
-                if (name not in names) and predicate(symbol=symbol):
-                    names.add(name)
-                    try:
-                        value = symbol.value(frame)
-                        item = display(symbol.name, value, typeIsPrimitive(value.type))
-                        result.append(item)
-                    except Exception as e:
-                        logExceptionBacktrace("Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
-                        names.remove(name)
+            while (not block.is_static) and (not block.superblock.is_global):
+                for symbol in block:
+                    name = symbol.name
+                    if (name not in names) and predicate(symbol=symbol):
+                        names.add(name)
+                        try:
+                            value = symbol.value(frame)
+                            item = display(symbol.name, value, typeIsPrimitive(value.type))
+                            result.append(item)
+                        except Exception as e:
+                            logExceptionBacktrace("Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
+                            names.remove(name)
+                block = block.superblock
 
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
