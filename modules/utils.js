@@ -100,6 +100,50 @@ async function parseStringGDBJsonHybrid(str) {
   }
 }
 
+/**
+ * Stores arrays in a map
+ */
+class ArrayMap {
+  #storage = new Map();
+  constructor() { }
+  /**
+   * Adds `value` to the array keyed by `key`. If no array is referenced by key, one is created.
+   * @param {any} key 
+   * @param {any} value 
+   */
+  add_to(key, value) {
+    let set = this.#storage.get(key) ?? [];
+    set.push(value);
+    this.#storage.set(key, set);
+  }
+
+  /**
+   * Returns an array referenced by key or an empty iterable, to help
+   * with not polluting code with .get(..) ?? [] everywhere.
+   * @param {any} key
+   * @returns { any[] }
+   */
+  safe_get(key) {
+    return this.#storage.get(key) ?? [];
+  }
+
+  /**
+   * @param {any} key 
+   * @param {any[]} array 
+   */
+  set(key, array) {
+    this.#storage.set(key, array);
+  }
+
+  clear() {
+    this.#storage.clear();
+  }
+
+  delete(key) {
+    this.#storage.delete(key);
+  }
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -107,5 +151,6 @@ module.exports = {
   deescape_gdbjs_output,
   isReplaySession,
   diff,
-  cleanJsonString
+  cleanJsonString,
+  ArrayMap
 };
