@@ -17,7 +17,7 @@ const {
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
-const { getFunctionName, spawn, isReplaySession, cleanJsonString } = require("./utils");
+const { getFunctionName, spawn, isReplaySession, ArrayMap } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/locals");
 const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
@@ -118,7 +118,7 @@ let gdbProcess = null;
 /** @typedef {number} VariablesReference */
 /** @typedef { import("@vscode/debugadapter").DebugSession } DebugSession */
 class GDB extends GDBMixin(GDBBase) {
-  #lineBreakpoints = new Map();
+  #lineBreakpoints = new ArrayMap();
   /** Maps function name (original location) -> Function breakpoint id
    * @type { Map<string, number> } */
   #fnBreakpoints = new Map();
@@ -315,11 +315,11 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async clearBreakPointsInFile(path) {
-    let breakpointIds = (this.#lineBreakpoints.get(path) ?? []).map((bkpt) => bkpt.id);
+    const breakpointIds = this.#lineBreakpoints.safe_get(path).map((bkpt) => bkpt.id);
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
-      this.#lineBreakpoints.set(path, []);
+      this.#lineBreakpoints.delete(path);
     }
   }
 
@@ -329,7 +329,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns { Promise<{ line: any; id: number; verified: boolean; enabled: boolean }[]> } res
    */
   async setBreakpointsInFile(file, bpRequest) {
-    let breakpointIds = (this.#lineBreakpoints.get(file) ?? []).map((bkpt) => bkpt.number);
+    const breakpointIds = this.#lineBreakpoints.safe_get(file).map((bkpt) => bkpt.number);
     // clear previously set breakpoints
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
@@ -527,6 +527,7 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       const start = await ec.setNewContext(stackStartAddress, frame.func, this);
       let frames = await this.getStack(start, 20 - start, threadId);
+      let newFrames = frames.length;
       for (let frame of frames) {
         const argsVarRef = this.nextVarRef;
         const frameIdVarRef = this.nextVarRef;
@@ -1011,9 +1012,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   registerBreakpoint(bp) {
-    let bps = this.#lineBreakpoints.get(bp.file) ?? [];
-    bps.push(bp);
-    this.#lineBreakpoints.set(bp.file, bps);
+    this.#lineBreakpoints.add_to(bp.file, bp);
   }
 
   interrupt() { }

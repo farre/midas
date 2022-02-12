@@ -5,13 +5,15 @@
  * @typedef {import("./gdb").GDB } GDB
  */
 
+const { ArrayMap } = require("./utils");
+
 /// Type that tracks variablesReferences for an execution context (i.e; a thread).
 class ExecutionState {
   threadId;
   /** @type {VSCodeStackFrame[]} */
   stack = [];
   #stackFrameLevelsToStackFrameIdentifiers = [];
-  #frameVariablesReferences = new Map();
+  #frameVariablesReferences = new ArrayMap();
   /** @type {Map<string, VSCodeVariable>} */
   #debugNameMap = new Map();
   states = [];
@@ -27,17 +29,14 @@ class ExecutionState {
    * @param {number} stackFrameIdentifier - stack frame variable reference `id` belongs to
    */
   addTrackedVariableReference(id, stackFrameIdentifier) {
-    let frameReferences = this.#frameVariablesReferences.get(stackFrameIdentifier) ?? [];
-    frameReferences.push(id);
-    this.#frameVariablesReferences.set(stackFrameIdentifier, frameReferences);
+    this.#frameVariablesReferences.add_to(stackFrameIdentifier, id);
   }
 
   async clear(gdb) {
     for (let stack of this.stack) {
       let item = gdb.references.get(stack.id);
       await item.cleanUp(gdb);
-      let referencedByFrame = this.#frameVariablesReferences.get(stack.id) ?? [];
-      for (const variableReference of referencedByFrame) {
+      for (const variableReference of this.#frameVariablesReferences.safe_get(stack.id)) {
         gdb.references.delete(variableReference);
       }
     }
@@ -55,8 +54,7 @@ class ExecutionState {
     for (const stack of selected) {
       let item = gdb.references.get(stack.id);
       await item.cleanUp(gdb);
-      let referencedByFrame = this.#frameVariablesReferences.get(stack.id);
-      for (const variableReference of referencedByFrame) {
+      for (const variableReference of this.#frameVariablesReferences.safe_get(stack.id)) {
         gdb.references.delete(variableReference);
       }
       this.#frameVariablesReferences.delete(stack.id);
@@ -115,7 +113,6 @@ class ExecutionState {
   getFrameLevel(stackFrameIdentifier) {
     return this.#stackFrameLevelsToStackFrameIdentifiers.indexOf(stackFrameIdentifier);
   }
-
 
   addMapping(variableObjectName, variable) {
     this.#debugNameMap.set(variableObjectName, variable);
