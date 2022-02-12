@@ -99,23 +99,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // Enable this when we upgrade to DAP 1.51.0
     response.body.supportsSingleThreadExecutionRequests = true;
 
-    response.body.exceptionBreakpointFilters = [
-      {
-        filter: "namedException",
-        label: "Named Exception",
-        description: `Break on named exceptions. Enter the exception's name as the Condition.`,
-        default: false,
-        supportsCondition: true,
-        conditionDescription: `Enter the exception's name`,
-      },
-      {
-        filter: "otherExceptions",
-        label: "Other Exceptions",
-        description: "This is a other exception",
-        default: true,
-        supportsCondition: false,
-      },
-    ];
     // make VS Code send exceptionInfo request
     response.body.supportsExceptionInfoRequest = true;
     // make VS Code send setExpression request
@@ -211,9 +194,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     let ec = this.gdb.getExecutionContext(args.threadId);
     await ec.pendingStackTrace;
     ec.pendingStackTrace = new Promise(async resolve => {
-      await this.gdb.buildExecutionState(args.threadId);
       let exec_ctx = this.gdb.executionContexts.get(args.threadId);
       if (args.startFrame == 0) {
+        await this.gdb.buildExecutionState(args.threadId);
         response.body = {
           stackFrames: exec_ctx.stack,
         };
