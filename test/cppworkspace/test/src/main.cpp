@@ -5,6 +5,7 @@
 #include <todo.hpp>
 #include "test_ptrs.hpp"
 #include "enum.hpp"
+#include "baseclasses.hpp"
 
 int overload(int a) { 
   return a * 2; 
@@ -361,6 +362,7 @@ int main(int argc, const char **argv) {
   auto Double = add_two(1.550795, 1.590795);
   auto Float = add_two(668.19685f, 668.93685f);
   auto Int = add_two(20, 22);
+  static auto sStatic = new Statics{1337,42, "Static static all the way statics"}; 
 
   Statics* sOne = new Statics{1,2, "Statics one"};
   Statics* sTwo = new Statics{100,200, "Statics Two"};
@@ -414,4 +416,5 @@ int main(int argc, const char **argv) {
   testFinalDerived();
   test_ptrs_main();
   enum_stuff();
+  baseclasses::main();
 }
