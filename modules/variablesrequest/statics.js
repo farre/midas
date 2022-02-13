@@ -30,12 +30,11 @@ class StaticsReference extends VariablesReference {
    * 
    * @param { number } variablesReference 
    * @param { number } threadId 
-   * @param { number } frameLevel 
    * @param { string } evaluateName
    * @param { number } stackFrameIdentifier 
    */
-  constructor(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier) {
-    super(variablesReference, threadId, frameLevel);
+  constructor(variablesReference, threadId, evaluateName, stackFrameIdentifier) {
+    super(variablesReference, threadId);
     this.stackFrameIdentifier = stackFrameIdentifier;
     this.evaluateName = evaluateName;
   }
@@ -46,8 +45,9 @@ class StaticsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
+    const frameLevel = super.getFrameLevel(gdb);
     let result = []
-    let children = await gdb.getContentsOfStatic(this.threadId, this.frameLevel, this.evaluateName);
+    let children = await gdb.getContentsOfStatic(this.threadId, frameLevel, this.evaluateName);
     for(const child of children) {
       const path = `${this.evaluateName}.${child.name}`;
       if(child.isPrimitive) {
@@ -57,7 +57,7 @@ class StaticsReference extends VariablesReference {
         let nextRef = this.namesRegistered.get(child.name);
         if(!nextRef) {
           nextRef = gdb.generateVariableReference();
-          let subStructHandler = new StructsReference(nextRef, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          let subStructHandler = new StructsReference(nextRef, this.threadId, path, this.stackFrameIdentifier);
           gdb.references.set(
             nextRef,
             subStructHandler

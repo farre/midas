@@ -35,12 +35,10 @@ class VariablesReference {
   /**
    * @param {number} variablesReference - can be a stackFrameId or an id for a variable
    * @param {number} threadId - the thread which this variable or stackframe exists in
-   * @param {number} frameLevel - the (current) frame level this variable or stack frame lives on
    */
-  constructor(variablesReference, threadId, frameLevel) {
+  constructor(variablesReference, threadId) {
     this.variablesReferenceId = variablesReference;
     this.threadId = threadId;
-    this.frameLevel = frameLevel;
   }
 
   /**
@@ -52,6 +50,9 @@ class VariablesReference {
     throw new Error("Base class VariablesReference should not be instantiated. Merely for documentation purposes.");
   }
 
+  getFrameLevel(gdb) {
+    return gdb.getExecutionContext(this.threadId).getFrameLevel(this.variablesReferenceId);
+  }
   /**
    * This "virtual" function must uphold this contract:
    * Clean up any data in the backend, that it promises to manage. How or where, is not important, as long as this

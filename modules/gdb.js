@@ -527,15 +527,14 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       const start = await ec.setNewContext(stackStartAddress, frame.func, this);
       let frames = await this.getStack(start, 20 - start, threadId);
-      let newFrames = frames.length;
       for (let frame of frames) {
         const argsVarRef = this.nextVarRef;
         const frameIdVarRef = this.nextVarRef;
         const registerVarRef = this.nextVarRef;
-        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId, +frame.level);
-        this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId, +frame.level));
-        this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, +frame.level, argsVarRef, registerVarRef, state));
-        this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, +frame.level, state));
+        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
+        this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId));
+        this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, argsVarRef, registerVarRef, state));
+        this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, state));
         ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
         ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
 
@@ -1050,10 +1049,10 @@ class GDB extends GDBMixin(GDBBase) {
         const stackFrameArgsIdentifier = this.nextVarRef;
         const stackFrameIdentifier = this.nextVarRef;
         const registerScopeVariablesReference = this.nextVarRef;
-        this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId, +frame.level));
-        let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId, +frame.level);
-        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, +frame.level, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
-        this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, +frame.level, state));
+        this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId));
+        let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId);
+        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
+        this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, state));
 
         ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
         ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);

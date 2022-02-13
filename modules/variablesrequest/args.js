@@ -10,8 +10,8 @@ class ArgsReference extends VariablesReference {
   /** @type {import("./stackFramestate").StackFrameState}*/
   #stackFrameState;
 
-  constructor(argScopeVariableReference, threadId, frameLevel, stackFrameState) {
-    super(argScopeVariableReference, threadId, frameLevel);
+  constructor(argScopeVariableReference, threadId, stackFrameState) {
+    super(argScopeVariableReference, threadId);
     this.#stackFrameState = stackFrameState;
   }
 
