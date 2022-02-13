@@ -12,8 +12,8 @@ class LocalsReference extends VariablesReference {
   /** @type {import("./stackFramestate").StackFrameState }*/
   state;
 
-  constructor(stackFrameId, threadId, frameLevel, argScopeIdentifer, registerScopeIdentifier, state) {
-    super(stackFrameId, threadId, frameLevel);
+  constructor(stackFrameId, threadId, argScopeIdentifer, registerScopeIdentifier, state) {
+    super(stackFrameId, threadId);
     if(!state) debugger;
     this.argScopeIdentifier = argScopeIdentifer;
     this.registerScopeIdentifier = registerScopeIdentifier;

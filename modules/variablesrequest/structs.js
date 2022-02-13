@@ -29,12 +29,11 @@ class StructsReference extends VariablesReference {
    * 
    * @param { number } variablesReference 
    * @param { number } threadId 
-   * @param { number } frameLevel 
    * @param { string } evaluateName
    * @param { number } stackFrameIdentifier 
    */
-  constructor(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier) {
-    super(variablesReference, threadId, frameLevel);
+  constructor(variablesReference, threadId, evaluateName, stackFrameIdentifier) {
+    super(variablesReference, threadId);
     this.stackFrameIdentifier = stackFrameIdentifier;
     this.evaluateName = evaluateName;
   }
@@ -45,7 +44,8 @@ class StructsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    let cmd_result = await gdb.getContentsOf(this.threadId, this.frameLevel, this.evaluateName);
+    const frameLevel = super.getFrameLevel(gdb);
+    let cmd_result = await gdb.getContentsOf(this.threadId, frameLevel, this.evaluateName);
     if(cmd_result) {
       response.body = {
         variables: this.processCommandResult(gdb, cmd_result)
@@ -70,7 +70,7 @@ class StructsReference extends VariablesReference {
       let ref = this.namesRegistered.get(base_class.name);
       if(!ref) {
         ref = gdb.generateVariableReference();
-        const subStructHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [base_class.name]);
+        const subStructHandler = new BaseClassReference(ref, this.threadId, this.evaluateName, this.stackFrameIdentifier, [base_class.name]);
         gdb.references.set(
           ref,
           subStructHandler
@@ -98,7 +98,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          const subStructHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subStructHandler = new StructsReference(ref, this.threadId, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subStructHandler
@@ -121,7 +121,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          const subScopeHandler = new StaticsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subScopeHandler = new StaticsReference(ref, this.threadId, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subScopeHandler
@@ -135,7 +135,7 @@ class StructsReference extends VariablesReference {
         let ref = this.namesRegistered.get(member.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          const subScopeHandler = new StructsReference(ref, this.threadId, this.frameLevel, path, this.stackFrameIdentifier);
+          const subScopeHandler = new StructsReference(ref, this.threadId, path, this.stackFrameIdentifier);
           gdb.references.set(
             ref,
             subScopeHandler
@@ -190,20 +190,20 @@ class BaseClassReference extends StructsReference {
   /**
    * @param { number } variablesReference 
    * @param { number } threadId 
-   * @param { number } frameLevel 
    * @param { string } evaluateName - evaluation path to the members of this object; this path excludes base class names.
    *  so if Foo : Bar { int j } and Bar { int i }, means evaluate path to i, is Foo.i.
    * @param { number } stackFrameIdentifier - stack frame id for which this variable lives in
    * @param { string[] } baseClassNames - base class name hierarchy
    */
   baseClassHierarchy;
-  constructor(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier, baseClassNames) {
-    super(variablesReference, threadId, frameLevel, evaluateName, stackFrameIdentifier);
+  constructor(variablesReference, threadId, evaluateName, stackFrameIdentifier, baseClassNames) {
+    super(variablesReference, threadId, evaluateName, stackFrameIdentifier);
     this.baseClassHierarchy = baseClassNames;
   }
 
   async handleRequest(response, gdb) {
-    let cmd_result = await gdb.getContentsOfBaseClass(this.threadId, this.frameLevel, this.evaluateName, this.baseClassHierarchy);
+    const frameLevel = super.getFrameLevel(gdb);
+    let cmd_result = await gdb.getContentsOfBaseClass(this.threadId, frameLevel, this.evaluateName, this.baseClassHierarchy);
     response.body = {
       variables: this.processCommandResult(gdb, cmd_result)
     }
@@ -224,7 +224,7 @@ class BaseClassReference extends StructsReference {
       let ref = this.namesRegistered.get(base_class.name);
       if(!ref) {
         ref = gdb.generateVariableReference();
-        const subScopeHandler = new BaseClassReference(ref, this.threadId, this.frameLevel, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassHierarchy, base_class.name]);
+        const subScopeHandler = new BaseClassReference(ref, this.threadId, this.evaluateName, this.stackFrameIdentifier, [...this.baseClassHierarchy, base_class.name]);
         gdb.references.set(
           ref,
           subScopeHandler

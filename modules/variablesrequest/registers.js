@@ -11,8 +11,8 @@ class RegistersReference extends VariablesReference {
   /** @type {VSCodeVariable[]}  */
   #registerVariables;
 
-  constructor(stackFrameId, threadId, frameLevel) {
-    super(stackFrameId, threadId, frameLevel);
+  constructor(stackFrameId, threadId) {
+    super(stackFrameId, threadId);
     this.#registerVariables = [];
   }
 
@@ -23,7 +23,8 @@ class RegistersReference extends VariablesReference {
    */
   async handleRequest(response, gdb) {
     // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    await gdb.selectStackFrame(this.frameLevel, this.threadId);
+    const frameLevel = super.getFrameLevel(gdb);
+    await gdb.selectStackFrame(frameLevel, this.threadId);
     let miResult = await gdb.execMI(`-data-list-register-values N ${gdb.generalPurposeRegCommandString}`);
     response.body = {
       variables: miResult["register-values"].map((res, index) => new DebugAdapter.Variable(gdb.registerFile[index], res.value)),

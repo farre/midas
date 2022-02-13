@@ -18,11 +18,10 @@ class StackFrameState {
   registeredLocalsNames = new Map();
   registeredArgsNames = new Map();
 
-  constructor(stackFrameVariableReference, argsVariableReference, threadId, frameLevel) {
+  constructor(stackFrameVariableReference, argsVariableReference, threadId) {
     this.#argsVariableReference = argsVariableReference;
     this.#stackFrameVariableReference = stackFrameVariableReference;
     this.#threadId = threadId;
-    this.frameLevel = frameLevel;
   }
 
   /**
@@ -30,7 +29,8 @@ class StackFrameState {
    * @returns
    */
   async getStackLocals(gdb) {
-    const locals = await gdb.getLocalsOf(this.#threadId, this.frameLevel, LocalsParameter.LOCALS);
+    const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
+    const locals = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.LOCALS);
     let result = [];
     for (const local of locals) {
       if (local.isPrimitive) {
@@ -39,7 +39,7 @@ class StackFrameState {
         let ref = this.registeredLocalsNames.get(local.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let topLevelStruct = new StructsReference(ref,this.#threadId,this.frameLevel,local.name, this.#stackFrameVariableReference );
+          let topLevelStruct = new StructsReference(ref,this.#threadId, local.name, this.#stackFrameVariableReference );
           this.registeredLocalsNames.set(local.name, ref);
           gdb.references.set(ref, topLevelStruct);
           gdb.getExecutionContext(this.#threadId).addTrackedVariableReference(ref, this.#stackFrameVariableReference);
@@ -56,7 +56,8 @@ class StackFrameState {
    * @returns
    */
   async getStackArgs(gdb) {
-    const args = await gdb.getLocalsOf(this.#threadId, this.frameLevel, LocalsParameter.ARGS);
+    const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
+    const args = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.ARGS);
     let result = [];
     for (const local of args) {
       if (local.isPrimitive) {
@@ -65,7 +66,7 @@ class StackFrameState {
         let ref = this.registeredArgsNames.get(local.name);
         if(!ref) {
           ref = gdb.generateVariableReference();
-          let topLevelStruct = new StructsReference( ref, this.#threadId, this.frameLevel, local.name, this.#stackFrameVariableReference);
+          let topLevelStruct = new StructsReference( ref, this.#threadId, local.name, this.#stackFrameVariableReference);
           this.registeredArgsNames.set(local.name, ref);
           gdb.references.set(ref, topLevelStruct);
           gdb.getExecutionContext(this.#threadId).addTrackedVariableReference(ref, this.#stackFrameVariableReference);
