@@ -44,7 +44,7 @@ class StructsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    const frameLevel = super.getFrameLevel(gdb);
+    const frameLevel = gdb.getExecutionContext(this.threadId).getFrameLevel(this.stackFrameIdentifier);
     let cmd_result = await gdb.getContentsOf(this.threadId, frameLevel, this.evaluateName);
     if(cmd_result) {
       response.body = {
@@ -183,6 +183,10 @@ class StructsReference extends VariablesReference {
       await gdb.execMI(`-var-delete ${vo_name}`);
       return err_response(response, `${namedObject} is not editable`);
     }
+  }
+
+  getFrameLevel(gdb) {
+    return gdb.getExecutionContext(this.threadId).getFrameLevel(this.stackFrameIdentifier);
   }
 }
 

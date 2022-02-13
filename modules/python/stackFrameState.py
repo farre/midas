@@ -1,4 +1,3 @@
-from xml.dom.expatbuilder import parseString
 import gdb
 import sys
 import json
@@ -10,126 +9,6 @@ import time
 # from .utils import getMembersRecursively, memberIsReference, selectThreadAndFrame, parseStringArgs, getFunctionBlock, static_display, typeIsPrimitive, display, prepareOutput, logExceptionBacktrace
 
 logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
-
-def getFunctionBlock(frame) -> gdb.Block:
-    block = frame.block()
-    while not block.superblock.is_static and not block.superblock.is_global:
-        block = block.superblock
-    if block.is_static or block.is_global:
-        return None
-    return block
-
-def logExceptionBacktrace(errmsg, exception):
-        logging.error("{} Exception info: {}".format(errmsg, exception))
-        logging.error(traceback.format_exc())
-
-def selectThreadAndFrame(threadId, frameLevel):
-    try:
-        gdb.execute("thread {}".format(threadId))
-        gdb.execute("frame {}".format(frameLevel))
-    except Exception as e:
-        logExceptionBacktrace("Selecting thread and frame failed.", e)
-
-def parseStringArgs(arg):
-    return gdb.string_to_argv(arg)
-
-def prepareOutput(cmdName, contents):
-    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
-
-def typeIsPrimitive(valueType):
-    try:
-        for f in valueType.fields():
-            if hasattr(f, "enumval"):
-                return True
-            else:
-                return False
-    except TypeError:
-        return True
-
-def memberIsReference(type):
-    code = type.code
-    return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
-
-def getMembersRecursively(field, memberList, statics):
-    if field.bitsize > 0:
-        logging.info("field {} is possibly a bitfield of size {}".format(field.name, field.bitsize))
-    if hasattr(field, 'bitpos'):
-        if field.is_base_class:
-            for f in field.type.fields():
-                getMembersRecursively(f, memberList=memberList, statics=statics)
-        else:
-            if field.name is not None and not field.name.startswith("_vptr"):
-                memberList.append(field.name)
-    else:
-        statics.append(field.name)
-
-def getMembers(field, memberList, statics, baseclasses):
-    if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-        memberList.append(field.name)
-    elif field.is_base_class:
-        baseclasses.append(field.name)
-    elif not hasattr(field, "bitpos"):
-        statics.append(field.name)
-
-
-def getValue(value):
-    print("Trying to get value of {0}".format(value))
-    if memberIsReference(value.type):
-        try:
-            v = value.referenced_value()
-            return v
-        except gdb.MemoryError:
-            return value
-    else:
-        return value
-
-def getElement(key, map):
-    try:
-        r = map[key]
-        return r
-    except KeyError:
-        return None
-
-def getMemberValue(path):
-    pathComponents = path.split(".")
-    parent = pathComponents[0]
-    try:
-        it = gdb.parse_and_eval(parent)
-        pathComponents = pathComponents[1:]
-        if len(pathComponents):
-            return it
-        for path in pathComponents:
-            curr = getElement(path, it)
-            if curr is None:
-                return None
-            it = curr
-        
-        return it
-    except gdb.error:
-        return None
-
-def display(name, value, isPrimitive):
-    try:
-        if value.type.code == gdb.TYPE_CODE_PTR:
-            if isPrimitive:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value), "isPrimitive": isPrimitive, "static": False }
-            else:
-                return { "name": name, "display": "<{}> {}".format(value.dereference().address, value.type), "isPrimitive": isPrimitive, "static": False }
-        else:
-            if isPrimitive:
-                return { "name": name, "display": "{}".format(value), "isPrimitive": isPrimitive, "static": False }
-            else:
-                return { "name": name, "display": "{}".format(value.type), "isPrimitive": isPrimitive, "static": False }
-    except:
-        return { "name": name, "display": "<invalid address> {}".format(value.type), "isPrimitive": isPrimitive, "static": False }
-
-def base_class_display(name, type):
-    return { "name": name, "display": "{} (base)".format(type) }
-
-def static_display(name, type):
-    isPrimitive = True if type.tag is None else False
-    typeName = type.tag if type.tag is not None else type
-    return { "name": name, "display": "static {}".format(typeName), "isPrimitive": isPrimitive, "static": True }
 
 class ContentsOfStatic(gdb.Command):
     def __init__(self):
@@ -183,12 +62,11 @@ class ContentsOfBaseClass(gdb.Command):
         self.name = "get-contents-of-base-class"
     
     def invoke(self, arguments, from_tty):
-        logging.info("Arguments: {}".format(arguments))
+        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
         selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         base_classes = parseStringArgs(base_classes)
-        logging.info("parsing expression '{}' and it's baseclasses: {}".format(expression, base_classes))
         it = gdb.parse_and_eval(components[0])
         for c in components[1:]:
             it = it[c]
@@ -206,15 +84,9 @@ class ContentsOfBaseClass(gdb.Command):
         baseclasses = []
         fields = []
         result = {"members": [], "statics": [], "base_classes": [ ]}
-        currentBc = None
-        currentTypeName = None
         try:
             typeIterator = it.type
             for bc in map(lambda bc: bc.replace("_*_*_", " "), base_classes):
-                # --- debug purposes ---
-                currentBc = bc
-                currentTypeName = typeIterator.name
-                # /// debug purposes ///
                 typeIterator = typeIterator[bc].type
                 it = it.cast(typeIterator)
 
@@ -236,14 +108,15 @@ class ContentsOfBaseClass(gdb.Command):
             
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
+            invokeEnd = time.perf_counter_ns()
             sys.stdout.write(msg)
             sys.stdout.flush()
+            logging.info("ContentsOfBaseClass for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for f in fields:
                 fieldsNames.append("{}".format(f.name))
-            logging.error("Current type {} -> couldn't go to next type {}. Exception: {} | {}".format(currentTypeName, currentBc, extype, exvalue))
             res = json.dumps(None, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
             sys.stdout.write(msg)
@@ -251,16 +124,32 @@ class ContentsOfBaseClass(gdb.Command):
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
+recentSymbols = {}
+
+# If we're parsing something that we know lives in the local frame, this is twice as fast than gdb.parse_and_eval(name). 
+# As we say in Swedish; många bäckar små.
+def getClosest(frame, name):
+    block = frame.block()
+    while (not block.is_static) and (not block.superblock.is_global):
+        for symbol in block:
+            if symbol.name == name:
+                return symbol.value(frame)
+        block = block.superblock
+    return None
+
+
 class ContentsOf(gdb.Command):
     def __init__(self):
         super(ContentsOf, self).__init__("gdbjs-get-contents-of", gdb.COMMAND_USER)
         self.name = "get-contents-of"
 
     def invoke(self, arguments, from_tty):
+        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
         selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
-        it = gdb.parse_and_eval(components[0])
+        frame = gdb.selected_frame()
+        it = getClosest(frame, components[0])
         for component in components[1:]:
             it = it[component]
         if it.type.code == gdb.TYPE_CODE_PTR:
@@ -270,14 +159,14 @@ class ContentsOf(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            logging.error("Couldn't dereference value {}".format(expression))
+            logging.error("Couldn't dereference value {}; {}".format(expression, e))
             raise e
 
         members = []
         statics = []
         baseclasses = []
         fields = []
-        result = {"members": [], "statics": [], "base_classes": [ ]}
+        result = { "members": [], "statics": [], "base_classes": [] }
         try:
             fields = it.type.fields()
             for f in fields:
@@ -297,8 +186,10 @@ class ContentsOf(gdb.Command):
             
             res = json.dumps(result, ensure_ascii=False)
             msg = prepareOutput(self.name, res)
+            invokeEnd = time.perf_counter_ns()
             sys.stdout.write(msg)
             sys.stdout.flush()
+            logging.info("ContentsOf for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
