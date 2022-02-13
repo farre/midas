@@ -596,6 +596,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       case "set-watchpoint":
         await this.gdb.setReadWatchPoint(args.location);
         break;
+      case "hot-reload-scripts":
+        try {
+          await this.gdb.setup();
+          console.log(`Successfully hot reloaded scripts`);
+        } catch(err) {
+          console.log(`failed to reload scripts ${err}`);
+        }
       default:
         vscode.window.showInformationMessage(`Unknown request: ${command}`);
     }
@@ -656,6 +663,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // terminal where rr has been started in
   registerTerminal(terminal) {
     this.#terminal = terminal;
+  }
+
+  reloadScripts() {
+    this.gdb.setup();
   }
 }
 

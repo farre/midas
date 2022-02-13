@@ -45,7 +45,7 @@ class StaticsReference extends VariablesReference {
    * @returns { Promise<VariablesResponse> }
    */
   async handleRequest(response, gdb) {
-    const frameLevel = super.getFrameLevel(gdb);
+    const frameLevel = gdb.getExecutionContext(this.threadId).getFrameLevel(this.stackFrameIdentifier);
     let result = []
     let children = await gdb.getContentsOfStatic(this.threadId, frameLevel, this.evaluateName);
     for(const child of children) {

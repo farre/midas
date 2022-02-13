@@ -61,7 +61,11 @@ function getVSCodeCommands() {
     vscode.debug.activeDebugSession.customRequest("set-watchpoint", { location: `${container.evaluateName}.${variable.name}` });
   });
 
-  return [rrRecord, continueAll, pauseAll, reverseFinish, watch];
+  let hotReloadScripts = registerCommand("midas.hot-reload-scripts", () => {
+    vscode.debug.activeDebugSession.customRequest("hot-reload-scripts");
+  });
+
+  return [rrRecord, continueAll, pauseAll, reverseFinish, watch, hotReloadScripts];
 }
 
 module.exports = {

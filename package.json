@@ -61,6 +61,11 @@
         "title": "Set read-access watchpoint",
         "shortTitle": "Watch variable",
         "icon": "$(eye-watch)"
+      },
+      {
+        "command": "midas.hot-reload-scripts",
+        "title": "Re-initializes Midas",
+        "shortTitle": "Re-initialize"
       }
     ],
     "menus": {

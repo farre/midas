@@ -5,7 +5,6 @@ import gdb.types
 import traceback
 import logging
 
-logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
 
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
@@ -47,6 +46,8 @@ def memberIsReference(type):
     return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
 def getMembersRecursively(field, memberList, statics):
+    if field.bitsize > 0:
+        logging.info("field {} is possibly a bitfield of size {}".format(field.name, field.bitsize))
     if hasattr(field, 'bitpos'):
         if field.is_base_class:
             for f in field.type.fields():
@@ -55,6 +56,14 @@ def getMembersRecursively(field, memberList, statics):
             if field.name is not None and not field.name.startswith("_vptr"):
                 memberList.append(field.name)
     else:
+        statics.append(field.name)
+
+def getMembers(field, memberList, statics, baseclasses):
+    if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
+        memberList.append(field.name)
+    elif field.is_base_class:
+        baseclasses.append(field.name)
+    elif not hasattr(field, "bitpos"):
         statics.append(field.name)
 
 def getValue(value):
@@ -75,25 +84,10 @@ def getElement(key, map):
     except KeyError:
         return None
 
-def getMemberValue(path):
-    pathComponents = path.split(".")
-    parent = pathComponents[0]
-    try:
-        it = gdb.parse_and_eval(parent)
-        pathComponents = pathComponents[1:]
-        if len(pathComponents):
-            return it
-        for path in pathComponents:
-            curr = getElement(path, it)
-            if curr is None:
-                return None
-            it = curr
-        
-        return it
-    except gdb.error:
-        return None
-
 def display(name, value, isPrimitive):
+    if value.is_optimized_out:
+        # we set all optimized values to primitives, because we don't want a scope for them in VSCode
+        return { "name": name, "display": "<optimized out>", "isPrimitive": True, "static": False }
     try:
         if value.type.code == gdb.TYPE_CODE_PTR:
             if isPrimitive:
@@ -108,5 +102,10 @@ def display(name, value, isPrimitive):
     except:
         return { "name": name, "display": "<invalid address> {}".format(value.type), "isPrimitive": isPrimitive, "static": False }
 
-def static_display(name, value, isPrimitive):
-    return { "name": name, "display": "{} (static)".format(value.type), "isPrimitive": isPrimitive, "static": True }
+def base_class_display(name, type):
+    return { "name": name, "display": "{} (base)".format(type) }
+
+def static_display(name, type):
+    isPrimitive = True if type.tag is None else False
+    typeName = type.tag if type.tag is not None else type
+    return { "name": name, "display": "static {}".format(typeName), "isPrimitive": isPrimitive, "static": True }
