@@ -103,7 +103,7 @@ class ConfigurationProvider {
   async resolveDebugConfiguration(folder, config, token) {
     // if launch.json is missing or empty
     if (!config || !config.type || config.type == undefined) {
-      await vscode.window.showErrorMessage("Cannot start debugging because no launcdh configuration has been provided.");
+      await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
       return null;
     }
     setDefaults(config);
@@ -113,8 +113,8 @@ class ConfigurationProvider {
     }
 
     if(config.mode == "rr") {
-      if(!config.replay) {
-        await vscode.window.showErrorMessage("You need to set replay settings rrPath and rrServerAddress");
+      if(!config.serverAddress) {
+        await vscode.window.showErrorMessage("You need to set the serverAddress field, for the network path rr listens on");
         return null;
       }
       const options = {
@@ -186,7 +186,7 @@ class DebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     if(session.configuration.mode == "rr") {
-      let miServerAddress = session.configuration.replay.rrServerAddress;
+      let miServerAddress = session.configuration.serverAddress;
       const rrPath = session.configuration.replay.rrPath;
       const pid = session.configuration.replay.parameters.pid;
       const traceWorkspace = session.configuration.replay.parameters.traceWorkspace;

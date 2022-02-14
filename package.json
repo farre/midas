@@ -149,22 +149,21 @@
                 "enum": ["gdb", "rr"],
                 "enumDescriptions": [
                   "Launch normal GDB debug session",
-                  "Launch GDB debug session against rr replay. To run in this mode you need to set the 'replay' field's values."
+                  "Launch GDB debug session against rr replay. To run in this mode you need to set the serverAddress field."
                 ]
+              },
+              "serverAddress": {
+                "type": "string",
+                "description": "Connection string to GDB server that rr spawns. Format is host:port",
+                "default": "127.0.0.1:50505"
               },
               "replay": {
                 "type": "object",
-                "required": ["rrPath", "rrServerAddress"],
                 "properties": {
                   "rrPath": {
                     "type": "string",
                     "description": "Path to rr. Defaults to trying to execute rr in $PATH",
                     "default": "rr"
-                  },
-                  "rrServerAddress": {
-                    "type": "string",
-                    "description": "Connection string to GDB server that rr spawns. Format is host:port",
-                    "default": "127.0.0.1:50505"
                   },
                   "traceWorkspace": {
                     "type": "string",
@@ -235,8 +234,7 @@
               "mode": "rr",
               "replay": {
                 "rrPath": "rr",
-                "rrServerAddress": "localhost:50505",
-                "startEventRequest": false
+                "rrServerAddress": "localhost:50505"
               }
             }
           }

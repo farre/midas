@@ -101,8 +101,8 @@ const DefaultRRSpawnArgs = [
   "set sysroot /",
 ];
 
-function spawnRRGDB(gdbPath, binary, replayConfig, cwd) {
-  const args = [...DefaultRRSpawnArgs, "-ex", `target extended-remote ${replayConfig.rrServerAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
+function spawnRRGDB(gdbPath, binary, serverAddress, cwd) {
+  const args = [...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
   return spawn(gdbPath, args);
 }
 
@@ -159,7 +159,7 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.replay, args.cwd);
+          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.serverAddress, args.cwd);
           gdbProcess = gdb;
           return gdb;
         } else {
