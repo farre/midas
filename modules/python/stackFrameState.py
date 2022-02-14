@@ -49,10 +49,7 @@ class ContentsOfStatic(gdb.Command):
                 result.append(item)
         except:
             result.append({ "name": "static value", "display": "{}".format(it), "isPrimitive": True, "static": True })
-        res = json.dumps(result, ensure_ascii=False)
-        msg = prepareOutput(self.name, res)
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        output(self.name, result)
 
 contentsOfStaticCommand = ContentsOfStatic()
 
@@ -60,7 +57,7 @@ class ContentsOfBaseClass(gdb.Command):
     def __init__(self):
         super(ContentsOfBaseClass, self).__init__("gdbjs-get-contents-of-base-class", gdb.COMMAND_USER)
         self.name = "get-contents-of-base-class"
-    
+
     def invoke(self, arguments, from_tty):
         invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
@@ -105,22 +102,16 @@ class ContentsOfBaseClass(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 result["base_classes"].append(item)
-            
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
+
             invokeEnd = time.perf_counter_ns()
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, result)
             logging.info("ContentsOfBaseClass for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for f in fields:
                 fieldsNames.append("{}".format(f.name))
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, None)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
@@ -183,12 +174,9 @@ class ContentsOf(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 result["base_classes"].append(item)
-            
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
+
             invokeEnd = time.perf_counter_ns()
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, result)
             logging.info("ContentsOf for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
@@ -196,10 +184,7 @@ class ContentsOf(gdb.Command):
             for f in fields:
                 fieldsNames.append("{}".format(f.name))
             logging.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}\nRecursively found members: {} \t statics: {}\n".format(expression, extype, exvalue, fieldsNames, members, statics))
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, None)
 
 
 updatesOfCommand = ContentsOf()
@@ -246,15 +231,9 @@ class GetLocals(gdb.Command):
                             names.remove(name)
                 block = block.superblock
 
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, result)
         except Exception as e:
             logExceptionBacktrace("Exception thrown in GetLocals.invoke", e)
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, None)
 
 getLocalsCommand = GetLocals()

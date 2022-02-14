@@ -184,7 +184,7 @@ function GDBMixin(GDBBase) {
       // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
       const ext = vscode.extensions.getExtension("farrese.midas");
       const dir = `${ext.extensionPath}/modules/python`;
-      const scripts = ["utils.py", "stackFrameState.py"]
+      const scripts = ["utils.py", "stackFrameState.py", "buildStackTrace.py"]
 
       for(const script of scripts.map(f => require("fs").readFileSync(`${dir}/${f}`, { encoding: 'utf8' }))) {
         if(!script || script.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
@@ -217,9 +217,9 @@ function GDBMixin(GDBBase) {
      * @param {number} frameLevel 
      * @param {number} expression 
      * @param {string[]} baseClassHierarchy - a list of base classes, in ascending order of the hierarchy.
-     * @returns 
+     * @returns
      */
-    async getContentsOfBaseClass(threadId, frameLevel, expression, baseClassHierarchy) { 
+    async getContentsOfBaseClass(threadId, frameLevel, expression, baseClassHierarchy) {
       let baseClassHierarchyParameter = "";
       if(baseClassHierarchy.length == 1) {
         baseClassHierarchyParameter = `'${baseClassHierarchy[0].replaceAll(" ", "_*_*_")}'`;
@@ -227,6 +227,14 @@ function GDBMixin(GDBBase) {
         baseClassHierarchyParameter = `'${baseClassHierarchy.map(name => `${name.replaceAll(" ", "_*_*_")}`).join(" ")}'`
       }
       return await this.execCMD(`get-contents-of-base-class ${threadId} ${frameLevel} ${expression} ${baseClassHierarchyParameter}`);
+    }
+
+    async getStackTrace(threadId, start, levels) {
+      return await this.execCMD(`request-stackframes ${threadId} ${start} ${levels}`);
+    }
+
+    async getTopFrame(threadId) {
+      return await this.execCMD(`get-top-frame ${threadId}`);
     }
 
   };

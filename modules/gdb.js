@@ -4,6 +4,7 @@ const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
 const { Source, ContinuedEvent } = require("@vscode/debugadapter");
+const { performance } = require('perf_hooks');
 const path = require("path");
 const {
   InitializedEvent,
@@ -30,6 +31,15 @@ function log(location, payload) {
     return;
   }
   console.log(`[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
+}
+
+let TIMER_ID = 0;
+
+function timerName(name) {
+  let timer_id = TIMER_ID;
+  const timerName = `${name}${timer_id}`;
+  TIMER_ID++;
+  return timerName;
 }
 
 /** @typedef { { addr: string, disp: string, enabled: string, file: string, fullname: string, func: string, line: string, number: string, "original-location": string, "thread-groups": string[], times: string, type: string } } GDBBreakpoint */
@@ -531,40 +541,74 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async buildExecutionState(threadId) {
-    let frame = await this.getCurrentFrameInfo(threadId);
-    let stackStartAddress = await this.readRBP(threadId);
     let ec = this.getExecutionContext(threadId);
-    if (ec.isSameContextAsCurrent(stackStartAddress, frame.func)) {
-      ec.stack[0].line = +frame.line;
-    } else {
-      const start = await ec.setNewContext(stackStartAddress, frame.func, this);
-      let frames = await this.getStack(start, 20 - start, threadId);
-      for (let frame of frames) {
-        const argsVarRef = this.nextVarRef;
-        const frameIdVarRef = this.nextVarRef;
-        const registerVarRef = this.nextVarRef;
-        let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
-        this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId));
-        this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, argsVarRef, registerVarRef, state));
-        this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, state));
-        ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
-        ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
-
-        let src = null;
-        if (frame.file && frame.line) {
-          src = new Source(frame.file, frame.fullname);
-        }
-
-        let r = new StackFrame(frameIdVarRef, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-        r.func = frame.func;
-        ec.pushStackFrame(r, state);
-        let level = 0;
-        for (let s of ec.stack) {
-          const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-          s.stackAddressStart = stackAddressStart;
-        }
-        await this.selectStackFrame(0, ec.threadId);
+    let frame = await this.getTopFrame(threadId);
+    if(frame) {
+      if (ec.isSameContextAsCurrent(frame.stackStartAddress, frame.name)) {
+        ec.stack[0].line = +frame.line;
+      } else {
+        const start = await ec.setNewContext(frame.stackStartAddress, frame.name, this);
+        const timer_name = timerName("buildExecutionState");
+        console.time(timer_name);
+        await this.newBuildExecutionState(threadId, start);
+        console.timeEnd(timer_name);
       }
+    } else {
+      await ec.clear(this);
+      const start = 0;
+      const timer_name = timerName("buildExecutionState");
+      console.time(timer_name);
+      await this.newBuildExecutionState(threadId, start);
+      console.timeEnd(timer_name);
+    }
+  }
+
+  async oldBuildExecutionState(threadId, start) {
+    let ec = this.getExecutionContext(threadId);
+    let frames = await this.getStack(start, 20 - start, threadId);
+    for (let frame of frames) {
+      const argsVarRef = this.nextVarRef;
+      const frameIdVarRef = this.nextVarRef;
+      const registerVarRef = this.nextVarRef;
+      let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
+      this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId));
+      this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, argsVarRef, registerVarRef, state));
+      this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, state));
+      ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
+      ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
+
+      let src = null;
+      if (frame.file && frame.line) {
+        src = new Source(frame.file, frame.fullname);
+      }
+
+      let r = new StackFrame(frameIdVarRef, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
+      r.func = frame.func;
+      ec.pushStackFrame(r, state);
+      let level = 0;
+      for (let s of ec.stack) {
+        const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
+        s.stackAddressStart = stackAddressStart;
+      }
+      await this.selectStackFrame(0, ec.threadId);
+    }
+  }
+
+  async newBuildExecutionState(threadId, start)  {
+    let ec = this.getExecutionContext(threadId);
+    let frames = await this.getStackTrace(threadId, start, 20 - start);
+    for(let f of frames) {
+      const argsVarRef = this.nextVarRef;
+      const frameIdVarRef = this.nextVarRef;
+      const registerVarRef = this.nextVarRef;
+      let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
+      this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId));
+      this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, argsVarRef, registerVarRef, state));
+      this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, state));
+      ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
+      ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
+      f.id = frameIdVarRef;
+      ec.pushStackFrame(f, state)
     }
   }
 
@@ -1061,13 +1105,20 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async requestMoreFrames(threadId, levels) {
+    const timer_name = timerName("requestMoreFrames");
+    console.time(timer_name);
+    let res = await this.newRequestMoreFrames(threadId, levels);
+    console.timeEnd(timer_name);
+    return res;
+  }
+
+  async oldRequestMoreFrames(threadId, levels) {
     let ec = this.getExecutionContext(threadId);
     try {
       // getStack throws if we're trying to request frames that do not exist.
       let frames = await this.getStack(ec.stack.length, levels, threadId);
       let result = [];
       let states = [];
-      let frameLevel = ec.stack.length;
       for (let frame of frames) {
         const stackFrameArgsIdentifier = this.nextVarRef;
         const stackFrameIdentifier = this.nextVarRef;
@@ -1076,7 +1127,6 @@ class GDB extends GDBMixin(GDBBase) {
         let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId);
         this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
         this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, state));
-
         ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
         ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
         let src = null;
@@ -1101,6 +1151,25 @@ class GDB extends GDBMixin(GDBBase) {
       console.log(e);
       return [];
     }
+  }
+
+  async newRequestMoreFrames(threadId, levels) {
+    let ec = this.getExecutionContext(threadId);
+    let frames = await this.getStackTrace(threadId, ec.stack.length, levels);
+    for (let frame of frames) {
+      const stackFrameArgsIdentifier = this.nextVarRef;
+      const stackFrameIdentifier = this.nextVarRef;
+      const registerScopeVariablesReference = this.nextVarRef;
+      this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId));
+      let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId);
+      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
+      this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, state));
+      ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
+      ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
+      frame.id = stackFrameIdentifier
+      ec.pushStackFrame(frame, state);
+    }
+    return frames;
   }
 
 }

@@ -75,7 +75,7 @@ class ExecutionState {
   }
 
   currentFunction() {
-    return this.stack[0].func;
+    return this.stack[0].name;
   }
 
   currentStackAddressStart() {
@@ -98,7 +98,7 @@ class ExecutionState {
   }
 
   async setNewContext(stackStartAddress, func, gdb) {
-    let indexOfFrame = this.stack.findIndex(frame => frame.func == func && frame.stackAddressStart == stackStartAddress);
+    let indexOfFrame = this.stack.findIndex(frame => frame.name == func && frame.stackAddressStart == stackStartAddress);
     if (indexOfFrame != -1) {
       const levelsToClean = this.stack.splice(0, indexOfFrame);
       this.#stackFrameLevelsToStackFrameIdentifiers = this.#stackFrameLevelsToStackFrameIdentifiers.slice(indexOfFrame);

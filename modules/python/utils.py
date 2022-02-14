@@ -31,6 +31,12 @@ def parseStringArgs(arg):
 def prepareOutput(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
 
+def output(name, result):
+    res = json.dumps(result, ensure_ascii=False)
+    msg = prepareOutput(name, res)
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+
 def typeIsPrimitive(valueType):
     try:
         for f in valueType.fields():
