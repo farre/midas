@@ -6,9 +6,46 @@ import traceback
 import logging
 import time
 
-# from .utils import getMembersRecursively, memberIsReference, selectThreadAndFrame, parseStringArgs, getFunctionBlock, static_display, typeIsPrimitive, display, prepareOutput, logExceptionBacktrace
+# Midas Terminology
+# Execution Context: Thread (id) and Frame (level)
 
 logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
+
+# Registers the current execution context
+class ExecutionContextRegister:
+    inferior = None
+    def __init__(self):
+        self.threadId = -1
+        self.frameLevel = -1
+        ExecutionContextRegister.inferior = gdb.selected_inferior()
+
+    def set_thread(self, threadId):
+        if self.threadId != threadId:
+            logging.info("changing thread {} -> {}".format(self.threadId, threadId))
+            for t in ExecutionContextRegister.inferior.threads():
+                if t.num == threadId:
+                    t.switch()
+                    self.threadId = t.num
+                    return t
+        else:
+            return gdb.selected_thread()
+
+    def set_frame(self, level):
+        if self.frameLevel != level:
+            logging.info("changing frame {} -> {}".format(self.frameLevel, level))
+            gdb.execute("frame {}".format(level))
+            frame = gdb.selected_frame()
+            self.frameLevel = frame.level()
+            return frame
+        else:
+            return gdb.selected_frame()
+
+    def set_context(self, threadId, frameLevel):
+        t = self.set_thread(threadId=threadId)
+        f = self.set_frame(level=frameLevel)
+        return (t, f)
+
+executionContext = ExecutionContextRegister()
 
 class ContentsOfStatic(gdb.Command):
     def __init__(self):
@@ -17,7 +54,7 @@ class ContentsOfStatic(gdb.Command):
     
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
-        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         it = gdb.parse_and_eval(components[0])
 
@@ -49,10 +86,7 @@ class ContentsOfStatic(gdb.Command):
                 result.append(item)
         except:
             result.append({ "name": "static value", "display": "{}".format(it), "isPrimitive": True, "static": True })
-        res = json.dumps(result, ensure_ascii=False)
-        msg = prepareOutput(self.name, res)
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        output(self.name, result)
 
 contentsOfStaticCommand = ContentsOfStatic()
 
@@ -60,11 +94,11 @@ class ContentsOfBaseClass(gdb.Command):
     def __init__(self):
         super(ContentsOfBaseClass, self).__init__("gdbjs-get-contents-of-base-class", gdb.COMMAND_USER)
         self.name = "get-contents-of-base-class"
-    
+
     def invoke(self, arguments, from_tty):
         invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
-        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         base_classes = parseStringArgs(base_classes)
         it = gdb.parse_and_eval(components[0])
@@ -83,7 +117,10 @@ class ContentsOfBaseClass(gdb.Command):
         statics = []
         baseclasses = []
         fields = []
-        result = {"members": [], "statics": [], "base_classes": [ ]}
+        staticResult = []
+        memberResults = []
+        baseClassResult = []
+
         try:
             typeIterator = it.type
             for bc in map(lambda bc: bc.replace("_*_*_", " "), base_classes):
@@ -93,40 +130,30 @@ class ContentsOfBaseClass(gdb.Command):
             fields = typeIterator.fields()
             for f in fields:
                 getMembers(f, memberList=members, statics=statics, baseclasses=baseclasses)
-            
+
             for member in members:
                 item = display(member, it[member], typeIsPrimitive(it[member].type))
-                result["members"].append(item)
-            
+                memberResults.append(item)
+
             for static in statics:
                 item = static_display(static, it.type[static].type)
-                result["statics"].append(item)
+                staticResult.append(item)
 
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
-                result["base_classes"].append(item)
-            
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
+                baseClassResult.append(item)
+
             invokeEnd = time.perf_counter_ns()
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            result = {"members": memberResults, "statics": staticResult, "base_classes": baseClassResult }
+            output(self.name, result)
             logging.info("ContentsOfBaseClass for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
-            extype, exvalue, extraceback = sys.exc_info()
-            fieldsNames = []
-            for f in fields:
-                fieldsNames.append("{}".format(f.name))
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            logging.error("Couldn't get base class contents")
+            output(self.name, None)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
-recentSymbols = {}
-
-# If we're parsing something that we know lives in the local frame, this is twice as fast than gdb.parse_and_eval(name). 
+# If we're parsing something that we know lives in the local frame, this is twice as fast than gdb.parse_and_eval(name).
 # As we say in Swedish; många bäckar små.
 def getClosest(frame, name):
     block = frame.block()
@@ -137,7 +164,6 @@ def getClosest(frame, name):
         block = block.superblock
     return None
 
-
 class ContentsOf(gdb.Command):
     def __init__(self):
         super(ContentsOf, self).__init__("gdbjs-get-contents-of", gdb.COMMAND_USER)
@@ -146,60 +172,54 @@ class ContentsOf(gdb.Command):
     def invoke(self, arguments, from_tty):
         invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
-        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         components = expression.split(".")
-        frame = gdb.selected_frame()
         it = getClosest(frame, components[0])
         for component in components[1:]:
             it = it[component]
         if it.type.code == gdb.TYPE_CODE_PTR:
             it = it.dereference()
-        
         try:
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
             logging.error("Couldn't dereference value {}; {}".format(expression, e))
             raise e
-
-        members = []
-        statics = []
-        baseclasses = []
         fields = []
+
+        memberResults = []
+        staticsResults = []
+        baseClassResults = []
         result = { "members": [], "statics": [], "base_classes": [] }
         try:
             fields = it.type.fields()
-            for f in fields:
-                getMembers(f, memberList=members, statics=statics, baseclasses=baseclasses)
-            
-            for member in members:
-                item = display(member, it[member], typeIsPrimitive(it[member].type))
-                result["members"].append(item)
-            
-            for static in statics:
-                item = static_display(static, it.type[static].type)
-                result["statics"].append(item)
+            for field in fields:
+                if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
+                    # members.append(field.name)
+                    item = display(field.name, it[field.name], typeIsPrimitive(it[field.name].type))
+                    memberResults.append(item)
+                elif field.is_base_class:
+                    # baseclasses.append(field.name)
+                    item = base_class_display(field.name, it.type[field.name].type)
+                    baseClassResults.append(item)
+                elif not hasattr(field, "bitpos"):
+                    # statics.append(field.name)
+                    item = static_display(field.name, it.type[field.name].type)
+                    staticsResults.append(item)
 
-            for baseclass in baseclasses:
-                item = base_class_display(baseclass, it.type[baseclass].type)
-                result["base_classes"].append(item)
-            
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
+            result["members"] = memberResults
+            result["base_classes"] = baseClassResults
+            result["statics"] = staticsResults
             invokeEnd = time.perf_counter_ns()
-            sys.stdout.write(msg)
-            sys.stdout.flush()
-            logging.info("ContentsOf for {} took {}ns".format(expression, invokeEnd-invokeBegin))
+            output(self.name, result)
+            logging.info("ContentsOf for {} took {}ns.".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
-            for f in fields:
-                fieldsNames.append("{}".format(f.name))
-            logging.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}\nRecursively found members: {} \t statics: {}\n".format(expression, extype, exvalue, fieldsNames, members, statics))
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            for field in fields:
+                fieldsNames.append("{}".format(field.name))
+            logging.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
+            output(self.name, None)
 
 
 updatesOfCommand = ContentsOf()
@@ -214,20 +234,25 @@ def parseScopeParam(scope):
     elif scope == "registers":
         raise NotImplementedError()
     else:
-        raise NotImplementedError() 
+        raise NotImplementedError()
 
 class GetLocals(gdb.Command):
+    lastThreadId = -1
+    lastFrameLevel = -1
+
+    def same_context(threadId, frameLevel):
+        return GetLocals.lastThreadId == threadId and GetLocals.lastFrameLevel == frameLevel
 
     def __init__(self):
         super(GetLocals, self).__init__("gdbjs-get-locals", gdb.COMMAND_USER)
         self.name = "get-locals"
 
     def invoke(self, arguments, from_tty):
+        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, scope] = parseStringArgs(arguments)
+        (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         predicate = parseScopeParam(scope)
-        selectThreadAndFrame(threadId=threadId, frameLevel=frameLevel)
         try:
-            frame = gdb.selected_frame()
             block = frame.block()
             names = set()
             result = []
@@ -245,16 +270,11 @@ class GetLocals(gdb.Command):
                             logExceptionBacktrace("Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
-
-            res = json.dumps(result, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            invokeEnd = time.perf_counter_ns()
+            output(self.name, result)
+            logging.info("GetLocals took {}ns".format(invokeEnd-invokeBegin))
         except Exception as e:
             logExceptionBacktrace("Exception thrown in GetLocals.invoke", e)
-            res = json.dumps(None, ensure_ascii=False)
-            msg = prepareOutput(self.name, res)
-            sys.stdout.write(msg)
-            sys.stdout.flush()
+            output(self.name, None)
 
 getLocalsCommand = GetLocals()

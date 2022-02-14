@@ -107,6 +107,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsDisassembleRequest = true;
     response.body.supportsSteppingGranularity = true;
     response.body.supportsInstructionBreakpoints = true;
+
+    // we'll use this to brute force VSCode to not request 20 stack frames. N.B: does not work.
+    // response.body.supportsDelayedStackTraceLoading = true;
     this.sendResponse(response);
   }
 
@@ -192,18 +195,19 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async stackTraceRequest(response, args) {
     let ec = this.gdb.getExecutionContext(args.threadId);
+    // this is an unfortunate hack, since VSCode double-fires this request, possibly a VSCode bug.
     await ec.pendingStackTrace;
     ec.pendingStackTrace = new Promise(async resolve => {
       let exec_ctx = this.gdb.executionContexts.get(args.threadId);
       if (args.startFrame == 0) {
-        await this.gdb.buildExecutionState(args.threadId);
+        await this.gdb.buildExecutionState(args.threadId, args.levels);
         response.body = {
           stackFrames: exec_ctx.stack,
         };
       } else {
         const frames = await this.gdb.requestMoreFrames(args.threadId, args.levels);
         response.body = {
-          stackFrames: frames,
+          stackFrames: frames
         };
       }
       this.sendResponse(response);
