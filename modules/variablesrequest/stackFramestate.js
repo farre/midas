@@ -32,7 +32,8 @@ class StackFrameState {
     const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
     const locals = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.LOCALS);
     if(!locals) {
-      console.error("Expected output from getLocalOf(locals). Got none.")
+      // eslint-disable-next-line max-len
+      console.error("Expected output from getLocalOf(locals), got none. If you see this message, from inside the rr 'trampoline' (pre-main) you can ignore it. We have no symbols or stack for that context");
       return [];
     }
     let result = [];
@@ -63,7 +64,8 @@ class StackFrameState {
     const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
     const args = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.ARGS) ?? [];
     if(!args) {
-      console.error("Expected output from getLocalOf(args). Got none.")
+      // eslint-disable-next-line max-len
+      console.error("Expected output from getLocalOf(args), got none. If you see this message, from inside the rr 'trampoline' (pre-main) you can ignore it. We have no symbols or stack for that context");
       return [];
     }
     let result = [];

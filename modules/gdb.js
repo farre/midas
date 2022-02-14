@@ -744,7 +744,6 @@ class GDB extends GDBMixin(GDBBase) {
    */
   #onNotifyThreadCreated(payload) {
     // this does nothing, handled by onThreadCreated
-    console.log(`${JSON.stringify(payload)}`);
   }
 
   /**
