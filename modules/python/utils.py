@@ -19,17 +19,20 @@ def logExceptionBacktrace(errmsg, exception):
         logging.error(traceback.format_exc())
 
 def selectThreadAndFrame(threadId, frameLevel):
-    try:
-        gdb.execute("thread {}".format(threadId))
-        gdb.execute("frame {}".format(frameLevel))
-    except Exception as e:
-        logExceptionBacktrace("Selecting thread and frame failed.", e)
+    gdb.execute("thread {}".format(threadId))
+    gdb.execute("frame {}".format(frameLevel))
 
 def parseStringArgs(arg):
     return gdb.string_to_argv(arg)
 
 def prepareOutput(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
+
+def output(name, result):
+    res = json.dumps(result, ensure_ascii=False)
+    msg = prepareOutput(name, res)
+    sys.stdout.write(msg)
+    sys.stdout.flush()
 
 def typeIsPrimitive(valueType):
     try:
