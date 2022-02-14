@@ -825,6 +825,15 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
+    const { enabled, line } = payload.bkpt;
+    const num = payload.bkpt.number;
+    const bp = {
+      line: line,
+      id: +num,
+      verified: true,
+      enabled: enabled == "y",
+    };
+    this.#target.sendEvent(new BreakpointEvent("changed", bp));
     log(getFunctionName(), payload);
   }
 
