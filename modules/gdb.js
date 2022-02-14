@@ -638,6 +638,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   async #onThreadExited(thread) {
     this.#threads.delete(thread.id);
+    this.#uninitializedThread.delete(thread.id);
     let ec = this.executionContexts.get(thread.id);
     if (ec) {
       // ec.releaseVariableReferences(this);

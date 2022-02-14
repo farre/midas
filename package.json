@@ -195,9 +195,9 @@
             "trace": false,
             "cwd": "${workspaceFolder}",
             "mode": "rr",
+            "serverAddress": "localhost:50505",
             "replay": {
-              "rrPath": "rr",
-              "rrServerAddress": "localhost:50505"
+              "rrPath": "rr"
             }
           }
         ],
@@ -232,9 +232,9 @@
               "trace": false,
               "debuggerPath": "gdb",
               "mode": "rr",
+              "serverAddress": "localhost:50505",
               "replay": {
-                "rrPath": "rr",
-                "rrServerAddress": "localhost:50505"
+                "rrPath": "rr"
               }
             }
           }
