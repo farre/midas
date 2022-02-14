@@ -31,6 +31,10 @@ class StackFrameState {
   async getStackLocals(gdb) {
     const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
     const locals = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.LOCALS);
+    if(!locals) {
+      console.error("Expected output from getLocalOf(locals). Got none.")
+      return [];
+    }
     let result = [];
     for (const local of locals) {
       if (local.isPrimitive) {
@@ -57,7 +61,11 @@ class StackFrameState {
    */
   async getStackArgs(gdb) {
     const frameLevel = gdb.getExecutionContext(this.#threadId).getFrameLevel(this.#stackFrameVariableReference);
-    const args = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.ARGS);
+    const args = await gdb.getLocalsOf(this.#threadId, frameLevel, LocalsParameter.ARGS) ?? [];
+    if(!args) {
+      console.error("Expected output from getLocalOf(args). Got none.")
+      return [];
+    }
     let result = [];
     for (const local of args) {
       if (local.isPrimitive) {
