@@ -152,6 +152,9 @@ class GDB extends GDBMixin(GDBBase) {
   evaluatableStructuredVars = new Map();
 
   #threads = new Map();
+  // threads which we haven't been able to get systag for, yet
+  #uninitializedThread = new Map();
+
   userRequestedInterrupt = false;
   allStopMode;
 
@@ -191,7 +194,7 @@ class GDB extends GDBMixin(GDBBase) {
     // await this.attachOnFork();
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");
-    this.setup();
+    await this.setup();
     this.#rrSession = true;
     await this.#setUpRegistersInfo();
     if (stopOnEntry) {
@@ -208,7 +211,7 @@ class GDB extends GDBMixin(GDBBase) {
     trace = doTrace;
     this.allStopMode = allStopMode;
     await this.init();
-    this.setup();
+    await this.setup();
     if (!allStopMode) {
       await this.enableAsync();
     } else {
@@ -383,7 +386,16 @@ class GDB extends GDBMixin(GDBBase) {
     return frame.frame;
   }
 
-  threads() {
+  async threads() {
+    let unit_threads = [...this.#uninitializedThread.values()];
+    for(let t of unit_threads) {
+      let r = await this.execMI(`-thread-info ${t.id}`)
+      if(r.threads.length > 0) {
+        let details = r.threads[0]["details"] ? ` (${r.threads[0]["details"]})` : "";
+        this.#threads.get(t.id).name = `${r.threads[0]["target-id"]}${details})`;
+        this.#uninitializedThread.delete(t.id);
+      }
+    }
     return Array.from(this.#threads.values());
   }
 
@@ -617,7 +629,8 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async #onThreadCreated(thread) {
-    thread.name = this.#program;
+    thread.name = `${this.#program}`
+    this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
     this.executionContexts.set(thread.id, new ExecutionState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
@@ -730,6 +743,7 @@ class GDB extends GDBMixin(GDBBase) {
    */
   #onNotifyThreadCreated(payload) {
     // this does nothing, handled by onThreadCreated
+    console.log(`${JSON.stringify(payload)}`);
   }
 
   /**
