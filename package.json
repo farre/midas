@@ -105,13 +105,12 @@
         "configurationAttributes": {
           "launch": {
             "required": [
-              "program",
               "mode"
             ],
             "properties": {
               "program": {
                 "type": "string",
-                "description": "Binary to debug"
+                "description": "Binary to debug. Required field if mode is 'gdb'; for rr the binary will be picked interactively."
               },
               "stopOnEntry": {
                 "type": "boolean",
@@ -190,7 +189,6 @@
             "type": "midas",
             "request": "launch",
             "name": "Launch replay session",
-            "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": false,
             "cwd": "${workspaceFolder}",
@@ -226,7 +224,6 @@
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,

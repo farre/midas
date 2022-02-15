@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const { MidasDebugSession } = require("./debugSession");
 const path = require("path");
+const fs = require("fs");
 const subprocess = require("child_process");
 const { isReplaySession } = require("./utils");
 
@@ -98,43 +99,79 @@ function setDefaults(config) {
   }
 }
 
-class ConfigurationProvider {
-  // eslint-disable-next-line no-unused-vars
-  async resolveDebugConfiguration(folder, config, token) {
-    // if launch.json is missing or empty
-    if (!config || !config.type || config.type == undefined) {
-      await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
-      return null;
+/**
+ * Parse the required launch config `program` field from the field `cmd` of the `rr ps` result
+ * @param {string} rr_ps_output_cmd - the `cmd` field returned from `tracePicked`
+ * @returns {string} - path to binary to debug
+ * @throws Throws an exception if a file can't be parsed from `rr_ps_output_cmd`
+ */
+function parseProgram(rr_ps_output_cmd) {
+  let splits = rr_ps_output_cmd.split(" ");
+  let program = splits[0];
+  let stats = fs.statSync(program);
+  let i = 1;
+  while(!stats.isFile()) {
+    program = program.concat(" ".concat(splits[i]));
+    i++;
+    stats = fs.statSync(program);
+  }
+  return program;
+}
+
+const tracePicked = async (traceWorkspace) => {
+  const options = {
+    canPickMany: false,
+    ignoreFocusOut: true,
+    title: "Select process to debug",
+  };
+  return await vscode.window.showQuickPick(getTraceInfo(traceWorkspace), options).then((selection) => {
+    if (selection) {
+      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.detail };
+      return replay_parameters;
     }
-    setDefaults(config);
-    if (!config.program) {
-      await vscode.window.showErrorMessage("A path to the binary to debug is missing in the launch settings");
-      return null;
+    return null;
+  });
+};
+
+// todo(simon): create some random port generator, when serverAddress is not set in launch config
+function getFreeRandomPort() {
+  return 50505;
+}
+
+class ConfigurationProvider {
+
+  async resolveReplayConfig(folder, config, token) {
+    if(!config.serverAddress) {
+      config.serverAddress = `127.0.0.1:${getFreeRandomPort()}`;
     }
 
-    if(config.mode == "rr") {
-      if(!config.serverAddress) {
-        await vscode.window.showErrorMessage("You need to set the serverAddress field, for the network path rr listens on");
-        return null;
-      }
+    if (config.replay.traceWorkspace && !config.replay.pid) {
+      config = await tracePicked(config.replay.traceWorkspace).then((replay_parameters) => {
+        if (replay_parameters) {
+          config.replay.parameters = replay_parameters;
+          return config;
+        } else {
+          vscode.window.showErrorMessage("You did not pick a trace.");
+          return null;
+        }
+      });
+    } else if (!config.replay.traceWorkspace && !config.replay.pid) {
       const options = {
         canPickMany: false,
         ignoreFocusOut: true,
         title: "Select process to debug",
       };
-      const tracePicked = async (traceWorkspace) => {
-        return await vscode.window.showQuickPick(getTraceInfo(traceWorkspace), options).then((selection) => {
-          if (selection) {
-            const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.detail };
-            return replay_parameters;
-          }
-          return null;
-        });
-      };
-      
-      if (config.replay.traceWorkspace && !config.replay.pid) {
-        config = await tracePicked(config.replay.traceWorkspace).then((replay_parameters) => {
+      config = await vscode.window
+        .showQuickPick(getTraces(), options)
+        .then(tracePicked)
+        .then((replay_parameters) => {
           if (replay_parameters) {
+            try {
+              config.program = parseProgram(replay_parameters.cmd)
+            } catch(e) {
+              vscode.window.showErrorMessage("Could not parse binary");
+              return null;
+            }
             config.replay.parameters = replay_parameters;
             return config;
           } else {
@@ -142,31 +179,34 @@ class ConfigurationProvider {
             return null;
           }
         });
-      } else if (!config.replay.traceWorkspace && !config.replay.pid) {
-        config = await vscode.window
-          .showQuickPick(getTraces(), options)
-          .then(tracePicked)
-          .then((replay_parameters) => {
-            if (replay_parameters) {
-              config.replay.parameters = replay_parameters;
-              return config;
-            } else {
-              vscode.window.showErrorMessage("You did not pick a trace.");
-              return null;
-            }
-          });
-      }
-      vscode.commands.executeCommand("setContext", "midas.rrSession", true);
-      return config;
+    }
+    vscode.commands.executeCommand("setContext", "midas.rrSession", true);
+    return config;
+  }
+
+  async resolveGdbConfig(folder, config, token) {
+    if (!config.program) {
+      await vscode.window.showInformationMessage("Cannot find a program to debug");
+      return null;
+    }
+    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
+    vscode.commands.executeCommand("setContext", "midas.rrSession", false);
+    return config;
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  async resolveDebugConfiguration(folder, config, token) {
+    // if launch.json is missing or empty
+    if (!config || !config.type || config.type == undefined || !config.mode) {
+      await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
+      return null;
+    }
+    setDefaults(config);
+
+    if(config.mode == "rr") {
+      return this.resolveReplayConfig(folder, config, token);
     } else if(config.mode == "gdb") {
-    // without rr
-      if (!config.program) {
-        await vscode.window.showInformationMessage("Cannot find a program to debug");
-        return null;
-      }
-      vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
-      vscode.commands.executeCommand("setContext", "midas.rrSession", false);
-      return config;
+      return this.resolveGdbConfig(folder, config, token);
     } else {
       vscode.window.showErrorMessage("You have not set mode. Supported values: 'rr' or 'gdb'");
       return null;
