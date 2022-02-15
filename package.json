@@ -105,13 +105,12 @@
         "configurationAttributes": {
           "launch": {
             "required": [
-              "program",
               "mode"
             ],
             "properties": {
               "program": {
                 "type": "string",
-                "description": "Binary to debug"
+                "description": "Binary to debug. Only required for 'gdb' mode."
               },
               "stopOnEntry": {
                 "type": "boolean",
@@ -226,7 +225,6 @@
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": false,
