@@ -84,6 +84,7 @@ class ExecutionState {
 
   isSameContextAsCurrent(stackStartAddress, functionName) {
     if (this.stack.length == 0) return false;
+    if(this.currentStackAddressStart() == undefined || stackStartAddress == undefined) debugger;
     return this.currentStackAddressStart() == stackStartAddress && this.currentFunction() == functionName;
   }
 

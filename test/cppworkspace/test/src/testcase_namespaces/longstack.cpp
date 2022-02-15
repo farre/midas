@@ -2,11 +2,24 @@
 
 namespace longstack
 {
+    void doNothing3() {
+        std::cout << "reached the peak" << std::endl;
+    }
+
+    void doNothing2() {
+        doNothing3();
+    }
+
+    void doNothing() {
+        doNothing2();
+    }
+
     int chain25(int v)
     {
         int result = 24;
         result = v / -5;
         result += 5;
+        doNothing();
         return result;
     }
 

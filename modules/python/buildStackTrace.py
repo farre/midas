@@ -8,28 +8,7 @@ import logging
 import time
 from os import path
 
-def make_vs_frame(frame):
-    sal = frame.find_sal()
-    sym = sal.symtab
-    logging.info("Frame {}\n\tFunction: {}".format(frame, frame.function()))
-    filename = path.basename(sym.filename)
-    fullname = sym.fullname()
-    line_number = sal.line
-    # DebugProtocol.Source
-    src = { "name": filename, "path": fullname, "sourceReference": 0 }
-    stackStart = frame.read_register("rbp")
-    sf = {
-        "id": 0,
-        "source": src,
-        "line": line_number,
-        "column": 0,
-        "name": "{}".format(frame.function().name),
-        "address": "0x{:X}".format(frame.pc()),
-        "stackStartAddress": "{}".format(stackStart),
-    }
-    return sf
-
-def make_vs_frame_from_fn(frame, functionSymbol):
+def makeVSCodeFrameFromFn(frame, functionSymbol):
     sal = frame.find_sal()
     functionSymbolTab = functionSymbol.symtab
     filename = path.basename(functionSymbolTab.filename)
@@ -45,29 +24,9 @@ def make_vs_frame_from_fn(frame, functionSymbol):
         "column": 0,
         "name": "{}".format(functionSymbol.name),
         "address": frame.pc(),
-        "stackStartAddress": "{}".format(stackStart),
+        "stackAddressStart": int(stackStart),
     }
     return sf
-
-class StackFrameManager:
-    def __init__(self, threadId):
-        self.threadId = threadId
-        self.stack = []
-
-    def set(self, frames):
-        self.stack = frames
-
-    def seek_pop(self, stackStart, functionName):
-        index = 0
-        for frame in self.stack:
-            if frame["name"] == functionName and frame["address"] == stackStart:
-                self.stack = self.stack[index:]
-                break
-        return index
-
-
-threads = {}
-threads[1] = StackFrameManager(1)
 
 class GetTopFrame(gdb.Command):
     def __init__(self):
@@ -76,17 +35,15 @@ class GetTopFrame(gdb.Command):
 
     def invoke(self, threadId, from_tty):
         gdb.execute("thread {}".format(threadId))
-        selectThreadAndFrame(int(threadId), 0)
         frame = gdb.newest_frame()
         try:
-            res = make_vs_frame_from_fn(frame, frame.function())
+            res = makeVSCodeFrameFromFn(frame, frame.function())
             output(self.name, res)
         except:
             output(self.name, None)
 
 
 getTopFrameCommand = GetTopFrame()
-
 
 class StackFrameRequest(gdb.Command):
     def __init__(self):
@@ -111,8 +68,7 @@ class StackFrameRequest(gdb.Command):
             for x in range(levels + 1):
                 fn = f.function()
                 if fn is not None:
-                    # result.append(make_vs_frame(f))
-                    item = make_vs_frame_from_fn(f, f.function())
+                    item = makeVSCodeFrameFromFn(f, f.function())
                     result.append(item)
                 f = f.older()
         except Exception as e:
