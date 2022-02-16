@@ -201,7 +201,7 @@ class GDB extends GDBMixin(GDBBase) {
   async setup() {
     /** @type {import("./buildMode").MidasRunMode } */
     let runModeSettings = this.#target.buildSettings;
-    runModeSettings.initializeLoadedScripts(this);
+    await runModeSettings.initializeLoadedScripts(this);
   }
 
   async startWithRR(program, stopOnEntry, doTrace) {
@@ -565,7 +565,12 @@ class GDB extends GDBMixin(GDBBase) {
         const start = await ec.setNewContext(frame.stackAddressStart, frame.name, this);
         const timer_name = timerName("buildExecutionState-call-backend");
         console.time(timer_name);
-        await this.newBuildExecutionState(threadId, start, levels);
+        // means we've not cleared state; add remaining frames to state (which for VSCode tend to be 20)
+        if(start >= 0 && start < levels) {
+          const remainder = levels - start;
+          await this.newBuildExecutionState(threadId, start, remainder);
+          if(start != 0) ec.stack[0].line = +frame.line;
+        }
         console.timeEnd(timer_name);
       }
     } else {
