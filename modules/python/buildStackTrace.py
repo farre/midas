@@ -7,6 +7,23 @@ import traceback
 import logging
 import time
 from os import path
+import functools
+
+def time_command_invocation(f):
+    if not isDevelopmentBuild:
+        return f
+    """Measure performance (time) of command or function"""
+    @functools.wraps(f)
+    def timer_decorator(*args, **kwargs):
+        invokeBegin = time.perf_counter_ns()
+        f(*args, **kwargs)
+        invokeEnd = time.perf_counter_ns()
+        logger = logging.getLogger("time-logger")
+        elapsed_time = int((invokeEnd - invokeBegin) / 1000) # we don't need nano-second measuring, but the accuracy of the timer is nice.
+        logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
+        # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
+    return timer_decorator
+
 
 def makeVSCodeFrameFromFn(frame, functionSymbol):
     sal = frame.find_sal()
@@ -55,6 +72,7 @@ class GetTopFrame(gdb.Command):
         super(GetTopFrame, self).__init__("gdbjs-get-top-frame", gdb.COMMAND_USER)
         self.name = "get-top-frame"
 
+    @time_command_invocation
     def invoke(self, threadId, from_tty):
         gdb.execute("thread {}".format(threadId))
         frame = gdb.newest_frame()
@@ -72,6 +90,7 @@ class StackFrameRequest(gdb.Command):
         super(StackFrameRequest, self).__init__("gdbjs-request-stackframes", gdb.COMMAND_USER)
         self.name = "request-stackframes"
 
+    @time_command_invocation
     def invoke(self, arguments, from_tty):
         [threadId, start, levels] = parseStringArgs(arguments)
         threadId = int(threadId)

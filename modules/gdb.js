@@ -24,6 +24,7 @@ const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
 const {StackFrameState} = require("./variablesrequest/stackFramestate");
 const {ArgsReference} = require("./variablesrequest/args");
+const { MidasDebugSession } = require("./debugSession");
 let trace = true;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -141,7 +142,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   /**
    * reference to the DebugSession that talks to VSCode
-   * @type { DebugSession }
+   * @type { MidasDebugSession }
    */
   #target;
   // program name
@@ -195,6 +196,12 @@ class GDB extends GDBMixin(GDBBase) {
 
   get nextVarRef() {
     return this.#nextVarRef++;
+  }
+
+  async setup() {
+    /** @type {import("./buildMode").MidasRunMode } */
+    let runModeSettings = this.#target.buildSettings;
+    runModeSettings.initializeLoadedScripts(this);
   }
 
   async startWithRR(program, stopOnEntry, doTrace) {

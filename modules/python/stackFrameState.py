@@ -3,13 +3,10 @@ import sys
 import json
 import gdb.types
 import traceback
-import logging
-import time
+import os
 
 # Midas Terminology
 # Execution Context: Thread (id) and Frame (level)
-
-logging.basicConfig(filename='update.log', filemode="w", encoding='utf-8', level=logging.DEBUG)
 
 # Registers the current execution context
 class ExecutionContextRegister:
@@ -21,7 +18,7 @@ class ExecutionContextRegister:
 
     def set_thread(self, threadId):
         if self.threadId != threadId:
-            logging.info("changing thread {} -> {}".format(self.threadId, threadId))
+            misc_logger.info("changing thread {} -> {}".format(self.threadId, threadId))
             for t in ExecutionContextRegister.inferior.threads():
                 if t.num == threadId:
                     t.switch()
@@ -32,7 +29,7 @@ class ExecutionContextRegister:
 
     def set_frame(self, level):
         if self.frameLevel != level:
-            logging.info("changing frame {} -> {}".format(self.frameLevel, level))
+            misc_logger.info("changing frame {} -> {}".format(self.frameLevel, level))
             gdb.execute("frame {}".format(level))
             frame = gdb.selected_frame()
             self.frameLevel = frame.level()
@@ -51,7 +48,8 @@ class ContentsOfStatic(gdb.Command):
     def __init__(self):
         super(ContentsOfStatic, self).__init__("gdbjs-get-contents-of-static", gdb.COMMAND_USER)
         self.name = "get-contents-of-static"
-    
+
+    @time_command_invocation
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
@@ -66,7 +64,7 @@ class ContentsOfStatic(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            logging.error("Couldn't dereference value {}".format(expression))
+            misc_logger.error("Couldn't dereference value {}".format(expression))
             raise e
         result = []
         try:
@@ -95,8 +93,8 @@ class ContentsOfBaseClass(gdb.Command):
         super(ContentsOfBaseClass, self).__init__("gdbjs-get-contents-of-base-class", gdb.COMMAND_USER)
         self.name = "get-contents-of-base-class"
 
+    @time_command_invocation
     def invoke(self, arguments, from_tty):
-        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
@@ -111,7 +109,7 @@ class ContentsOfBaseClass(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except:
-            logging.error("Couldn't dereference value {}".format(expression))
+            misc_logger.error("Couldn't dereference value {}".format(expression))
         
         members = []
         statics = []
@@ -143,12 +141,10 @@ class ContentsOfBaseClass(gdb.Command):
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 baseClassResult.append(item)
 
-            invokeEnd = time.perf_counter_ns()
             result = {"members": memberResults, "statics": staticResult, "base_classes": baseClassResult }
             output(self.name, result)
-            logging.info("ContentsOfBaseClass for {} took {}ns".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
-            logging.error("Couldn't get base class contents")
+            misc_logger.error("Couldn't get base class contents")
             output(self.name, None)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
@@ -169,8 +165,8 @@ class ContentsOf(gdb.Command):
         super(ContentsOf, self).__init__("gdbjs-get-contents-of", gdb.COMMAND_USER)
         self.name = "get-contents-of"
 
+    @time_command_invocation
     def invoke(self, arguments, from_tty):
-        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         components = expression.split(".")
@@ -183,7 +179,7 @@ class ContentsOf(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            logging.error("Couldn't dereference value {}; {}".format(expression, e))
+            misc_logger.error("Couldn't dereference value {}; {}".format(expression, e))
             raise e
         fields = []
 
@@ -210,15 +206,13 @@ class ContentsOf(gdb.Command):
             result["members"] = memberResults
             result["base_classes"] = baseClassResults
             result["statics"] = staticsResults
-            invokeEnd = time.perf_counter_ns()
             output(self.name, result)
-            logging.info("ContentsOf for {} took {}ns.".format(expression, invokeEnd-invokeBegin))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
-            logging.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
+            misc_logger.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
             output(self.name, None)
 
 
@@ -247,8 +241,8 @@ class GetLocals(gdb.Command):
         super(GetLocals, self).__init__("gdbjs-get-locals", gdb.COMMAND_USER)
         self.name = "get-locals"
 
+    @time_command_invocation
     def invoke(self, arguments, from_tty):
-        invokeBegin = time.perf_counter_ns()
         [threadId, frameLevel, scope] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         predicate = parseScopeParam(scope)
@@ -270,9 +264,7 @@ class GetLocals(gdb.Command):
                             logExceptionBacktrace("Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
-            invokeEnd = time.perf_counter_ns()
             output(self.name, result)
-            logging.info("GetLocals took {}ns".format(invokeEnd-invokeBegin))
         except Exception as e:
             logExceptionBacktrace("Exception thrown in GetLocals.invoke", e)
             output(self.name, None)
