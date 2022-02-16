@@ -3,6 +3,7 @@
 const { Thread, ThreadGroup } = require("gdb-js");
 const { trace } = require("./gdb");
 const vscode = require("vscode");
+const { MidasRunMode } = require("./buildMode");
 
 const WatchPointType = {
   ACCESS: "-a",
@@ -177,19 +178,7 @@ function GDBMixin(GDBBase) {
         if(trace) console.log(`Setting: ${printOptions[optIndex++].description}`);
         await this.execCLI(cmd);
       }
-    
-    }
-    
-    async setup() {
-      // TODO(simon): we need someway to resolve this path from the installee. This will break on everything that isn't my machine.
-      const ext = vscode.extensions.getExtension("farrese.midas");
-      const dir = `${ext.extensionPath}/modules/python`;
-      const scripts = ["utils.py", "buildStackTrace.py", "stackFrameState.py"];
 
-      for(const script of scripts.map(f => require("fs").readFileSync(`${dir}/${f}`, { encoding: 'utf8' }))) {
-        if(!script || script.length == 0) throw new Error("Couldn't set up Midas commands. This fully breaks this extension");
-        await this.execPy(script);
-      }
     }
 
     // todo(simon): when we've implemented thread id and framelevel selection for backend
@@ -201,7 +190,7 @@ function GDBMixin(GDBBase) {
     async getLocalsOf(threadId, frameLevel, scopeType) {
       return await this.execCMD(`get-locals ${threadId} ${frameLevel} ${scopeType}`);
     }
-  
+
     async getContentsOf(threadId, frameLevel, expression) {
       return await this.execCMD(`get-contents-of ${threadId} ${frameLevel} ${expression}`);
     }
