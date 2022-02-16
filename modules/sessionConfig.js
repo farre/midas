@@ -4,6 +4,7 @@ const path = require("path");
 const subprocess = require("child_process");
 const { isReplaySession } = require("./utils");
 const fs = require("fs");
+const { MidasRunMode } = require("./buildMode");
 
 /**
  * @returns { Thenable<string[]> }
@@ -43,6 +44,8 @@ function* get_field(line) {
   }
   return null;
 }
+
+let buildSettings;
 
 function fallbackParseOfrrps(data) {
   return data
@@ -196,6 +199,13 @@ class ConfigurationProvider {
 
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
+    try {
+      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py", "stackFrameState.py"], config.trace, config.trace);
+      buildSettings = runMode;
+    } catch(err) {
+      console.log(`Error loading scripts: ${err}`);
+      return null;
+    }
     // if launch.json is missing or empty
     if (!config || !config.type || config.type == undefined || !config.mode) {
       await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
@@ -238,11 +248,11 @@ class DebugAdapterFactory {
       let term = vscode.window.createTerminal("rr terminal");
       term.sendText(cmd_str);
       term.show(true);
-      let dbg_session = new MidasDebugSession(true);
+      let dbg_session = new MidasDebugSession(true, false, fs, buildSettings);
       dbg_session.registerTerminal(term);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     } else {
-      let dbg_session = new MidasDebugSession(true);
+      let dbg_session = new MidasDebugSession(true, false, fs, buildSettings);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }

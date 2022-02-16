@@ -31,10 +31,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type {vscode.Terminal} */
   #terminal;
 
+  #buildSettings;
+
   // eslint-disable-next-line no-unused-vars
-  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs) {
+  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, buildSettings) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
+    this.#buildSettings = buildSettings;
     this.threadId = 1;
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
@@ -43,6 +46,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.on("error", (event) => {
       console.log(event.body);
     });
+  }
+
+  get buildSettings() {
+    return this.#buildSettings;
   }
 
   /**

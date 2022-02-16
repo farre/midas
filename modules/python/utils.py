@@ -4,7 +4,25 @@ import json
 import gdb.types
 import traceback
 import logging
+import logging.handlers
+import functools
+import time
 
+if isDevelopmentBuild:
+    time_handler = logging.handlers.WatchedFileHandler("time.log", mode="w")
+    formatter = logging.Formatter(logging.BASIC_FORMAT)
+    time_handler.setFormatter(formatter)
+    time_logger = logging.getLogger("time-logger")
+    time_logger.setLevel(logging.DEBUG)
+    time_logger.addHandler(time_handler)
+
+misc_handler = logging.handlers.WatchedFileHandler("update.log", mode="w")
+misc_formatter = logging.Formatter(logging.BASIC_FORMAT)
+misc_handler.setFormatter(misc_formatter)
+
+misc_logger = logging.getLogger("update-logger")
+misc_logger.setLevel(logging.DEBUG)
+misc_logger.addHandler(misc_handler)
 
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
@@ -15,8 +33,8 @@ def getFunctionBlock(frame) -> gdb.Block:
     return block
 
 def logExceptionBacktrace(errmsg, exception):
-        logging.error("{} Exception info: {}".format(errmsg, exception))
-        logging.error(traceback.format_exc())
+        misc_logger.error("{} Exception info: {}".format(errmsg, exception))
+        misc_logger.error(traceback.format_exc())
 
 def selectThreadAndFrame(threadId, frameLevel):
     gdb.execute("thread {}".format(threadId))
@@ -50,7 +68,7 @@ def memberIsReference(type):
 
 def getMembersRecursively(field, memberList, statics):
     if field.bitsize > 0:
-        logging.info("field {} is possibly a bitfield of size {}".format(field.name, field.bitsize))
+        misc_logger.info("field {} is possibly a bitfield of size {}".format(field.name, field.bitsize))
     if hasattr(field, 'bitpos'):
         if field.is_base_class:
             for f in field.type.fields():
