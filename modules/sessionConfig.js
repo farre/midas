@@ -200,7 +200,7 @@ class ConfigurationProvider {
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
     try {
-      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py", "stackFrameState.py"], config.trace, config.trace);
+      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py"], config.trace, config.trace);
       buildSettings = runMode;
     } catch(err) {
       console.log(`Error loading scripts: ${err}`);
