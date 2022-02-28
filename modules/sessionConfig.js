@@ -110,15 +110,13 @@ function setDefaults(config) {
  */
 function parseProgram(rr_ps_output_cmd) {
   let splits = rr_ps_output_cmd.split(" ");
-  let program = splits[0];
-  let stats = fs.statSync(program);
-  let i = 1;
-  while(!stats.isFile()) {
-    program = program.concat(" ".concat(splits[i]));
-    i++;
-    stats = fs.statSync(program);
+  let prog = splits[splits.length-1];
+  if(prog.includes("/")) {
+    const tmp = prog.split("/");
+    prog = tmp[tmp.length - 1];
+    return prog;
   }
-  return program;
+  return prog;
 }
 
 const tracePicked = async (traceWorkspace) => {
