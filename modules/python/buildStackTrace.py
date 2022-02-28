@@ -70,7 +70,8 @@ class GetTopFrame(gdb.Command):
 
     @time_command_invocation
     def invoke(self, threadId, from_tty):
-        t = executionContext.set_thread(threadId)
+        t = executionContext.set_thread(int(threadId))
+        gdb.execute("thread {}".format(threadId))
         frame = gdb.newest_frame()
         try:
             res = makeVSCodeFrameFromFn(frame, frame.function())
