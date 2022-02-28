@@ -77,7 +77,7 @@ class GetTopFrame(gdb.Command):
             output(self.name, res)
         except:
             output(self.name, None)
-        
+
 
 
 getTopFrameCommand = GetTopFrame()
@@ -268,7 +268,6 @@ class ContentsOfBaseClass(gdb.Command):
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
 # If we're parsing something that we know lives in the local frame, this is twice as fast than gdb.parse_and_eval(name).
-# As we say in Swedish; många bäckar små.
 def getClosest(frame, name):
     block = frame.block()
     while (not block.is_static) and (not block.superblock.is_global):
