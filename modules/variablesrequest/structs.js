@@ -169,8 +169,8 @@ class StructsReference extends VariablesReference {
    */
   async update(response, gdb, namedObject, value) {
     const vo_name = `ASSIGN_TEMPORARY_${this.evaluateName}_${namedObject}`;
-    let res = await gdb.execMI(`-var-create ${vo_name} * ${this.evaluateName}.${namedObject}`);
     try {
+      let res = await gdb.execMI(`-var-create ${vo_name} * ${this.evaluateName}.${namedObject}`);
       res = await gdb.execMI(`-var-assign ${vo_name} "${value}"`, this.threadId);
       await gdb.execMI(`-var-delete ${vo_name}`);
       if (res.value) {
@@ -180,7 +180,9 @@ class StructsReference extends VariablesReference {
         return response;
       }
     } catch(err) {
-      await gdb.execMI(`-var-delete ${vo_name}`);
+      try {
+        await gdb.execMI(`-var-delete ${vo_name}`);
+      } catch(e) {}
       return err_response(response, `${namedObject} is not editable`);
     }
   }
