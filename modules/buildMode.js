@@ -1,7 +1,7 @@
 const vscode = require("vscode");
 
 /**
- * Run-mode settings of Midas. Basically equivalent to "build mode" for compiled languages.
+ * Run-mode settings of Midas. Loads scripts and holds trace of GDB events and debug logging.
  */
 class MidasRunMode {
   #contents = [];
@@ -58,6 +58,14 @@ class MidasRunMode {
       if(this.#trace || this.#debug) console.log(`Intializing contents of file ${file}`);
       await gdb.execPy(contents);
     }
+  }
+
+  get trace() {
+    return this.#trace;
+  }
+  
+  get debug() {
+    return this.#debug;
   }
 }
 

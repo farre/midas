@@ -6,6 +6,23 @@ const { isReplaySession } = require("./utils");
 const fs = require("fs");
 const { MidasRunMode } = require("./buildMode");
 
+const DebugLogging =  {
+  Off: "off",
+  GdbEventsOnly: "gdb events",
+  PythonLogsOnly: "python logs",
+  Full: "full"
+};
+
+function debugLogging(setting) {
+  switch(setting.toLowerCase()) {
+    case DebugLogging.Off: return { trace: false, pythonLogging: false };
+    case DebugLogging.GdbEventsOnly: return { trace: true, pythonLogging: false };
+    case DebugLogging.PythonLogsOnly: return { trace: false, pythonLogging: true };
+    case DebugLogging.Full: return { trace: true, pythonLogging: true };
+  }
+  throw new Error(`Debug log settings set to incorrect value: ${setting}`);
+}
+
 /**
  * @returns { Thenable<string[]> }
  */
@@ -198,9 +215,11 @@ class ConfigurationProvider {
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
     try {
-      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py"], config.trace, config.trace);
+      const { trace, pythonLogging } = debugLogging(config.trace);
+      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py"], trace, pythonLogging);
       buildSettings = runMode;
     } catch(err) {
+      await vscode.window.showErrorMessage("Error loading Midas python library. Hard error, Midas Debug Adapter can not run.");
       console.log(`Error loading scripts: ${err}`);
       return null;
     }
