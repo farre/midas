@@ -25,7 +25,7 @@ const { RegistersReference } = require("./variablesrequest/registers");
 const {StackFrameState} = require("./variablesrequest/stackFramestate");
 const {ArgsReference} = require("./variablesrequest/args");
 const { MidasDebugSession } = require("./debugSession");
-let trace = true;
+let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
   if (!trace) {
@@ -204,9 +204,9 @@ class GDB extends GDBMixin(GDBBase) {
     await runModeSettings.initializeLoadedScripts(this);
   }
 
-  async startWithRR(program, stopOnEntry, doTrace) {
+  async startWithRR(program, stopOnEntry) {
     this.#program = path.basename(program);
-    trace = doTrace;
+    trace = this.#target.buildSettings.trace;
     await this.init();
     // await this.attachOnFork();
     this.registerAsAllStopMode();
@@ -223,9 +223,9 @@ class GDB extends GDBMixin(GDBBase) {
     this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
 
-  async start(program, stopOnEntry, debug, doTrace, allStopMode) {
+  async start(program, stopOnEntry, allStopMode) {
     this.#program = path.basename(program);
-    trace = doTrace;
+    trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
     await this.init();
     await this.setup();
@@ -310,9 +310,7 @@ class GDB extends GDBMixin(GDBBase) {
         await this.continueAll();
       }
     } else {
-      // todo(simon): this needs a custom implementation, like in the above if branch
-      //  especially when it comes to rr integration
-      await this.reverseProceed(threadId);
+      await this.execCLI("reverse-continue");
     }
   }
 

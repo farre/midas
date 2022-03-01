@@ -144,11 +144,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       this.gdb = new GDB(this, args);
       this.gdb.withRR = true;
       this.gdb.setupEventHandlers(args.stopOnEntry);
-      await this.gdb.startWithRR(args.program, args.stopOnEntry, args.trace);
+      await this.gdb.startWithRR(args.program, args.stopOnEntry);
     } else if (args.type == "midas") {
       this.gdb = new GDB(this, args);
       this.gdb.setupEventHandlers(args.stopOnEntry);
-      await this.gdb.start(args.program, args.stopOnEntry, !args.noDebug, args.trace, args.allStopMode ?? false);
+      await this.gdb.start(args.program, args.stopOnEntry, args.allStopMode ?? false);
     }
   }
 
