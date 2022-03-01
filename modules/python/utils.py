@@ -9,14 +9,14 @@ import functools
 import time
 
 if isDevelopmentBuild:
-    time_handler = logging.handlers.WatchedFileHandler("time.log", mode="w")
+    time_handler = logging.handlers.WatchedFileHandler("performance_time.log", mode="w")
     formatter = logging.Formatter(logging.BASIC_FORMAT)
     time_handler.setFormatter(formatter)
     time_logger = logging.getLogger("time-logger")
     time_logger.setLevel(logging.DEBUG)
     time_logger.addHandler(time_handler)
 
-misc_handler = logging.handlers.WatchedFileHandler("update.log", mode="w")
+misc_handler = logging.handlers.WatchedFileHandler("debug.log", mode="w")
 misc_formatter = logging.Formatter(logging.BASIC_FORMAT)
 misc_handler.setFormatter(misc_formatter)
 
@@ -86,24 +86,6 @@ def getMembers(field, memberList, statics, baseclasses):
         baseclasses.append(field.name)
     elif not hasattr(field, "bitpos"):
         statics.append(field.name)
-
-def getValue(value):
-    print("Trying to get value of {0}".format(value))
-    if memberIsReference(value.type):
-        try:
-            v = value.referenced_value()
-            return v
-        except gdb.MemoryError:
-            return value
-    else:
-        return value
-
-def getElement(key, map):
-    try:
-        r = map[key]
-        return r
-    except KeyError:
-        return None
 
 def display(name, value, isPrimitive):
     if value.is_optimized_out:
