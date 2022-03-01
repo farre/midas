@@ -6,6 +6,7 @@
 #include <mutex>
 #include <iomanip>
 #include <cstdlib>
+#include <tuple>
 
 std::mutex g_stdio_mutex;
 struct Foo {
@@ -146,8 +147,15 @@ auto test_evaluate_variables_when_passing_through_scopes() {
   std::cout << w << ", " << h << std::endl;
 }
 
+void tuple_tuples() {
+  std::tuple<int, std::tuple<int, int, std::string>, std::string> hmm{1, {2,3, "inner"}, "outer"};
+  std::cout << "tuples are... meh" << std::endl;
+}
+
 int main(int argc, const char **argv) {
+  std::string hw = "Hello World";
   vecOfString();
+  tuple_tuples();
   auto w = 200;
   auto h = 200;
   test_evaluate_variables_when_passing_through_scopes();

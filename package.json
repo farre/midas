@@ -188,7 +188,7 @@
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": "Off",
-            "allStopMode": false,
+            "allStopMode": true,
             "cwd": "${workspaceFolder}",
             "mode": "gdb"
           },
@@ -220,7 +220,7 @@
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": "Off",
-              "allStopMode": false,
+              "allStopMode": true,
               "mode": "gdb"
             }
           },
