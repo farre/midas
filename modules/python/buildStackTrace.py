@@ -139,6 +139,7 @@ class StackFrameRequest(gdb.Command):
         try:
             currentFrame = gdb.selected_frame()
             misc_logger.info("selecting frame level {} and getting {} more frames for thread {}".format(start, levels, threadId))
+
             (t, f) = executionContext.set_context(threadId, start)
             result = []
             try:

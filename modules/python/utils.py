@@ -25,7 +25,6 @@ misc_logger = logging.getLogger("update-logger")
 misc_logger.setLevel(logging.DEBUG)
 misc_logger.addHandler(misc_handler)
 
-
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
     while not block.superblock.is_static and not block.superblock.is_global:
