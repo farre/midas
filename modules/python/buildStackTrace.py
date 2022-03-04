@@ -31,7 +31,7 @@ class ExecutionContextRegister:
             return gdb.selected_thread()
 
     def set_frame(self, level):
-        if self.frameLevel != level:
+        if self.frameLevel != int(level):
             misc_logger.info("changing frame {} -> {}".format(self.frameLevel, level))
             gdb.execute("frame {}".format(level))
             frame = gdb.selected_frame()
@@ -41,8 +41,8 @@ class ExecutionContextRegister:
             return gdb.selected_frame()
 
     def set_context(self, threadId, frameLevel):
-        t = self.set_thread(threadId=threadId)
-        f = self.set_frame(level=frameLevel)
+        t = self.set_thread(threadId=int(threadId))
+        f = self.set_frame(level=int(frameLevel))
         return (t, f)
 
 executionContext = ExecutionContextRegister()
@@ -70,14 +70,14 @@ class GetTopFrame(gdb.Command):
 
     @time_command_invocation
     def invoke(self, threadId, from_tty):
-        t = executionContext.set_thread(threadId)
+        t = executionContext.set_thread(int(threadId))
+        gdb.execute("thread {}".format(threadId))
         frame = gdb.newest_frame()
         try:
             res = makeVSCodeFrameFromFn(frame, frame.function())
             output(self.name, res)
         except:
             output(self.name, None)
-        
 
 
 getTopFrameCommand = GetTopFrame()
@@ -136,9 +136,9 @@ class StackFrameRequest(gdb.Command):
         threadId = int(threadId)
         levels = int(levels)
         start = int(start)
-        currentFrame = gdb.selected_frame()
-        logging.info("selecting frame level {} and getting {} more frames for thread {}".format(start, levels, threadId))
         try:
+            currentFrame = gdb.selected_frame()
+            misc_logger.info("selecting frame level {} and getting {} more frames for thread {}".format(start, levels, threadId))
             (t, f) = executionContext.set_context(threadId, start)
             result = []
             try:
@@ -148,12 +148,12 @@ class StackFrameRequest(gdb.Command):
                         item = makeVSCodeFrameFromFn(f, f.function())
                         result.append(item)
                     else:
-                        logging.info("Frame does not have a function associated with it: {}: {}".format(f.name(), f))
+                        misc_logger.info("Frame does not have a function associated with it: {}: {}".format(f.name(), f))
                         item = makeVSCodeFrameNoAssociatedFnName(f.name(), f)
                         result.append(item)
                     f = f.older()
             except Exception as e:
-                logging.info("Stack trace build exception for frame {}: {}".format(start + x, e))
+                misc_logger.info("Stack trace build exception for frame {}: {}".format(start + x, e))
             output(self.name, result)
             currentFrame.select()
         except:
@@ -161,6 +161,7 @@ class StackFrameRequest(gdb.Command):
             output(self.name, [])
 
 stackFrameRequestCommand = StackFrameRequest()
+
 
 class ContentsOfStatic(gdb.Command):
     def __init__(self):
@@ -205,6 +206,7 @@ class ContentsOfStatic(gdb.Command):
         output(self.name, result)
 
 contentsOfStaticCommand = ContentsOfStatic()
+
 
 class ContentsOfBaseClass(gdb.Command):
     def __init__(self):
@@ -267,8 +269,7 @@ class ContentsOfBaseClass(gdb.Command):
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
-# If we're parsing something that we know lives in the local frame, this is twice as fast than gdb.parse_and_eval(name).
-# As we say in Swedish; många bäckar små.
+# When parsing closely related blocks, this is faster than gdb.parse_and_eval on average.
 def getClosest(frame, name):
     block = frame.block()
     while (not block.is_static) and (not block.superblock.is_global):
@@ -277,6 +278,35 @@ def getClosest(frame, name):
                 return symbol.value(frame)
         block = block.superblock
     return None
+
+# Function that is able to utilize pretty printers, so that we can resolve
+# a value (which often does _not_ have the same expression path as regular structured types).
+# For instance used for std::tuple, which has a difficult member "layout", with ambiguous names.
+# Since ContentsOf command always takes a full "expression path", now it doesn't matter if the sub-paths of the expression
+# contain non-member names; because if there's a pretty printer that rename the members (like in std::tuple, it's [1], [2], ... [N])
+# these will be found and traversed properly, anyway
+def resolve_gdb_value(value, components):
+    it = value
+    # todo(simon): this error reporting can be removed, further down the line.
+    err_msg_copy = components.copy()
+    while len(components) > 0:
+        pp = gdb.default_visualizer(it)
+        component = components.pop(0)
+        if pp is not None:
+            found = False
+            for child in pp.children():
+                (name, value) = child
+                if component == name:
+                    it = value
+                    found = True
+                    break
+            if not found:
+                misc_logger.error("Could not find submember {} of {}".format(component, ".".join(err_msg_copy)))
+                raise NotImplementedError()
+        else:
+            it = it[component]
+    return it
+
 
 class ContentsOf(gdb.Command):
     def __init__(self):
@@ -288,9 +318,27 @@ class ContentsOf(gdb.Command):
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         components = expression.split(".")
-        it = getClosest(frame, components[0])
-        for component in components[1:]:
-            it = it[component]
+        ancestor = getClosest(frame, components[0])
+        it = resolve_gdb_value(ancestor, components[1:])
+        pp = gdb.default_visualizer(it)
+        result = { "members": [], "statics": [], "base_classes": [] }
+        memberResults = []
+        staticsResults = []
+        baseClassResults = []
+
+        if pp is not None:
+            if hasattr(pp, "children"):
+                for child in pp.children():
+                    (name, value) = child
+                    memberResults.append(display(name, value, typeIsPrimitive(value.type)))
+                result["members"] = memberResults
+                output(self.name, result)
+            else:
+                memberResults.append(display("value", pp.to_string().value(), True, True))
+                result["members"] = memberResults
+                output(self.name, result)
+            return
+
         if it.type.code == gdb.TYPE_CODE_PTR:
             it = it.dereference()
         try:
@@ -299,12 +347,7 @@ class ContentsOf(gdb.Command):
         except Exception as e:
             misc_logger.error("Couldn't dereference value {}; {}".format(expression, e))
             raise e
-        fields = []
 
-        memberResults = []
-        staticsResults = []
-        baseClassResults = []
-        result = { "members": [], "statics": [], "base_classes": [] }
         try:
             fields = it.type.fields()
             for field in fields:
@@ -385,6 +428,7 @@ class GetLocals(gdb.Command):
             output(self.name, result)
         except Exception as e:
             logExceptionBacktrace("Exception thrown in GetLocals.invoke", e)
+            raise
             output(self.name, None)
 
 getLocalsCommand = GetLocals()
