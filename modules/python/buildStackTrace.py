@@ -21,7 +21,6 @@ class ExecutionContextRegister:
 
     def set_thread(self, threadId):
         if self.threadId != threadId:
-            misc_logger.info("changing thread {} -> {}".format(self.threadId, threadId))
             for t in ExecutionContextRegister.inferior.threads():
                 if t.num == threadId:
                     t.switch()
@@ -32,7 +31,6 @@ class ExecutionContextRegister:
 
     def set_frame(self, level):
         if self.frameLevel != int(level):
-            misc_logger.info("changing frame {} -> {}".format(self.frameLevel, level))
             gdb.execute("frame {}".format(level))
             frame = gdb.selected_frame()
             self.frameLevel = frame.level()
@@ -138,7 +136,6 @@ class StackFrameRequest(gdb.Command):
         start = int(start)
         try:
             currentFrame = gdb.selected_frame()
-            misc_logger.info("selecting frame level {} and getting {} more frames for thread {}".format(start, levels, threadId))
             (t, f) = executionContext.set_context(threadId, start)
             result = []
             try:
@@ -148,12 +145,11 @@ class StackFrameRequest(gdb.Command):
                         item = makeVSCodeFrameFromFn(f, f.function())
                         result.append(item)
                     else:
-                        misc_logger.info("Frame does not have a function associated with it: {}: {}".format(f.name(), f))
                         item = makeVSCodeFrameNoAssociatedFnName(f.name(), f)
                         result.append(item)
                     f = f.older()
             except Exception as e:
-                misc_logger.info("Stack trace build exception for frame {}: {}".format(start + x, e))
+                err_logger.error("Stack trace build exception for frame {}: {}".format(start + x, e))
             output(self.name, result)
             currentFrame.select()
         except:
@@ -183,7 +179,7 @@ class ContentsOfStatic(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            misc_logger.error("Couldn't dereference value {}".format(expression))
+            err_logger.error("Couldn't dereference value {}".format(expression))
             raise e
         result = []
         try:
@@ -229,7 +225,7 @@ class ContentsOfBaseClass(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except:
-            misc_logger.error("Couldn't dereference value {}".format(expression))
+            err_logger.error("Couldn't dereference value {}".format(expression))
         
         members = []
         statics = []
@@ -285,7 +281,7 @@ def getClosest(frame, name):
 # Since ContentsOf command always takes a full "expression path", now it doesn't matter if the sub-paths of the expression
 # contain non-member names; because if there's a pretty printer that rename the members (like in std::tuple, it's [1], [2], ... [N])
 # these will be found and traversed properly, anyway
-def resolve_gdb_value(value, components):
+def resolveGdbValue(value, components):
     it = value
     # todo(simon): this error reporting can be removed, further down the line.
     err_msg_copy = components.copy()
@@ -319,7 +315,7 @@ class ContentsOf(gdb.Command):
         (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         components = expression.split(".")
         ancestor = getClosest(frame, components[0])
-        it = resolve_gdb_value(ancestor, components[1:])
+        it = resolveGdbValue(ancestor, components[1:])
         pp = gdb.default_visualizer(it)
         result = { "members": [], "statics": [], "base_classes": [] }
         memberResults = []
@@ -345,7 +341,7 @@ class ContentsOf(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            misc_logger.error("Couldn't dereference value {}; {}".format(expression, e))
+            err_logger.error("Couldn't dereference value {}; {}".format(expression, e))
             raise e
 
         try:
@@ -373,7 +369,7 @@ class ContentsOf(gdb.Command):
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
-            misc_logger.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
+            err_logger.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
             output(self.name, None)
 
 
