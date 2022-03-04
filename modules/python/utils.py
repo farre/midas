@@ -8,6 +8,7 @@ import logging.handlers
 import functools
 import time
 
+# Midas sets this, when Midas DA has been initialized
 if isDevelopmentBuild:
     time_handler = logging.handlers.WatchedFileHandler(
         "performance_time.log", mode="w")
@@ -25,6 +26,22 @@ misc_logger = logging.getLogger("update-logger")
 misc_logger.setLevel(logging.DEBUG)
 misc_logger.addHandler(misc_handler)
 
+err_handler = logging.handlers.WatchedFileHandler("error.log", mode="w")
+err_formatter = logging.Formatter(logging.BASIC_FORMAT)
+err_handler.setFormatter(err_formatter)
+
+err_logger = logging.getLogger("error-logger")
+err_logger.setLevel(logging.WARNING)
+err_logger.addHandler(err_handler)
+
+default_uncaught = sys.excepthook
+
+# Add logging to debug.log for uncaught exceptions
+def exception_handler(type, value, traceback):
+    err_logger.error("[Uncaught exception] {}: {}\nTraceback:\n{}".format(type, value, traceback))
+    default_uncaught(type, value, traceback)
+
+sys.excepthook = exception_handler
 
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
