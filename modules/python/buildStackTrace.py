@@ -79,7 +79,6 @@ class GetTopFrame(gdb.Command):
         except:
             output(self.name, None)
 
-
 getTopFrameCommand = GetTopFrame()
 
 def makeVSCodeFrameFromFn(frame, functionSymbol):
