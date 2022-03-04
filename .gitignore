@@ -11,4 +11,6 @@ test/cppworkspace/thread/build
 .vscode/settings.json
 
 update.log
-foo.py
+time.log
+debug.log
+performance_time.log

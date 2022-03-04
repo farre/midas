@@ -118,9 +118,16 @@
                 "default": true
               },
               "trace": {
-                "type": "boolean",
-                "description": "Turns logging on or off",
-                "default": false
+                "type": ["string"],
+                "description": "Debug trace logging",
+                "enum": ["Off", "GDB Events", "Python logs", "Full"],
+                "default": "Off",
+                "enumDescriptions": [
+                  "Turn all logging off",
+                  "Turn trace logging of GDB events on",
+                  "Turn debug logging of from Python on",
+                  "Turn on additional debug logging to time.log and update.log, made by Python scripts"
+                ]
               },
               "args": {
                 "type": "string[]",
@@ -180,8 +187,8 @@
             "name": "Debug binary",
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
-            "trace": false,
-            "allStopMode": false,
+            "trace": "Off",
+            "allStopMode": true,
             "cwd": "${workspaceFolder}",
             "mode": "gdb"
           },
@@ -191,7 +198,7 @@
             "name": "Launch replay session",
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
-            "trace": false,
+            "trace": "Off",
             "cwd": "${workspaceFolder}",
             "mode": "rr",
             "serverAddress": "localhost:50505",
@@ -212,8 +219,8 @@
               "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
-              "trace": false,
-              "allStopMode": false,
+              "trace": "Off",
+              "allStopMode": true,
               "mode": "gdb"
             }
           },
@@ -227,7 +234,7 @@
               "name": "${1:Launch Debug}",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
-              "trace": false,
+              "trace": "Off",
               "debuggerPath": "gdb",
               "mode": "rr",
               "serverAddress": "localhost:50505",
