@@ -202,18 +202,20 @@ function GDBMixin(GDBBase) {
     /**
      * Returns member fields of a base class belonging to the type that `expression` represents, or in other words
      * returns the member fields of the type of `expression` defined in it's base class.
-     * @param {number} threadId 
+     * @param {number} threadId
      * @param {number} frameLevel 
      * @param {number} expression 
      * @param {string[]} baseClassHierarchy - a list of base classes, in ascending order of the hierarchy.
      * @returns
      */
     async getContentsOfBaseClass(threadId, frameLevel, expression, baseClassHierarchy) {
+      // nb! we can't have types containing spaces in the parameter list; so we do this tragic looking thing.
+      const FORMAT_PARAMETER_REPLACEMENT = "_*_*_";
       let baseClassHierarchyParameter = "";
       if(baseClassHierarchy.length == 1) {
-        baseClassHierarchyParameter = `'${baseClassHierarchy[0].replaceAll(" ", "_*_*_")}'`;
+        baseClassHierarchyParameter = `'${baseClassHierarchy[0].replaceAll(" ", FORMAT_PARAMETER_REPLACEMENT)}'`;
       } else {
-        baseClassHierarchyParameter = `'${baseClassHierarchy.map(name => `${name.replaceAll(" ", "_*_*_")}`).join(" ")}'`
+        baseClassHierarchyParameter = `'${baseClassHierarchy.map(name => `${name.replaceAll(" ", FORMAT_PARAMETER_REPLACEMENT)}`).join(" ")}'`
       }
       return await this.execCMD(`get-contents-of-base-class ${threadId} ${frameLevel} ${expression} ${baseClassHierarchyParameter}`);
     }
