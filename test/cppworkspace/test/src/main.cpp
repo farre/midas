@@ -9,6 +9,7 @@
 #include "testcase_namespaces/statics.hpp"
 #include "testcase_namespaces/structrequests.hpp"
 #include "testcase_namespaces/derive.hpp"
+#include "testcase_namespaces/pp.hpp"
 
 int overload(int a)
 {
@@ -61,7 +62,7 @@ int main(int argc, const char **argv)
   constexpr auto baz = "baz is also kind of a cool word!!!!!!!!!!!!!!!";
   constexpr const char *bazchar = "These types end up being wildly different";
   std::cout << "Goodbye cruel world" << std::endl;
-
+  prettyprinting::main();
   test_ptrs_main();
   enum_stuff();
   derive::main();
