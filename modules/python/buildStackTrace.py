@@ -8,6 +8,10 @@ import time
 from os import path
 import functools
 
+# Response result from a variables request
+def variables_response(members=[], statics=[], base_classes=[]):
+    return { "members": members, "statics": statics, "base_classes": base_classes }
+
 # Midas Terminology
 # Execution Context: Thread (id) and Frame (level)
 
@@ -213,11 +217,8 @@ class ContentsOfBaseClass(gdb.Command):
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
-        components = expression.split(".")
         base_classes = parseStringArgs(base_classes)
-        it = gdb.parse_and_eval(components[0])
-        for c in components[1:]:
-            it = it[c]
+        it = getAndTraverseExpressionPath(frame=frame, expression=expression)
 
         if it.type.code == gdb.TYPE_CODE_PTR:
             it = it.dereference()
@@ -226,7 +227,7 @@ class ContentsOfBaseClass(gdb.Command):
                 it = it.referenced_value()
         except:
             err_logger.error("Couldn't dereference value {}".format(expression))
-        
+
         members = []
         statics = []
         baseclasses = []
@@ -234,6 +235,17 @@ class ContentsOfBaseClass(gdb.Command):
         staticResult = []
         memberResults = []
         baseClassResult = []
+        pp = gdb.default_visualizer(it)
+        if pp is not None:
+            if hasattr(pp, "children"):
+                for child in pp.children():
+                    (name, value) = child
+                    memberResults.append(display(name, value, typeIsPrimitive(value.type)))
+                output(self.name, variables_response(members=memberResults))
+            else:
+                memberResults.append(display("value", pp.to_string().value(), True, True))
+                output(self.name, variables_response(members=memberResults))
+            return
 
         try:
             typeIterator = it.type
@@ -256,9 +268,7 @@ class ContentsOfBaseClass(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 baseClassResult.append(item)
-
-            result = {"members": memberResults, "statics": staticResult, "base_classes": baseClassResult }
-            output(self.name, result)
+            output(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult))
         except Exception as e:
             misc_logger.error("Couldn't get base class contents")
             output(self.name, None)
@@ -286,23 +296,29 @@ def resolveGdbValue(value, components):
     # todo(simon): this error reporting can be removed, further down the line.
     err_msg_copy = components.copy()
     while len(components) > 0:
+        if memberIsReference(it.type):
+            it = it.referenced_value()
         pp = gdb.default_visualizer(it)
         component = components.pop(0)
         if pp is not None:
             found = False
             for child in pp.children():
-                (name, value) = child
+                (name, val) = child
                 if component == name:
-                    it = value
+                    it = val
                     found = True
                     break
             if not found:
-                misc_logger.error("Could not find submember {} of {}".format(component, ".".join(err_msg_copy)))
                 raise NotImplementedError()
         else:
             it = it[component]
     return it
 
+def getAndTraverseExpressionPath(frame, expression):
+    components = expression.split(".")
+    ancestor = getClosest(frame, components[0])
+    it = resolveGdbValue(ancestor, components[1:])
+    return it
 
 class ContentsOf(gdb.Command):
     def __init__(self):
@@ -313,37 +329,24 @@ class ContentsOf(gdb.Command):
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression] = parseStringArgs(arguments)
         (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
-        components = expression.split(".")
-        ancestor = getClosest(frame, components[0])
-        it = resolveGdbValue(ancestor, components[1:])
+        it = getAndTraverseExpressionPath(frame=frame, expression=expression)
         pp = gdb.default_visualizer(it)
-        result = { "members": [], "statics": [], "base_classes": [] }
         memberResults = []
         staticsResults = []
         baseClassResults = []
-
         if pp is not None:
             if hasattr(pp, "children"):
                 for child in pp.children():
                     (name, value) = child
                     memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                result["members"] = memberResults
-                output(self.name, result)
+                output(self.name, variables_response(members=memberResults))
             else:
                 memberResults.append(display("value", pp.to_string().value(), True, True))
-                result["members"] = memberResults
-                output(self.name, result)
+                output(self.name, variables_response(members=memberResults))
             return
 
-        if it.type.code == gdb.TYPE_CODE_PTR:
-            it = it.dereference()
-        try:
-            if memberIsReference(it.type):
-                it = it.referenced_value()
-        except Exception as e:
-            err_logger.error("Couldn't dereference value {}; {}".format(expression, e))
-            raise e
-
+        if memberIsReference(it.type):
+            it = it.referenced_value()
         try:
             fields = it.type.fields()
             for field in fields:
@@ -360,10 +363,7 @@ class ContentsOf(gdb.Command):
                     item = static_display(field.name, it.type[field.name].type)
                     staticsResults.append(item)
 
-            result["members"] = memberResults
-            result["base_classes"] = baseClassResults
-            result["statics"] = staticsResults
-            output(self.name, result)
+            output(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults))
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
