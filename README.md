@@ -1,4 +1,4 @@
-![Midas](index_large.png)
+![Midas](docs/index_large.png)
 
 Midas is a debug adapter that aims to implement the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications.
 
@@ -89,7 +89,9 @@ rrServerAddress defines the host and port that rr will be told to listen on, whi
 
 One thing to remember is that when debugging a replayable session, all stop mode can not be set to be true. So you can elide this option, as it will be set to true, regardless.
 
-However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`).
+However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`), shown below.
+
+![Default Launch config](docs/launchconfig.gif)
 
 ## Usage
 You can use GDB/rr from the debug console in VSCode as normal. No prefix commands with -exec etc, just type whatever commands you want. Notice however, that some commands might alter GDB state which might *not* be seen by Midas, so if you ever come across a command that breaks Midas or make Midas behave strange, please be so kind and report it so that edge cases can be handled.
@@ -99,5 +101,8 @@ You can use GDB/rr from the debug console in VSCode as normal. No prefix command
 To package extension, run the alias
 `yarn package` or `vsce package --yarn` (vsce needs to be installed; `npm install -g vsce`)
 
+## Changelog
+Can be [found here](docs/CHANGELOG.md)
+
 ## Known bugs
-Can be [found here](BUGS.MD)
+Can be [found here](docs/BUGS.MD)
