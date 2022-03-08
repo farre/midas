@@ -104,7 +104,7 @@ function getTraceInfo(trace) {
   );
 }
 
-function setDefaults(config) {
+function initDefaults(config) {
   if (!config.hasOwnProperty("stopOnEntry")) {
     config.stopOnEntry = false;
   }
@@ -114,8 +114,11 @@ function setDefaults(config) {
   if (!config.hasOwnProperty("allStopMode")) {
     config.allStopMode = true;
   }
-  if (!config.hasOwnProperty("debuggerPath")) {
-    config.debuggerPath = "gdb";
+  if (!config.hasOwnProperty("gdbPath")) {
+    config.gdbPath = "gdb";
+  }
+  if(!config.hasOwnProperty("setupCommands")) {
+    config.setupCommands = [];
   }
 }
 
@@ -207,7 +210,6 @@ class ConfigurationProvider {
       await vscode.window.showInformationMessage("Cannot find a program to debug");
       return null;
     }
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", config.allStopMode);
     vscode.commands.executeCommand("setContext", "midas.rrSession", false);
     return config;
   }
@@ -228,7 +230,7 @@ class ConfigurationProvider {
       await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
       return null;
     }
-    setDefaults(config);
+    initDefaults(config);
 
     if(config.mode == "rr") {
       return this.resolveReplayConfig(folder, config, token);

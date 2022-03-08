@@ -1,6 +1,7 @@
 {
   "name": "midas",
   "displayName": "midas",
+  "icon": "index.png",
   "description": "Midas: A GDB/MI Visual Studio Code Debug Adapter",
   "keywords": [
     "gdb",
@@ -42,19 +43,22 @@
         "command": "midas.session-continue-all",
         "title": "Continue all threads",
         "shortTitle": "Continue All",
-        "icon": "$(debug-continue)"
+        "icon": "$(debug-continue)",
+        "enablement": "midas.allStopModeSet == false && debugType == midas"
       },
       {
         "command": "midas.session-pause-all",
         "title": "Pause all threads",
         "shortTitle": "Pause all",
-        "icon": "$(debug-pause)"
+        "icon": "$(debug-pause)",
+        "enablement": "midas.allStopModeSet == false && debugType == midas"
       },
       {
         "command": "midas.reverse-finish",
         "title": "Reverse finish",
         "shortTitle": "Reverse finish",
-        "icon": "$(debug-step-out)"
+        "icon": "$(debug-step-out)",
+        "enablement": "midas.rrSession == true && debugType == midas"
       },
       {
         "command": "midas.set-watchpoint",
@@ -79,17 +83,17 @@
         {
           "command": "midas.session-continue-all",
           "group": "midas",
-          "when": "!midas.allStopModeSet"
+          "when": "midas.allStopModeSet == false && debugType == midas"
         },
         {
           "command": "midas.session-pause-all",
           "group": "midas",
-          "when": "!midas.allStopModeSet"
+          "when": "midas.allStopModeSet == false && debugType == midas"
         },
         {
           "command": "midas.reverse-finish",
           "group": "midas",
-          "when": "midas.rrSession"
+          "when": "midas.rrSession && debugType == midas"
         }
       ]
     },
@@ -139,7 +143,7 @@
                 "description": "Whether or not GDB should run in all stop mode",
                 "default": true
               },
-              "debuggerPath": {
+              "gdbPath": {
                 "type": "string",
                 "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
                 "default": "gdb"
@@ -176,6 +180,10 @@
                     "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
                   }
                 }
+              },
+              "setupCommands": {
+                "type": "array",
+                "description": "GDB Commands to run before debugging."
               }
             }
           }
@@ -220,6 +228,7 @@
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": "Off",
+              "gdbPath": "gdb",
               "allStopMode": true,
               "mode": "gdb"
             }
@@ -231,11 +240,12 @@
             "body": {
               "type": "midas",
               "request": "launch",
-              "name": "${1:Launch Debug}",
+              "name": "${1:Launch replay debug session}",
+              "program": "^\"\\${workspaceFolder}/path/binary\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
               "trace": "Off",
-              "debuggerPath": "gdb",
+              "gdbPath": "gdb",
               "mode": "rr",
               "serverAddress": "localhost:50505",
               "replay": {

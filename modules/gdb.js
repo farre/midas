@@ -24,7 +24,6 @@ const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
 const {StackFrameState} = require("./variablesrequest/stackFramestate");
 const {ArgsReference} = require("./variablesrequest/args");
-const { MidasDebugSession } = require("./debugSession");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -97,8 +96,6 @@ class VSCodeStackFrame extends StackFrame {
   func;
 }
 
-
-
 const DefaultRRSpawnArgs = [
   "-l",
   "10000",
@@ -112,15 +109,20 @@ const DefaultRRSpawnArgs = [
   "set sysroot /",
 ];
 
-function spawnRRGDB(gdbPath, binary, serverAddress, cwd) {
-  const args = [...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`];
-  return spawn(gdbPath, args);
+function spawnRRGDB(gdbPath, setupCommands, binary, serverAddress, cwd) {
+  const spawnParameters =
+    setupCommands
+      .flatMap(c => ["-iex", `"${c}"`])
+      .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`]);
+  return spawn(gdbPath, spawnParameters);
 }
 
-function spawnGDB(gdbPath, binary, ...args) {
-  console.log(`GDB path: ${gdbPath}`);
-  let params = !args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args];
-  let gdb = spawn(gdbPath, params);
+function spawnGDB(gdbPath, setupCommands, binary, ...args) {
+  const spawnParameters =
+    setupCommands
+      .flatMap(command => ["-iex", `"${command}"`])
+      .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
+  let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
 }
 
@@ -173,11 +175,11 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.debuggerPath, args.program, args.serverAddress, args.cwd);
+          let gdb = spawnRRGDB(args.gdbPath, args.setupCommands, args.program, args.serverAddress, args.cwd);
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.debuggerPath, args.program, ...(args.args ?? []));
+          let gdb = spawnGDB(args.gdbPath, args.setupCommands, args.program, ...(args.args ?? []));
           gdbProcess = gdb;
           return gdb;
         }
@@ -227,6 +229,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
+    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
     await this.init();
     await this.setup();
     if (!allStopMode) {
@@ -1156,11 +1159,6 @@ class GDB extends GDBMixin(GDBBase) {
     return frames;
   }
 
-}
-
-const FallBackMemberRegex = {
-  Member: /\w+(?= = )/g,
-  Separator: /( = )/
 }
 
 exports.GDB = GDB;
