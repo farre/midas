@@ -4,14 +4,7 @@ const { exec, spawn: _spawn } = require("child_process");
 var fs = require("fs");
 var path = require("path");
 
-// we moved this here, to deal with cyclic imports which failed silently in debug *and* in installed ("release") mode
-/** @typedef { import("@vscode/debugprotocol").DebugProtocol.LaunchRequestArguments | import("vscode").DebugConfiguration } ConfigurationVariant  */
-/**
- * Checks if this object represents a configuration of a replay session with rr
- * @param { ConfigurationVariant } config -  object to check if it has the "replay" attribute, it can be an LaunchArguments or DebugConfiguration
- * @returns true if it is
- */
-const isReplaySession = (config) => config.hasOwnProperty("replay");
+const isReplaySession = (config) => config.mode == "rr";
 
 async function buildTestFiles(testPath) {
   const buildPath = path.join(testPath, "build");
@@ -64,42 +57,6 @@ function spawn(gdbPath, args) {
   };
 }
 
-function deescape_gdbjs_output(str) {
-  return str.replaceAll('"', "").replaceAll("\\n", "\n");
-}
-
-function diff(a, b) {
-  return Math.abs(a - b);
-}
-
-/**
- * @param {string} str
- */
-async function cleanJsonString(str) {
-
-}
-
-const CompiledRegex = {
-  WhiteSpace: /w/
-};
-
-const testString = '{m_id = 2, m_date = {day = 3, month = 11, year = 2021}, m_title = { _M_dataplus = {<std::allocator<char>> = {<No data fields>}, _M_p = 0x41df30 "Test local struct"}, _M_string_length = 17, { _M_local_buf = "\\021\\000\\000\\000\\000\\000\\000\\000\\346\\a\\000\\000\\377\\177\\000", _M_allocated_capacity = 17}}}';
-
-/**
- * @param {string} str
- */
-async function parseStringGDBJsonHybrid(str) {
-  let obj = {};
-  let it = str.indexOf("{") + 1;
-  let start = it;
-  for(; it < str.length; it++) {
-    let end = str.indexOf("=", it+1);
-    let identifier = str.substring(start, end);
-    obj[identifier] = null;
-    start
-  }
-}
-
 /**
  * Stores arrays in a map
  */
@@ -148,9 +105,6 @@ module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
-  deescape_gdbjs_output,
   isReplaySession,
-  diff,
-  cleanJsonString,
   ArrayMap
 };
