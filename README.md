@@ -1,8 +1,6 @@
-# midas
-midas is a debug adapter that aims to implement the GDB/MI interface while also integrating into the experience
-an ease of use of [rr](https://rr-project.org/). 
+![Midas](index_large.png)
 
-These sections will be filled out as features get filled in.
+Midas is a debug adapter that aims to implement the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications.
 
 ## Launch configuration
 
@@ -15,52 +13,91 @@ in `launch.json` config:
     "type": "midas",
     "request": "launch",
     "name": "Launch Debug",
-    "program": "${workspaceFolder}/binary",
+    "program": "${workspaceFolder}/path/binary",
+    "cwd": "${workspaceFolder}",
     "stopOnEntry": true,
-    "trace": false,
-    "allStopMode": false,
-    "debuggerPath": "gdb"
+    "trace": "Off",
+    "allStopMode": true,
+    "mode": "gdb"
 }
 ```
-
 Required values are
 - type
 - request: launch
 - program: path/to/binary
 
-Default values for non-required properties:
-- trace: false
+Default values for non-required (or non-set) properties:
+- trace: "Off"
 - stopOnEntry: false
 - allStopMode: true
-- debuggerPath: gdb (meaning, if gdb doesn't exist on $PATH you will have to set this)
+- gdbPath: gdb (meaning, if gdb doesn't exist on $PATH you will have to set this)
 
-All stop mode, means that when a breakpoint is hit all threads stop, as well as when continuing, all threads start.
+All stop mode, means that all stop / continue actions halt or start threads in unison.
 
-### Replayable debug session (rr)
+Trace has the following settings:
+- "Off", no logging
+- "GDB events" - gdb events are logged to the developer console
+- "Python logs" - logs performance and debug messages to performance_time.log, error.log and debug.log.
+- "Full" all logging turned on.
+
+The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...)
+
+## Setup commands
+Another field that can be added is the `setupCommands` which takes an array of strings that are GDB commands to be executed before
+loading the binary or file containing symbols (the `-iex "someCommand here"`). Below is an example of such
 
 ```json
 {
     "type": "midas",
     "request": "launch",
     "name": "Launch Debug",
-    "program": "${workspaceFolder}/build/testapp",
+    "program": "${workspaceFolder}/path/binary",
+    "cwd": "${workspaceFolder}",
     "stopOnEntry": true,
-    "trace": true,
+    "trace": "Off",
     "allStopMode": true,
-    "rrServerAddress": "localhost:50505",
-    "rrPath": "rr",
-    "debuggerPath": "gdb"
-},
+    "mode": "gdb",
+    "setupCommands": ["set print object on"]
+}
 ```
 
-Required fields are the same as normal, along with:
+## Replayable debug session (rr)
+
+```json
+{
+    "type": "midas",
+    "request": "launch",
+    "name": "Launch replay debug session",
+    "program": "${workspaceFolder}/path/binary",
+    "cwd": "${workspaceFolder}",
+    "stopOnEntry": true,
+    "trace": "Off",
+    "gdbPath": "gdb",
+    "mode": "rr",
+    "serverAddress": "localhost:50505",
+    "replay": {
+        "rrPath": "rr"
+    }
+}
+```
+
+Required fields are the same as a normal debug session, along with:
 - rrServerAddress: host:port
+- The `replay` JSON object setting which takes an rrPath property, that behaves just like the gdbPath setting.
 
-One thing to remember is that when debugging a replayable session, all stop mode can not be set to be true. So if you elide this option, as it will default to true.
+rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB.
 
-- rrPath - will be set to "rr", similar to how debuggerPath is set to "gdb", thus have to be on path if not set
+One thing to remember is that when debugging a replayable session, all stop mode can not be set to be true. So you can elide this option, as it will be set to true, regardless.
+
+However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`).
+
+## Usage
+You can use GDB/rr from the debug console in VSCode as normal. No prefix commands with -exec etc, just type whatever commands you want. Notice however, that some commands might alter GDB state which might *not* be seen by Midas, so if you ever come across a command that breaks Midas or make Midas behave strange, please be so kind and report it so that edge cases can be handled.
 
 ## Development
 
 To package extension, run the alias
-`yarn package` or `vsce package --yarn`
+`yarn package` or `vsce package --yarn` (vsce needs to be installed; `npm install -g vsce`)
+
+## Known bugs
+Can be [found here](BUGS.MD)
