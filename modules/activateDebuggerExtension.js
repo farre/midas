@@ -11,7 +11,6 @@ const { ConfigurationProvider, DebugAdapterFactory } = require("./sessionConfig"
  */
 function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
-  context.workspaceState.update("allStopModeSet", true);
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider("midas", provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
