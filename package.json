@@ -198,7 +198,8 @@
             "trace": "Off",
             "allStopMode": true,
             "cwd": "${workspaceFolder}",
-            "mode": "gdb"
+            "mode": "gdb",
+            "setupCommands": []
           },
           {
             "type": "midas",
@@ -212,7 +213,8 @@
             "serverAddress": "localhost:50505",
             "replay": {
               "rrPath": "rr"
-            }
+            },
+            "setupCommands": []
           }
         ],
         "configurationSnippets": [
@@ -224,13 +226,14 @@
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "program": "^\"\\${workspaceFolder}/path/binary\"",
+              "program": "${2:/path/to/binary}",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
-              "trace": "Off",
-              "gdbPath": "gdb",
+              "trace": "${3:Off}",
+              "gdbPath": "${4:gdb}",
               "allStopMode": true,
-              "mode": "gdb"
+              "mode": "gdb",
+              "setupCommands": []
             }
           },
           {
@@ -241,16 +244,17 @@
               "type": "midas",
               "request": "launch",
               "name": "${1:Launch replay debug session}",
-              "program": "^\"\\${workspaceFolder}/path/binary\"",
+              "program": "${2:/path/to/binary}",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
-              "trace": "Off",
-              "gdbPath": "gdb",
+              "trace": "${3:Off}",
+              "gdbPath": "${4:gdb}",
               "mode": "rr",
-              "serverAddress": "localhost:50505",
+              "serverAddress": "${5:localhost:50505}",
               "replay": {
                 "rrPath": "rr"
-              }
+              },
+              "setupCommands": []
             }
           }
         ]
