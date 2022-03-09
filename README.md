@@ -1,6 +1,24 @@
 ![Midas](docs/index_large.png)
 
-Midas is a debug adapter that aims to implement the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications.
+Midas is a debug adapter that utilizes the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications and as such uses GDB's great Python integration to be faster than some debug adapters, where possible.
+
+## Requirements
+Midas is developed exclusively for GDB with Python integration in mind. If you are running a GDB which does not support it, or hasn't been built with Python functionality, Midas will not work, at all.
+
+To check whether or not GDB has been built with Python, from a terminal write
+```bash
+gdb --config
+```
+
+This will give you a list of GDB features built in. In this list, something like this should be shown:
+
+    --with-python=/usr (relocatable)
+    --with-python-libdir=/usr/lib (relocatable)
+
+
+Midas has been tested with the following GDB versions
+- GDB 9.2, GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
+
 
 ## Launch configuration
 
@@ -13,7 +31,7 @@ in `launch.json` config:
     "type": "midas",
     "request": "launch",
     "name": "Launch Debug",
-    "program": "${workspaceFolder}/path/binary",
+    "program": "/path/to/binary",
     "cwd": "${workspaceFolder}",
     "stopOnEntry": true,
     "trace": "Off",
@@ -40,7 +58,7 @@ Trace has the following settings:
 - "Python logs" - logs performance and debug messages to performance_time.log, error.log and debug.log.
 - "Full" all logging turned on.
 
-The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...)
+The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...). These are currently very bare bones though.
 
 ## Setup commands
 Another field that can be added is the `setupCommands` which takes an array of strings that are GDB commands to be executed before
