@@ -5,6 +5,7 @@ const subprocess = require("child_process");
 const { isReplaySession } = require("./utils");
 const fs = require("fs");
 const { MidasRunMode } = require("./buildMode");
+const net = require("net");
 
 const DebugLogging =  {
   Off: "off",
@@ -154,16 +155,50 @@ const tracePicked = async (traceWorkspace) => {
   });
 };
 
+/**
+ * 
+ * @param { net.Server } server
+ * @param { number } portToCheck
+ * @returns { Promise<number> }
+ */
+function getPort(server, portToCheck) {
+  return new Promise((resolve, reject) => {
+    server.on("error", reject);
+    server.listen({port: portToCheck, host: "127.0.0.1"}, () => {
+      const addressInfo = server.address();
+      resolve(addressInfo.port);
+    });
+  });
+}
+
 // todo(simon): create some random port generator, when serverAddress is not set in launch config
-function getFreeRandomPort() {
-  return 50505;
+async function getFreeRandomPort(portRange = { begin: 50505, end: 65000 }) {
+  const server = net.createServer();
+  server.unref();
+  for(let port = portRange.begin; port < portRange.end; port++) {
+    try {
+      let p = await getPort(server, port);
+      console.log(`port found on: ${p}`);
+      server.close();
+      return p;
+    } catch(err) {
+      console.log(`port ${port} already taken`);
+    }
+  }
+  throw new Error("Could not find port");
 }
 
 class ConfigurationProvider {
 
   async resolveReplayConfig(folder, config, token) {
     if(!config.serverAddress) {
-      config.serverAddress = `127.0.0.1:${getFreeRandomPort()}`;
+      try {
+        let port = await getFreeRandomPort();
+        config.serverAddress = `127.0.0.1:${port}`;
+      } catch(err) {
+        vscode.window.showErrorMessage("No port available for rr to listen on");
+        return null;
+      }
     }
 
     if (config.replay.traceWorkspace && !config.replay.pid) {
