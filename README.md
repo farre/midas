@@ -100,10 +100,10 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
 ```
 
 Required fields are the same as a normal debug session, along with:
-- rrServerAddress: host:port
 - The `replay` JSON object setting which takes an rrPath property, that behaves just like the gdbPath setting.
 
-rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB.
+rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB. If this field is not set
+Midas will use `127.0.0.1:RandomFreePort`.
 
 One thing to remember is that when debugging a replayable session, all stop mode can not be set to be true. So you can elide this option, as it will be set to true, regardless.
 
