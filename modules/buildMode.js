@@ -37,7 +37,7 @@ class MidasRunMode {
 
     }
     const fileContents = require("fs").readFileSync(`${dir}/${utilities}`, { encoding: 'utf8' });
-    this.#utils = {path: utilities, contents: fileContents };
+    this.#utils = { path: utilities, contents: fileContents };
   }
 
   async initializeLoadedScripts(gdb) {
