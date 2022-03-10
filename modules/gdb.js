@@ -290,16 +290,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.on("thread-group-exited", this.#onThreadGroupExited.bind(this));
     this.on("new-objfile", this.#onNewObjfile.bind(this));
 
-    this.on("breakPointValidated", (bp) => {
-      this.sendEvent(
-        new BreakpointEvent("changed", {
-          id: bp.id,
-          verified: true,
-          line: bp.line,
-        })
-      );
-    });
-
     this.sendEvent(new InitializedEvent());
   }
 

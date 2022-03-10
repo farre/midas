@@ -293,8 +293,6 @@ def getClosest(frame, name):
 # these will be found and traversed properly, anyway
 def resolveGdbValue(value, components):
     it = value
-    # todo(simon): this error reporting can be removed, further down the line.
-    err_msg_copy = components.copy()
     while len(components) > 0:
         if memberIsReference(it.type):
             it = it.referenced_value()
@@ -351,15 +349,12 @@ class ContentsOf(gdb.Command):
             fields = it.type.fields()
             for field in fields:
                 if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-                    # members.append(field.name)
                     item = display(field.name, it[field.name], typeIsPrimitive(it[field.name].type))
                     memberResults.append(item)
                 elif field.is_base_class:
-                    # baseclasses.append(field.name)
                     item = base_class_display(field.name, it.type[field.name].type)
                     baseClassResults.append(item)
                 elif not hasattr(field, "bitpos"):
-                    # statics.append(field.name)
                     item = static_display(field.name, it.type[field.name].type)
                     staticsResults.append(item)
 
@@ -388,12 +383,6 @@ def parseScopeParam(scope):
         raise NotImplementedError()
 
 class GetLocals(gdb.Command):
-    lastThreadId = -1
-    lastFrameLevel = -1
-
-    def same_context(threadId, frameLevel):
-        return GetLocals.lastThreadId == threadId and GetLocals.lastFrameLevel == frameLevel
-
     def __init__(self):
         super(GetLocals, self).__init__("gdbjs-get-locals", gdb.COMMAND_USER)
         self.name = "get-locals"
