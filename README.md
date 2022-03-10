@@ -5,6 +5,8 @@ Midas is a debug adapter that utilizes the GDB/MI interface while also integrati
 ## Requirements
 Midas is developed exclusively for GDB with Python integration in mind. If you are running a GDB which does not support it, or hasn't been built with Python functionality, Midas will not work, at all.
 
+And as it's developed with rr in mind, Linux is also a requirement.
+
 To check whether or not GDB has been built with Python, from a terminal write
 ```bash
 gdb --config
