@@ -623,7 +623,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         break;
       case "hot-reload-scripts":
         try {
-          await this.gdb.setup();
+          await this.gdb.reload_scripts();
           console.log(`Successfully hot reloaded scripts`);
         } catch(err) {
           console.log(`failed to reload scripts ${err}`);
