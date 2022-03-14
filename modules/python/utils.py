@@ -130,6 +130,8 @@ def display(name, value, isPrimitive, synthetic=False):
     except:
         return variable_display(name=name, display="<invalid address> {}".format(value.type), isPrimitive=isPrimitive, static=False, synthetic=True)
 
+def pp_display_simple(name, value):
+    return variable_display(name=name, display="{}".format(value), isPrimitive=True, static=False, synthetic=True)
 
 def base_class_display(name, type):
     return {"name": name, "display": "{} (base)".format(type)}
