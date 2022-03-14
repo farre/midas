@@ -53,19 +53,11 @@ function getVSCodeCommands() {
     vscode.debug.activeDebugSession.customRequest("reverse-finish");
   });
 
-  let watch = registerCommand("midas.set-watchpoint", ({ container, variable }) => {
-    if (!container.evaluateName) {
-      vscode.window.showErrorMessage("Variable has no evaluatable name");
-      return;
-    }
-    vscode.debug.activeDebugSession.customRequest("set-watchpoint", { location: `${container.evaluateName}.${variable.name}` });
-  });
-
   let hotReloadScripts = registerCommand("midas.hot-reload-scripts", () => {
     vscode.debug.activeDebugSession.customRequest("hot-reload-scripts");
   });
 
-  return [rrRecord, continueAll, pauseAll, reverseFinish, watch, hotReloadScripts];
+  return [rrRecord, continueAll, pauseAll, reverseFinish, hotReloadScripts];
 }
 
 module.exports = {
