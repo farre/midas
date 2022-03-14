@@ -334,12 +334,24 @@ class ContentsOf(gdb.Command):
         baseClassResults = []
         if pp is not None:
             if hasattr(pp, "children"):
-                for child in pp.children():
-                    (name, value) = child
-                    memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                output(self.name, variables_response(members=memberResults))
+                try:
+                    for child in pp.children():
+                        misc_logger.error(("trying to get name and value of child"))
+                        (name, value) = child
+                        memberResults.append(display(name, value, typeIsPrimitive(value.type)))
+                    output(self.name, variables_response(members=memberResults))
+                except Exception as e:
+                    err_logger.error("failed to get pretty printed value: {}. There's no value attribute?".format(e))
+                    raise e
             else:
-                memberResults.append(display("value", pp.to_string().value(), True, True))
+                # means the pretty printed result, doesn't have any children or shouldn't show any of them. Therefore it's safe
+                # for us to assume that we can just say "to string"; since the pretty printer is telling us only 1 value is of important (otherwise .children() would exist)
+                # This means that if someone implements a bad pretty printer, we can't help them (and neither can GDB).
+                res = pp.to_string()
+                if hasattr(res, "value"):
+                    memberResults.append(pp_display_simple("value", res.value()))
+                else:
+                    memberResults.append(pp_display_simple("value", res))
                 output(self.name, variables_response(members=memberResults))
             return
 
