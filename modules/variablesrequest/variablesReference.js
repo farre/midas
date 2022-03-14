@@ -86,6 +86,10 @@ class VariablesReference {
       return err_response(response, `${namedObject} is not editable`);
     }
   }
+
+  evaluatePath() {
+    return "";
+  }
 }
 
 module.exports = {

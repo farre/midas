@@ -150,6 +150,7 @@ class StructsReference extends VariablesReference {
     return result;
   }
 
+  evaluatePath() { return this.evaluateName; }
 
   async cleanUp(gdb) {
     // we don't need to do clean up; we're always managed by either a LocalsReference or a WatchReference
@@ -365,6 +366,8 @@ class StaticsReference extends VariablesReference {
       return err_response(response, `${namedObject} is not editable`);
     }
   }
+
+  evaluatePath() { return this.evaluateName; }
 
 }
 

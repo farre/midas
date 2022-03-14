@@ -18,7 +18,7 @@ const {
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
-const { getFunctionName, spawn, isReplaySession, ArrayMap } = require("./utils");
+const { getFunctionName, spawn, isReplaySession, ArrayMap, ExclusiveArray } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/locals");
 const { ExecutionState } = require("./executionState");
 const { RegistersReference } = require("./variablesrequest/registers");
@@ -135,6 +135,7 @@ class GDB extends GDBMixin(GDBBase) {
   /** Maps function name (original location) -> Function breakpoint id
    * @type { Map<string, number> } */
   #fnBreakpoints = new Map();
+  #watchpoints = new ExclusiveArray();
   vscodeBreakpoints = new Map();
   registerFile = [];
   // loaded libraries
@@ -364,6 +365,37 @@ class GDB extends GDBMixin(GDBBase) {
     }
     this.#lineBreakpoints.set(file, bps);
     return res;
+  }
+
+  async updateWatchpoints(wpRequest) {
+    const { removeIndices, newIndices } = this.#watchpoints.unionIndices(wpRequest, (a, b) => a.id == b.id);
+    if(removeIndices.length > 0) {
+      const bpNumbers = removeIndices.map(idx => this.#watchpoints.get(idx).id);
+      const cmdParameter = bpNumbers.join(" ");
+      this.execMI(`-break-delete ${cmdParameter}`);
+    }
+    this.#watchpoints.pop(removeIndices);
+    for(const idx of newIndices) {
+      let item = wpRequest[idx];
+      let wp;
+      switch(item.accessType) {
+        case "write": {
+          wp = await this.setWatchPoint(item.dataId, "write");
+        } break;
+        case "read": {
+          wp = await this.setWatchPoint(item.dataId, "read");
+        } break;
+        case "readWrite": {
+          wp = await this.setWatchPoint(item.dataId, "access");
+        } break;
+      }
+      item.id = wp.number;
+      item.message = item.dataId;
+      item.verified = true;
+      this.#watchpoints.push(item);
+    }
+    const result = this.#watchpoints.data;
+    return result;
   }
 
   /**
@@ -808,7 +840,7 @@ class GDB extends GDBMixin(GDBBase) {
    *            type: string,
    *            disp: string,
    *            enabled: string,
-   *            addr: number,
+   *            addr: string | number,
    *            func: string,
    *            file: string,
    *            fullname: string,
@@ -822,19 +854,48 @@ class GDB extends GDBMixin(GDBBase) {
    * @param { { bkpt: bkpt } } payload
    */
   async #onNotifyBreakpointCreated(payload) {
-    const { number, addr, func, file, enabled, line } = payload.bkpt;
+    let { number, addr, func, file, enabled, line } = payload.bkpt;
     let bp = {
-      id: `${number}`,
+      id: number,
       enabled: enabled == "y",
+      verified: addr != "<PENDING>"
     };
-    let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
 
+    let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
     if (!dapbkpt) {
-      let pos = new vscode.Position(+line - 1, 0);
-      let uri = vscode.Uri.parse(file);
-      let loc = new vscode.Location(uri, pos);
-      let src_bp = new vscode.SourceBreakpoint(loc, bp.enabled);
-      vscode.debug.addBreakpoints([src_bp]);
+      if(!file && !line) {
+        if(payload.bkpt["original-location"].includes("::")) { // function breakpoint
+          // todo(simon): implement. VSCode screws up breakpoints because of how it handles them.
+        } else if(payload.bkpt["original-location"].includes(":")) { // source breakpoint
+          const split = payload.bkpt["original-location"].split(":");
+          const file = split[0];
+          const line = split[1];
+          const newBreakpoint = {
+            id: +bp.id,
+            enabled: bp.enabled,
+            verified: bp.verified,
+            source: new Source(file),
+            line: +line
+          };
+          this.#lineBreakpoints.add_to(file, newBreakpoint);
+          this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+        } else {
+          debugger;
+        }
+      } else {
+        if(func) {
+          // see above todo
+        } else {
+          let pos = new vscode.Position(+line ?? 1 - 1, 0);
+          let uri = vscode.Uri.parse(file);
+          let loc = new vscode.Location(uri, pos);
+          let newBreakpoint = new vscode.SourceBreakpoint(loc, bp.enabled);
+          vscode.debug.addBreakpoints([newBreakpoint]);
+          this.#lineBreakpoints.add_to(file, bp);
+        }
+      }
+    } else {
+      debugger;
     }
     log(getFunctionName(), payload);
   }
@@ -845,13 +906,14 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
-    const { enabled, line } = payload.bkpt;
+    const { number, type, disp, enabled, addr, func, file, fullname, line } = payload.bkpt;
     const num = payload.bkpt.number;
     const bp = {
       line: line,
       id: +num,
       verified: true,
       enabled: enabled == "y",
+      source: new Source(file, fullname)
     };
     this.#target.sendEvent(new BreakpointEvent("changed", bp));
     log(getFunctionName(), payload);
@@ -1057,8 +1119,6 @@ class GDB extends GDBMixin(GDBBase) {
   registerBreakpoint(bp) {
     this.#lineBreakpoints.add_to(bp.file, bp);
   }
-
-  interrupt() { }
 
   clear() {
     this.executionContexts.clear();
