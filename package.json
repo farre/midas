@@ -61,24 +61,12 @@
         "enablement": "midas.rrSession == true && debugType == midas"
       },
       {
-        "command": "midas.set-watchpoint",
-        "title": "Set read-access watchpoint",
-        "shortTitle": "Watch variable",
-        "icon": "$(eye-watch)"
-      },
-      {
         "command": "midas.hot-reload-scripts",
         "title": "Re-initializes Midas",
         "shortTitle": "Re-initialize"
       }
     ],
     "menus": {
-      "debug/variables/context": [
-        {
-          "command": "midas.set-watchpoint",
-          "group": "midas"
-        }
-      ],
       "debug/toolBar": [
         {
           "command": "midas.session-continue-all",

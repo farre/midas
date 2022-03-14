@@ -6,9 +6,9 @@ const vscode = require("vscode");
 const { MidasRunMode } = require("./buildMode");
 
 const WatchPointType = {
-  ACCESS: "-a",
-  READ: "-r",
-  WRITE: "",
+  ACCESS: "access",
+  READ: "read",
+  WRITE: "write",
 };
 
 function printOption(opt, value = null) {
@@ -125,17 +125,19 @@ function GDBMixin(GDBBase) {
       return await this.execMI(`-exec-interrupt --all`);
     }
 
-    #setWatchPoint(location, wpType) {
-      return this.execMI(`-break-watch ${wpType} ${location}`);
+    async setWatchPoint(location, wpType) {
+      let result = await this.execCMD(`watchpoint ${wpType} ${location}`)
+      return result;
     }
+
     setReadWatchPoint(location) {
-      return this.#setWatchPoint(location, WatchPointType.READ);
+      return this.setWatchPoint(location, WatchPointType.READ);
     }
     setWriteWatchPoint(location) {
-      return this.#setWatchPoint(location, WatchPointType.WRITE);
+      return this.setWatchPoint(location, WatchPointType.WRITE);
     }
     setAccessWatchPoint(location) {
-      return this.#setWatchPoint(location, WatchPointType.ACCESS);
+      return this.setWatchPoint(location, WatchPointType.ACCESS);
     }
 
     async setPrintOptions(printOptions) {
