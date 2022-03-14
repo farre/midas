@@ -60,6 +60,22 @@ class MidasRunMode {
     }
   }
 
+  async reload_files(gdb) {
+    const ext = vscode.extensions.getExtension("farrese.midas");
+    const dir = `${ext.extensionPath}/modules/python`
+    for(let {path, contents} of this.#contents) {
+      const fileContents = require("fs").readFileSync(`${dir}/${path}`, { encoding: 'utf8' });
+      if(!fileContents || fileContents.length == 0) {
+        throw new Error(`Failed to load contents of ${path}. Midas DA will not function.`);
+      }
+      contents = fileContents;
+      await gdb.execPy(fileContents);
+    }
+    const fileContents = require("fs").readFileSync(`${dir}/${this.#utils.path}`, { encoding: 'utf8' });
+    await gdb.execPy(fileContents);
+    this.#utils.contents = fileContents;
+  }
+
   get trace() {
     return this.#trace;
   }
