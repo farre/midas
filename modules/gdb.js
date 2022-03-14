@@ -112,7 +112,7 @@ const DefaultRRSpawnArgs = [
 function spawnRRGDB(gdbPath, setupCommands, binary, serverAddress, cwd) {
   const spawnParameters =
     setupCommands
-      .flatMap(c => ["-iex", `"${c}"`])
+      .flatMap(c => ["-iex", `${c}`])
       .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`]);
   return spawn(gdbPath, spawnParameters);
 }
@@ -120,7 +120,7 @@ function spawnRRGDB(gdbPath, setupCommands, binary, serverAddress, cwd) {
 function spawnGDB(gdbPath, setupCommands, binary, ...args) {
   const spawnParameters =
     setupCommands
-      .flatMap(command => ["-iex", `"${command}"`])
+      .flatMap(command => ["-iex", `${command}`])
       .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
@@ -142,11 +142,6 @@ class GDB extends GDBMixin(GDBBase) {
   #loadedLibraries;
   // variablesReferences bookkeeping
   #nextVarRef = 1;
-
-  /**
-   * reference to the DebugSession that talks to VSCode
-   * @type { MidasDebugSession }
-   */
   #target;
   // program name
   #program = "";
@@ -157,7 +152,7 @@ class GDB extends GDBMixin(GDBBase) {
   executionContexts = new Map();
   /** @typedef {import("./variablesrequest/registers").RegistersReference | import("./variablesrequest/args").ArgsReference | import("./variablesrequest/locals").LocalsReference | import("./variablesrequest/structs").StructsReference } VariablesReferenceHandler*/
   /** @type { Map<number, VariablesReferenceHandler >} */
-  references = new Map();
+    references = new Map();
 
   /** @type {Map<string, VariablesReference>} */
   evaluatable = new Map();
@@ -205,6 +200,11 @@ class GDB extends GDBMixin(GDBBase) {
     /** @type {import("./buildMode").MidasRunMode } */
     let runModeSettings = this.#target.buildSettings;
     await runModeSettings.initializeLoadedScripts(this);
+  }
+
+  async reload_scripts() {
+    let runModeSettings = this.#target.buildSettings;
+    await runModeSettings.reload_files(this);
   }
 
   async startWithRR(program, stopOnEntry) {
