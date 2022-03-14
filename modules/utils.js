@@ -101,10 +101,71 @@ class ArrayMap {
   }
 }
 
+/** @template T */
+class ExclusiveArray {
+  /** @type { T[] } */
+  #data = [];
+  constructor() {  }
+
+  /**
+   * Compares `items` with the elements in this array and returns what elements needs removing from this array
+   * as well as the elements that are to be added from `items`
+   * @param { T[] } items - the array for which we are comparing against
+   * @param { (a: T, b: T) => boolean } comparator
+   * @returns {{ removeIndices: number[], newIndices: number[] }} - `remove` contains the indices of which elements can be to be removed,
+   * and `new` contains the indices of the elements in `items` that are not duplicates in this array.
+   */
+  unionIndices(items, comparator) {
+    let removeIndices = [];
+    let duplicateIndices = [];
+    for(let i = 0; i < this.#data.length; i++) {
+      let ith_should_keep = false;
+      for(let j = 0; j < items.length; j++) {
+        if(comparator(this.#data[i], items[j])) {
+          ith_should_keep = true;
+          duplicateIndices.push(j);
+          break;
+        }
+      }
+      if(!ith_should_keep) {
+        removeIndices.push(i);
+      }
+    }
+    let newIndices = [];
+    for(let i = 0; i < items.length; i++) {
+      if(!duplicateIndices.includes(i)) newIndices.push(i);
+    }
+    return { removeIndices, newIndices };
+  }
+
+  pop(indices) {
+    let sorted = indices.sort((a, b) => a < b);
+    let remove = [];
+    let shift = 0;
+    for(const idx of sorted) {
+      remove.push(this.#data.splice(idx - shift, 1)[0]);
+      shift += 1;
+    }
+    return remove;
+  }
+
+  push(...elements) {
+    this.#data.push(...elements);
+  }
+
+  get(idx) {
+    return this.data[idx];
+  }
+
+  get data() {
+    return this.#data;
+  }
+}
 module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
   isReplaySession,
-  ArrayMap
+  ArrayMap,
+  ExclusiveArray
 };

@@ -163,6 +163,32 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
+  dataBreakpointInfoRequest(response, args, request) {
+    let container = this.gdb.references.get(args.variablesReference);
+    let dataId;
+    if(container) {
+      let prefix = container.evaluatePath();
+      if(prefix == "") dataId = args.name;
+      else dataId = `${prefix}.${args.name}`;
+    } else {
+      dataId = args.name;
+    }
+    response.body = {
+      dataId: dataId,
+      accessTypes: ["read", "write", "readWrite"],
+      canPersist: false
+    };
+    this.sendResponse(response);
+  }
+
+  async setDataBreakpointsRequest(response, args, request) {
+    const res = await this.gdb.updateWatchpoints(args.breakpoints);
+    response.body = {
+      breakpoints: res
+    }
+    this.sendResponse(response);
+  }
+
   // eslint-disable-next-line no-unused-vars
   async continueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
@@ -175,7 +201,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async setFunctionBreakPointsRequest(response, args) {
-    this.gdb.clearFunctionBreakpoints();
     let res = [];
     for (let { name, condition, hitCondition } of args.breakpoints) {
       res.push(this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
@@ -553,14 +578,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  dataBreakpointInfoRequest(response, ...args) {
-    return this.virtualDispatch(response, ...args);
-  }
-
-  setDataBreakpointsRequest(...args) {
-    return this.virtualDispatch(...args);
-  }
-
   readMemoryRequest(...args) {
     return this.virtualDispatch(...args);
   }
@@ -603,9 +620,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       case "reverse-finish":
         await this.gdb.finishExecution(undefined, true);
         this.sendResponse(response);
-        break;
-      case "set-watchpoint":
-        await this.gdb.setReadWatchPoint(args.location);
         break;
       case "hot-reload-scripts":
         try {
