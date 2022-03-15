@@ -440,7 +440,11 @@ class GDB extends GDBMixin(GDBBase) {
         console.log("Thread is running...");
       }
     }
-    return Array.from(this.#threads.values());
+    let res = [];
+    for(const t of this.#threads.values()) {
+      res.push(t);
+    }
+    return res;
   }
 
   /**
@@ -621,7 +625,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  async #onStopped(payload) {
+  #onStopped(payload) {
     log(getFunctionName(), payload);
     let reason;
     try {
@@ -681,15 +685,16 @@ class GDB extends GDBMixin(GDBBase) {
     this.userRequestedInterrupt = false;
   }
 
-  async #onThreadCreated(thread) {
+  #onThreadCreated(thread) {
     thread.name = `${this.#program}`
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
     this.executionContexts.set(thread.id, new ExecutionState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
+    console.log(`Thread ${thread.id} started`);
   }
 
-  async #onThreadExited(thread) {
+  #onThreadExited(thread) {
     this.#threads.delete(thread.id);
     this.#uninitializedThread.delete(thread.id);
     let ec = this.executionContexts.get(thread.id);
@@ -853,51 +858,55 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param { { bkpt: bkpt } } payload
    */
-  async #onNotifyBreakpointCreated(payload) {
-    let { number, addr, func, file, enabled, line } = payload.bkpt;
-    let bp = {
-      id: number,
-      enabled: enabled == "y",
-      verified: addr != "<PENDING>"
-    };
-
-    let dapbkpt = await vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp);
-    if (!dapbkpt) {
-      if(!file && !line) {
-        if(payload.bkpt["original-location"].includes("::")) { // function breakpoint
-          // todo(simon): implement. VSCode screws up breakpoints because of how it handles them.
-        } else if(payload.bkpt["original-location"].includes(":")) { // source breakpoint
-          const split = payload.bkpt["original-location"].split(":");
-          const file = split[0];
-          const line = split[1];
-          const newBreakpoint = {
-            id: +bp.id,
-            enabled: bp.enabled,
-            verified: bp.verified,
-            source: new Source(file),
-            line: +line
-          };
-          this.#lineBreakpoints.add_to(file, newBreakpoint);
-          this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+  #onNotifyBreakpointCreated(payload) {
+    try {
+      let { number, addr, func, file, enabled, line } = payload.bkpt;
+      let bp = {
+        id: number,
+        enabled: enabled == "y",
+        verified: addr != "<PENDING>"
+      };
+      vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp).then(dapbkpt => {
+        if (!dapbkpt) {
+          if(!file && !line) {
+            if(payload.bkpt["original-location"].includes("::")) { // function breakpoint
+              // todo(simon): implement. VSCode screws up breakpoints because of how it handles them.
+            } else if(payload.bkpt["original-location"].includes(":")) { // source breakpoint
+              const split = payload.bkpt["original-location"].split(":");
+              const file = split[0];
+              const line = split[1];
+              const newBreakpoint = {
+                id: +bp.id,
+                enabled: bp.enabled,
+                verified: bp.verified,
+                source: new Source(file),
+                line: +line
+              };
+              this.#lineBreakpoints.add_to(file, newBreakpoint);
+              this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+            } else {
+              debugger;
+            }
+          } else {
+            if(func) {
+              // see above todo
+            } else {
+              let pos = new vscode.Position(+line ?? 1 - 1, 0);
+              let uri = vscode.Uri.parse(file);
+              let loc = new vscode.Location(uri, pos);
+              let newBreakpoint = new vscode.SourceBreakpoint(loc, bp.enabled);
+              vscode.debug.addBreakpoints([newBreakpoint]);
+              this.#lineBreakpoints.add_to(file, bp);
+            }
+          }
         } else {
           debugger;
         }
-      } else {
-        if(func) {
-          // see above todo
-        } else {
-          let pos = new vscode.Position(+line ?? 1 - 1, 0);
-          let uri = vscode.Uri.parse(file);
-          let loc = new vscode.Location(uri, pos);
-          let newBreakpoint = new vscode.SourceBreakpoint(loc, bp.enabled);
-          vscode.debug.addBreakpoints([newBreakpoint]);
-          this.#lineBreakpoints.add_to(file, bp);
-        }
-      }
-    } else {
-      debugger;
+        log(getFunctionName(), payload);
+      });
+    } catch(err) {
+      console.log(`Failed to get VScode & DAP breakpoints`);
     }
-    log(getFunctionName(), payload);
   }
 
   /**
