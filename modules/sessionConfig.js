@@ -253,7 +253,7 @@ class ConfigurationProvider {
   async resolveDebugConfiguration(folder, config, token) {
     try {
       const { trace, pythonLogging } = debugLogging(config.trace);
-      let runMode = new MidasRunMode("utils.py", ["buildStackTrace.py", "watchpoint.py"], trace, pythonLogging);
+      let runMode = new MidasRunMode(trace, pythonLogging);
       buildSettings = runMode;
     } catch(err) {
       await vscode.window.showErrorMessage("Error loading Midas python library. Hard error, Midas Debug Adapter can not run.");

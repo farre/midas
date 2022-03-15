@@ -8,7 +8,7 @@
 const { ArrayMap } = require("./utils");
 
 /// Type that tracks variablesReferences for an execution context (i.e; a thread).
-class ExecutionState {
+class ExecutionContextState {
   threadId;
   /** @type {VSCodeStackFrame[]} */
   stack = [];
@@ -84,7 +84,7 @@ class ExecutionState {
 
   isSameContextAsCurrent(stackStartAddress, functionName) {
     if (this.stack.length == 0) return false;
-    if(this.currentStackAddressStart() == undefined || stackStartAddress == undefined) debugger;
+    if(this.currentStackAddressStart() == undefined || stackStartAddress == undefined) return false;
     return this.currentStackAddressStart() == stackStartAddress && this.currentFunction() == functionName;
   }
 
@@ -135,5 +135,5 @@ class ExecutionState {
 }
 
 module.exports = {
-  ExecutionState,
+  ExecutionContextState,
 };

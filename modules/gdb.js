@@ -20,7 +20,7 @@ const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn, isReplaySession, ArrayMap, ExclusiveArray } = require("./utils");
 const { LocalsReference } = require("./variablesrequest/locals");
-const { ExecutionState } = require("./executionState");
+const { ExecutionContextState } = require("./executionContextState");
 const { RegistersReference } = require("./variablesrequest/registers");
 const {StackFrameState} = require("./variablesrequest/stackFramestate");
 const {ArgsReference} = require("./variablesrequest/args");
@@ -31,15 +31,6 @@ function log(location, payload) {
     return;
   }
   console.log(`[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
-}
-
-let TIMER_ID = 0;
-
-function timerName(name) {
-  let timer_id = TIMER_ID;
-  const timerName = `${name}${timer_id}`;
-  TIMER_ID++;
-  return timerName;
 }
 
 /** @typedef { { addr: string, disp: string, enabled: string, file: string, fullname: string, func: string, line: string, number: string, "original-location": string, "thread-groups": string[], times: string, type: string } } GDBBreakpoint */
@@ -95,6 +86,9 @@ class VSCodeStackFrame extends StackFrame {
   /** @type {string} */
   func;
 }
+const ext = vscode.extensions.getExtension("farrese.midas");
+const dir = `${ext.extensionPath}/modules/python`;
+const MidasSetupArgs = ["-iex", `source ${dir}/stdlib.py`];
 
 const DefaultRRSpawnArgs = [
   "-l",
@@ -113,7 +107,8 @@ function spawnRRGDB(gdbPath, setupCommands, binary, serverAddress, cwd) {
   const spawnParameters =
     setupCommands
       .flatMap(c => ["-iex", `${c}`])
-      .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`]);
+      .concat(MidasSetupArgs)
+      .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`])
   return spawn(gdbPath, spawnParameters);
 }
 
@@ -121,6 +116,7 @@ function spawnGDB(gdbPath, setupCommands, binary, ...args) {
   const spawnParameters =
     setupCommands
       .flatMap(command => ["-iex", `${command}`])
+      .concat(MidasSetupArgs)
       .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
@@ -142,17 +138,18 @@ class GDB extends GDBMixin(GDBBase) {
   #loadedLibraries;
   // variablesReferences bookkeeping
   #nextVarRef = 1;
+  /** @type {import("./debugSession").MidasDebugSession } */
   #target;
   // program name
   #program = "";
   // Are we debugging a normal session or an rr session
   #rrSession = false;
 
-  /** @type { Map<ThreadId, ExecutionState> } */
+  /** @type { Map<ThreadId, ExecutionContextState> } */
   executionContexts = new Map();
   /** @typedef {import("./variablesrequest/registers").RegistersReference | import("./variablesrequest/args").ArgsReference | import("./variablesrequest/locals").LocalsReference | import("./variablesrequest/structs").StructsReference } VariablesReferenceHandler*/
   /** @type { Map<number, VariablesReferenceHandler >} */
-    references = new Map();
+  references = new Map();
 
   /** @type {Map<string, VariablesReference>} */
   evaluatable = new Map();
@@ -186,7 +183,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   /**
    * @param {ThreadId} threadId
-   * @returns { ExecutionState }
+   * @returns { ExecutionContextState }
    */
   getExecutionContext(threadId) {
     return this.executionContexts.get(threadId);
@@ -199,12 +196,12 @@ class GDB extends GDBMixin(GDBBase) {
   async setup() {
     /** @type {import("./buildMode").MidasRunMode } */
     let runModeSettings = this.#target.buildSettings;
-    await runModeSettings.initializeLoadedScripts(this);
+    await runModeSettings.setProductionMode(this);
   }
 
   async reload_scripts() {
     let runModeSettings = this.#target.buildSettings;
-    await runModeSettings.reload_files(this);
+    await runModeSettings.reloadStdLib();
   }
 
   async startWithRR(program, stopOnEntry) {
@@ -223,7 +220,6 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       await this.run();
     }
-    this.#target.sendEvent(new StoppedEvent("entry", 1));
   }
 
   async start(program, stopOnEntry, allStopMode) {
@@ -232,7 +228,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.allStopMode = allStopMode;
     vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
     await this.init();
-    await this.setup();
+    // await this.setup();
     if (!allStopMode) {
       await this.enableAsync();
     } else {
@@ -488,8 +484,6 @@ class GDB extends GDBMixin(GDBBase) {
 
   // Async record handlers
   #onNotify(payload) {
-    log("notify", payload);
-
     switch (payload.state) {
       case "running": {
         this.#onNotifyRunning(payload.data);
@@ -579,32 +573,24 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async buildExecutionState(threadId, levels) {
-    const beScope = timerName("buildExecutionState.Main");
-    console.time(beScope);
     let ec = this.getExecutionContext(threadId);
     let frame = await this.getTopFrame(threadId);
-
     if(frame) {
-      if(frame.stackAddressStart == undefined) debugger;
       if (ec.isSameContextAsCurrent(frame.stackAddressStart, frame.name)) {
         ec.stack[0].line = +frame.line;
       } else {
         const start = await ec.setNewContext(frame.stackAddressStart, frame.name, this);
-        const timer_name = timerName("buildExecutionState-call-backend");
-        console.time(timer_name);
         // means we've not cleared state; add remaining frames to state (which for VSCode tend to be 20)
         if(start >= 0 && start < levels) {
           const remainder = levels - start;
           await this.newBuildExecutionState(threadId, start, remainder);
           if(start != 0) ec.stack[0].line = +frame.line;
         }
-        console.timeEnd(timer_name);
       }
     } else {
       // if we have no top frame, we're screwed any how
       await ec.clear(this);
     }
-    console.timeEnd(beScope);
   }
 
   async newBuildExecutionState(threadId, start, levels)  {
@@ -689,7 +675,7 @@ class GDB extends GDBMixin(GDBBase) {
     thread.name = `${this.#program}`
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
-    this.executionContexts.set(thread.id, new ExecutionState(thread.id));
+    this.executionContexts.set(thread.id, new ExecutionContextState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
     console.log(`Thread ${thread.id} started`);
   }
@@ -884,8 +870,6 @@ class GDB extends GDBMixin(GDBBase) {
               };
               this.#lineBreakpoints.add_to(file, newBreakpoint);
               this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
-            } else {
-              debugger;
             }
           } else {
             if(func) {
@@ -899,8 +883,6 @@ class GDB extends GDBMixin(GDBBase) {
               this.#lineBreakpoints.add_to(file, bp);
             }
           }
-        } else {
-          debugger;
         }
         log(getFunctionName(), payload);
       });
@@ -1151,10 +1133,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async requestMoreFrames(threadId, levels) {
-    const timer_name = timerName("requestMoreFrames");
-    console.time(timer_name);
     let res = await this.newRequestMoreFrames(threadId, levels);
-    console.timeEnd(timer_name);
     return res;
   }
 
