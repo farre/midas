@@ -48,9 +48,9 @@ def getFunctionBlock(frame) -> gdb.Block:
     return block
 
 
-def logExceptionBacktrace(errmsg, exception):
-    misc_logger.error("{} Exception info: {}".format(errmsg, exception))
-    misc_logger.error(traceback.format_exc())
+def logExceptionBacktrace(logger, errmsg, exception):
+    logger.error("{} Exception info: {}".format(errmsg, exception))
+    logger.error(traceback.format_exc())
 
 
 def selectThreadAndFrame(threadId, frameLevel):
@@ -204,27 +204,13 @@ def time_command_invocation(f):
         # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
     return timer_decorator
 
-
-class GetTopFrame(gdb.Command):
-    def __init__(self):
-        super(GetTopFrame, self).__init__("gdbjs-get-top-frame", gdb.COMMAND_USER)
-        self.name = "get-top-frame"
-
-    @time_command_invocation
-    def invoke(self, threadId, from_tty):
-        try:
-            t = executionContext.set_thread(int(threadId))
-            gdb.execute("thread {}".format(threadId))
-            frame = gdb.newest_frame()
-            res = makeVSCodeFrameFromFn(frame, frame.function())
-            output(self.name, res)
-        except Exception as e:
-            err_logger.error("Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()))
-            output(self.name, None)
-
-
-
-getTopFrameCommand = GetTopFrame()
+def createVSCodeStackFrame(frame):
+    try:
+        res = makeVSCodeFrameFromFn(frame, frame.function())
+        return res
+    except:
+        res = makeVSFrameFromNoSymbtab(frame.name(), frame)
+        return res
 
 def makeVSCodeFrameFromFn(frame, functionSymbol):
     sal = frame.find_sal()
@@ -246,7 +232,7 @@ def makeVSCodeFrameFromFn(frame, functionSymbol):
     }
     return sf
 
-def makeVSCodeFrameNoAssociatedFnName(name, frame):
+def makeVSFrameFromNoSymbtab(name, frame):
     sal = frame.find_sal()
     line_number = sal.line
     # DebugProtocol.Source
@@ -268,6 +254,24 @@ def makeVSCodeFrameNoAssociatedFnName(name, frame):
     }
     return sf
 
+class GetTopFrame(gdb.Command):
+    def __init__(self):
+        super(GetTopFrame, self).__init__("gdbjs-get-top-frame", gdb.COMMAND_USER)
+        self.name = "get-top-frame"
+
+    @time_command_invocation
+    def invoke(self, threadId, from_tty):
+        try:
+            t = executionContext.set_thread(int(threadId))
+            frame = gdb.newest_frame()
+            res = createVSCodeStackFrame(frame)
+            output(self.name, res)
+        except Exception as e:
+            logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
+            output(self.name, None)
+
+
+getTopFrameCommand = GetTopFrame()
 
 class StackFrameRequest(gdb.Command):
     def __init__(self):
@@ -286,16 +290,11 @@ class StackFrameRequest(gdb.Command):
             result = []
             try:
                 for x in range(levels + 1):
-                    fn = f.function()
-                    if fn is not None:
-                        item = makeVSCodeFrameFromFn(f, f.function())
-                        result.append(item)
-                    else:
-                        item = makeVSCodeFrameNoAssociatedFnName(f.name(), f)
-                        result.append(item)
+                    item = createVSCodeStackFrame(f)
+                    result.append(item)
                     f = f.older()
             except Exception as e:
-                err_logger.error("Stack trace build exception for frame {}: {}".format(start + x, e))
+                logExceptionBacktrace(err_logger, "Stack trace build exception for frame {}: {}".format(start + x, e), e)
             output(self.name, result)
             currentFrame.select()
         except:
@@ -325,7 +324,7 @@ class ContentsOfStatic(gdb.Command):
             if memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            err_logger.error("Couldn't dereference value {}".format(expression))
+            logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
             raise e
         result = []
         try:
@@ -367,8 +366,8 @@ class ContentsOfBaseClass(gdb.Command):
         try:
             if memberIsReference(it.type):
                 it = it.referenced_value()
-        except:
-            err_logger.error("Couldn't dereference value {}".format(expression))
+        except Exception as e:
+            logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
 
         members = []
         statics = []
@@ -483,7 +482,7 @@ class ContentsOf(gdb.Command):
                         memberResults.append(display(name, value, typeIsPrimitive(value.type)))
                     output(self.name, variables_response(members=memberResults))
                 except Exception as e:
-                    err_logger.error("failed to get pretty printed value: {}. There's no value attribute?".format(e))
+                    logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
                     raise e
             else:
                 # means the pretty printed result, doesn't have any children or shouldn't show any of them. Therefore it's safe
@@ -518,7 +517,7 @@ class ContentsOf(gdb.Command):
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
-            err_logger.error("Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames))
+            logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
             output(self.name, None)
 
 
@@ -561,12 +560,12 @@ class GetLocals(gdb.Command):
                             item = display(symbol.name, value, typeIsPrimitive(value.type))
                             result.append(item)
                         except Exception as e:
-                            logExceptionBacktrace("Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
+                            logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
             output(self.name, result)
         except Exception as e:
-            logExceptionBacktrace("Exception thrown in GetLocals.invoke", e)
+            logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
             raise
             output(self.name, None)
 
