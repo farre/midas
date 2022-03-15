@@ -13,7 +13,7 @@ function log(reason, message) {
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.VariablesResponse } VariablesResponse
  * @typedef { import("@vscode/debugprotocol").DebugProtocol.SetVariableResponse } SetVariableResponse
  * @typedef { import("../gdb").GDB } GDB
- * @typedef { import("../executionState").ExecutionState } ExecutionState
+ * @typedef { import("../executionContextState").ExecutionContextState } ExecutionContextState
  * @typedef { import("../gdb").VSCodeVariable } VSCodeVariable
  */
 

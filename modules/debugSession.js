@@ -10,6 +10,7 @@ const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { isReplaySession } = require("./utils");
+const { ExecutionContextState } = require("./executionContextState");
 
 let server;
 
@@ -17,12 +18,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
 
-  /** @type {number} */
-  threadId;
-
   /** @type { Subject } */
   configIsDone;
-
   _reportProgress;
   useInvalidetedEvent;
 
@@ -38,7 +35,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.#buildSettings = buildSettings;
-    this.threadId = 1;
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
@@ -48,6 +44,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     });
   }
 
+  /**
+   * @returns { import("./buildMode").MidasRunMode }
+   */
   get buildSettings() {
     return this.#buildSettings;
   }
@@ -228,6 +227,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async stackTraceRequest(response, args) {
     let ec = this.gdb.getExecutionContext(args.threadId);
     // this is an unfortunate hack, since VSCode double-fires this request, possibly a VSCode bug.
+    if(ec == undefined) {
+      this.gdb.executionContexts.set(args.threadId, new ExecutionContextState(args.threadId));
+      ec = this.gdb.getExecutionContext(args.threadId);
+    }
     await ec.pendingStackTrace;
     ec.pendingStackTrace = new Promise(async resolve => {
       let exec_ctx = this.gdb.executionContexts.get(args.threadId);

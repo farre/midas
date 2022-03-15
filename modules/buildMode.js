@@ -4,43 +4,20 @@ const vscode = require("vscode");
  * Run-mode settings of Midas. Loads scripts and holds trace of GDB events and debug logging.
  */
 class MidasRunMode {
-  #contents = [];
-  #utils;
   #trace = false;
   #debug = false;
+
   /**
-   *
-   * @param {*} utilities
-   * @param {*} files
    * @param {*} trace
    * @param {*} debug
    * @throws - `utilities` and `files` must provide paths to all Midas backend code, or this will throw (and Midas DA will not work).
    */
-  constructor(utilities, files, trace, debug) {
-    if(!utilities || !files) {
-      vscode.window.showErrorMessage("Midas backend code not provided. Debug Adapter will not work");
-      throw new Error("Midas backend code not provided. Debug Adapter will not work");
-    }
+  constructor(trace, debug) {
     this.#trace = trace;
     this.#debug = debug;
-    if(this.#trace || this.#debug) {
-      console.log(`Loading the contents of python files: ${files} and our 'midas stdlib': ${utilities}`);
-    }
-    const ext = vscode.extensions.getExtension("farrese.midas");
-    const dir = `${ext.extensionPath}/modules/python`
-    for(const file of files) {
-      const fileContents = require("fs").readFileSync(`${dir}/${file}`, { encoding: 'utf8' });
-      if(!fileContents || fileContents.length == 0) {
-        throw new Error(`Failed to load contents of ${file}. Midas DA will not function.`);
-      }
-      this.#contents.push({path: file, contents: fileContents});
-
-    }
-    const fileContents = require("fs").readFileSync(`${dir}/${utilities}`, { encoding: 'utf8' });
-    this.#utils = { path: utilities, contents: fileContents };
   }
 
-  async initializeLoadedScripts(gdb) {
+  async setProductionMode(gdb) {
     if(this.#trace) {
       await gdb.execPy("setTrace = True");
     } else {
@@ -52,28 +29,12 @@ class MidasRunMode {
     } else {
       await gdb.execPy("isDevelopmentBuild = False");
     }
-    await gdb.execPy(this.#utils.contents);
-
-    for(const {file, contents} of this.#contents) {
-      if(this.#trace || this.#debug) console.log(`Intializing contents of file ${file}`);
-      await gdb.execPy(contents);
-    }
   }
 
-  async reload_files(gdb) {
+  async reloadStdLib(gdb) {
     const ext = vscode.extensions.getExtension("farrese.midas");
     const dir = `${ext.extensionPath}/modules/python`
-    for(let {path, contents} of this.#contents) {
-      const fileContents = require("fs").readFileSync(`${dir}/${path}`, { encoding: 'utf8' });
-      if(!fileContents || fileContents.length == 0) {
-        throw new Error(`Failed to load contents of ${path}. Midas DA will not function.`);
-      }
-      contents = fileContents;
-      await gdb.execPy(fileContents);
-    }
-    const fileContents = require("fs").readFileSync(`${dir}/${this.#utils.path}`, { encoding: 'utf8' });
-    await gdb.execPy(fileContents);
-    this.#utils.contents = fileContents;
+    await gdb.execCMD(`source ${dir}/stdlib.py`);
   }
 
   get trace() {
