@@ -8,6 +8,9 @@ test/cppworkspace/test/build
 test/cppworkspace/test/testapp
 test/cppworkspace/thread/.vscode/
 test/cppworkspace/thread/build
+test/cppworkspace/simple_input/.vscode
+test/cppworkspace/simple_input/build
+test/cppworkspace/simple_input/testapp
 .vscode/settings.json
 
 update.log
