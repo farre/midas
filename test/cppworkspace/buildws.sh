@@ -1,6 +1,6 @@
 #!/bin/bash
 
-projects=("test" "thread")
+projects=("test" "thread" "simple_input")
 for project in "${projects[@]}"; do
     echo "building $project ..."
     cd "$project"
