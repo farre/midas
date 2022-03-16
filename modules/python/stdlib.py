@@ -62,16 +62,18 @@ def parseStringArgs(arg):
     return gdb.string_to_argv(arg)
 
 
-def prepareOutput(cmdName, contents):
+def prepareCommandOutput(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
 
+def prepareEventOutput(name, payload):
+    return '<gdbjs:event:{0} {1} {0}:event:gdbjs>'.format(name, payload)
 
-def output(name, result):
+def writeResultToStream(name, result, prepareFnPtr):
+    """Writes result of an operation to client stream."""
     res = json.dumps(result, ensure_ascii=False)
-    msg = prepareOutput(name, res)
-    sys.stdout.write(msg)
+    packet = prepareFnPtr(name, res)
+    sys.stdout.write(packet)
     sys.stdout.flush()
-
 
 def typeIsPrimitive(valueType):
     try:
@@ -265,10 +267,10 @@ class GetTopFrame(gdb.Command):
             t = executionContext.set_thread(int(threadId))
             frame = gdb.newest_frame()
             res = createVSCodeStackFrame(frame)
-            output(self.name, res)
+            writeResultToStream(self.name, res, prepareCommandOutput)
         except Exception as e:
             logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
-            output(self.name, None)
+            writeResultToStream(self.name, None, prepareCommandOutput)
 
 
 getTopFrameCommand = GetTopFrame()
@@ -295,11 +297,11 @@ class StackFrameRequest(gdb.Command):
                     f = f.older()
             except Exception as e:
                 logExceptionBacktrace(err_logger, "Stack trace build exception for frame {}: {}".format(start + x, e), e)
-            output(self.name, result)
+            writeResultToStream(self.name, result, prepareCommandOutput)
             currentFrame.select()
         except:
             # means selectThreadAndFrame failed; we have no frames from `start` and down
-            output(self.name, [])
+            writeResultToStream(self.name, [], prepareCommandOutput)
 
 stackFrameRequestCommand = StackFrameRequest()
 
@@ -344,7 +346,7 @@ class ContentsOfStatic(gdb.Command):
                 result.append(item)
         except:
             result.append({ "name": "static value", "display": "{}".format(it), "isPrimitive": True, "static": True })
-        output(self.name, result)
+        writeResultToStream(self.name, result, prepareCommandOutput)
 
 contentsOfStaticCommand = ContentsOfStatic()
 
@@ -382,10 +384,10 @@ class ContentsOfBaseClass(gdb.Command):
                 for child in pp.children():
                     (name, value) = child
                     memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                output(self.name, variables_response(members=memberResults))
+                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
             else:
                 memberResults.append(display("value", pp.to_string().value(), True, True))
-                output(self.name, variables_response(members=memberResults))
+                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
             return
 
         try:
@@ -409,10 +411,10 @@ class ContentsOfBaseClass(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 baseClassResult.append(item)
-            output(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult))
+            writeResultToStream(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult), prepareCommandOutput)
         except Exception as e:
             misc_logger.error("Couldn't get base class contents")
-            output(self.name, None)
+            writeResultToStream(self.name, None, prepareCommandOutput)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
@@ -480,7 +482,7 @@ class ContentsOf(gdb.Command):
                         misc_logger.error(("trying to get name and value of child"))
                         (name, value) = child
                         memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                    output(self.name, variables_response(members=memberResults))
+                    writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
                 except Exception as e:
                     logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
                     raise e
@@ -493,7 +495,7 @@ class ContentsOf(gdb.Command):
                     memberResults.append(pp_display_simple("value", res.value()))
                 else:
                     memberResults.append(pp_display_simple("value", res))
-                output(self.name, variables_response(members=memberResults))
+                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
             return
 
         if memberIsReference(it.type):
@@ -511,14 +513,14 @@ class ContentsOf(gdb.Command):
                     item = static_display(field.name, it.type[field.name].type)
                     staticsResults.append(item)
 
-            output(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults))
+            writeResultToStream(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults), prepareCommandOutput)
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
             logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
-            output(self.name, None)
+            writeResultToStream(self.name, None, prepareCommandOutput)
 
 
 updatesOfCommand = ContentsOf()
@@ -563,11 +565,10 @@ class GetLocals(gdb.Command):
                             logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
-            output(self.name, result)
+            writeResultToStream(self.name, result, prepareCommandOutput)
         except Exception as e:
             logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
-            raise
-            output(self.name, None)
+            writeResultToStream(self.name, [], prepareCommandOutput)
 
 getLocalsCommand = GetLocals()
 
@@ -588,6 +589,6 @@ class SetWatchPoint(gdb.Command):
         else:
             raise RuntimeError("Unknown watchpoint class")
         bp = gdb.breakpoints()[-1]
-        output(self.name, { "number": bp.number })
+        writeResultToStream(self.name, { "number": bp.number }, prepareCommandOutput)
 
 setWatchPointCommand = SetWatchPoint()

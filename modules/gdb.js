@@ -201,7 +201,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   async reload_scripts() {
     let runModeSettings = this.#target.buildSettings;
-    await runModeSettings.reloadStdLib();
+    await runModeSettings.reloadStdLib(this);
   }
 
   async startWithRR(program, stopOnEntry) {
@@ -286,7 +286,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.on("thread-group-started", this.#onThreadGroupStarted.bind(this));
     this.on("thread-group-exited", this.#onThreadGroupExited.bind(this));
     this.on("new-objfile", this.#onNewObjfile.bind(this));
-
     this.sendEvent(new InitializedEvent());
   }
 
@@ -576,17 +575,15 @@ class GDB extends GDBMixin(GDBBase) {
     let ec = this.getExecutionContext(threadId);
     let frame = await this.getTopFrame(threadId);
     if(frame) {
-      if (ec.isSameContextAsCurrent(frame.stackAddressStart, frame.name)) {
-        ec.stack[0].line = +frame.line;
-      } else {
+      if (!ec.isSameContextAsCurrent(frame.stackAddressStart, frame.name)) {
         const start = await ec.setNewContext(frame.stackAddressStart, frame.name, this);
         // means we've not cleared state; add remaining frames to state (which for VSCode tend to be 20)
         if(start >= 0 && start < levels) {
           const remainder = levels - start;
           await this.newBuildExecutionState(threadId, start, remainder);
-          if(start != 0) ec.stack[0].line = +frame.line;
         }
       }
+      if(ec.stack[0]) ec.stack[0].line = +frame.line;
     } else {
       // if we have no top frame, we're screwed any how
       await ec.clear(this);
@@ -928,8 +925,6 @@ class GDB extends GDBMixin(GDBBase) {
       threadId: THREADID,
     };
     stopEvent.body = body;
-    let exec_ctx = this.executionContexts.get(thread.id);
-    if (exec_ctx.stack.length > 0) exec_ctx.stack[0].line = +thread.frame.line;
     this.sendEvent(stopEvent);
   }
 
