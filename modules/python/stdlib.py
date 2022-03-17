@@ -1,30 +1,17 @@
 import gdb
+import os
 import sys
-import json
 import gdb.types
-import traceback
 import logging
 import logging.handlers
-import time
 from os import path
-import functools
+import config
 
-try: isDevelopmentBuild
-except: isDevelopmentBuild = None
-if isDevelopmentBuild is None:
-    isDevelopmentBuild = False
+def resolveExtensionFile(fileName):
+    extensionPath = os.path.dirname(os.path.realpath(__file__))
+    return "{}/../../{}".format(extensionPath, fileName)
 
-# Midas sets this, when Midas DA has been initialized
-if isDevelopmentBuild:
-    time_handler = logging.handlers.WatchedFileHandler(
-        "performance_time.log", mode="w")
-    formatter = logging.Formatter(logging.BASIC_FORMAT)
-    time_handler.setFormatter(formatter)
-    time_logger = logging.getLogger("time-logger")
-    time_logger.setLevel(logging.DEBUG)
-    time_logger.addHandler(time_handler)
-
-misc_handler = logging.handlers.WatchedFileHandler("debug.log", mode="w")
+misc_handler = logging.handlers.WatchedFileHandler(resolveExtensionFile("debug.log"), mode="w")
 misc_formatter = logging.Formatter(logging.BASIC_FORMAT)
 misc_handler.setFormatter(misc_formatter)
 
@@ -32,48 +19,37 @@ misc_logger = logging.getLogger("update-logger")
 misc_logger.setLevel(logging.DEBUG)
 misc_logger.addHandler(misc_handler)
 
-err_handler = logging.handlers.WatchedFileHandler("error.log", mode="w")
+err_handler = logging.handlers.WatchedFileHandler(resolveExtensionFile("error.log"), mode="w")
 err_formatter = logging.Formatter(logging.BASIC_FORMAT)
 err_handler.setFormatter(err_formatter)
 
 err_logger = logging.getLogger("error-logger")
 err_logger.addHandler(err_handler)
 
-def getFunctionBlock(frame) -> gdb.Block:
-    block = frame.block()
-    while not block.superblock.is_static and not block.superblock.is_global:
-        block = block.superblock
-    if block.is_static or block.is_global:
-        return None
-    return block
+time_handler = logging.handlers.WatchedFileHandler(resolveExtensionFile("performance_time.log"), mode="w")
+time_formatter = logging.Formatter(logging.BASIC_FORMAT)
+time_handler.setFormatter(time_formatter)
+time_logger = logging.getLogger("time-logger")
+time_logger.setLevel(logging.DEBUG)
+time_logger.addHandler(time_handler)
 
+# Setup code that needs to be excuted, so that GDB can know where to look for our python modules
+# We grab the path to the folder containing this file and append it to sys.
+extensionPath = os.path.dirname(os.path.realpath(__file__))
+if sys.path.count(extensionPath) == 0:
+    err_logger.error("Module path not set. Setting it")
+    sys.path.append(extensionPath)
 
-def logExceptionBacktrace(logger, errmsg, exception):
-    logger.error("{} Exception info: {}".format(errmsg, exception))
-    logger.error(traceback.format_exc())
+import midas_utils
+from midas_utils import prepareCommandResponse, parseCommandArguments, sendResponse, timeInvocation, logExceptionBacktrace, getClosest, resolveGdbValue, memberIsReference
 
+# Midas sets this, when Midas DA has been initialized
+if config.isDevelopmentBuild:
+    misc_logger.debug("Development mode is set. Logging enabled.")
 
 def selectThreadAndFrame(threadId, frameLevel):
     gdb.execute("thread {}".format(threadId))
     gdb.execute("frame {}".format(frameLevel))
-
-
-def parseStringArgs(arg):
-    return gdb.string_to_argv(arg)
-
-
-def prepareCommandOutput(cmdName, contents):
-    return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
-
-def prepareEventOutput(name, payload):
-    return '<gdbjs:event:{0} {1} {0}:event:gdbjs>'.format(name, payload)
-
-def writeResultToStream(name, result, prepareFnPtr):
-    """Writes result of an operation to client stream."""
-    res = json.dumps(result, ensure_ascii=False)
-    packet = prepareFnPtr(name, res)
-    sys.stdout.write(packet)
-    sys.stdout.flush()
 
 def typeIsPrimitive(valueType):
     try:
@@ -84,11 +60,6 @@ def typeIsPrimitive(valueType):
                 return False
     except TypeError:
         return True
-
-
-def memberIsReference(type):
-    code = type.code
-    return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
 
 def getMembersRecursively(field, memberList, statics):
@@ -154,57 +125,7 @@ def static_display(name, type):
 def variables_response(members=[], statics=[], base_classes=[]):
     return { "members": members, "statics": statics, "base_classes": base_classes }
 
-# Midas Terminology
-# Execution Context: Thread (id) and Frame (level)
 
-# Registers the current execution context
-class ExecutionContextRegister:
-    inferior = None
-    def __init__(self):
-        self.threadId = -1
-        self.frameLevel = -1
-        ExecutionContextRegister.inferior = gdb.selected_inferior()
-
-    def set_thread(self, threadId):
-        if self.threadId != threadId:
-            for t in ExecutionContextRegister.inferior.threads():
-                if t.num == threadId:
-                    t.switch()
-                    self.threadId = t.num
-                    return t
-        else:
-            return gdb.selected_thread()
-
-    def set_frame(self, level):
-        if self.frameLevel != int(level):
-            gdb.execute("frame {}".format(level))
-            frame = gdb.selected_frame()
-            self.frameLevel = frame.level()
-            return frame
-        else:
-            return gdb.selected_frame()
-
-    def set_context(self, threadId, frameLevel):
-        t = self.set_thread(threadId=int(threadId))
-        f = self.set_frame(level=int(frameLevel))
-        return (t, f)
-
-executionContext = ExecutionContextRegister()
-
-def time_command_invocation(f):
-    if not isDevelopmentBuild:
-        return f
-    """Measure performance (time) of command or function"""
-    @functools.wraps(f)
-    def timer_decorator(*args, **kwargs):
-        invokeBegin = time.perf_counter_ns()
-        f(*args, **kwargs)
-        invokeEnd = time.perf_counter_ns()
-        logger = logging.getLogger("time-logger")
-        elapsed_time = int((invokeEnd - invokeBegin) / 1000) # we don't need nano-second measuring, but the accuracy of the timer is nice.
-        logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
-        # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
-    return timer_decorator
 
 def createVSCodeStackFrame(frame):
     try:
@@ -261,16 +182,16 @@ class GetTopFrame(gdb.Command):
         super(GetTopFrame, self).__init__("gdbjs-get-top-frame", gdb.COMMAND_USER)
         self.name = "get-top-frame"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, threadId, from_tty):
         try:
-            t = executionContext.set_thread(int(threadId))
+            t = config.executionContext.set_thread(int(threadId))
             frame = gdb.newest_frame()
             res = createVSCodeStackFrame(frame)
-            writeResultToStream(self.name, res, prepareCommandOutput)
+            sendResponse(self.name, res, prepareCommandResponse)
         except Exception as e:
             logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
-            writeResultToStream(self.name, None, prepareCommandOutput)
+            sendResponse(self.name, None, prepareCommandResponse)
 
 
 getTopFrameCommand = GetTopFrame()
@@ -280,28 +201,28 @@ class StackFrameRequest(gdb.Command):
         super(StackFrameRequest, self).__init__("gdbjs-request-stackframes", gdb.COMMAND_USER)
         self.name = "request-stackframes"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, start, levels] = parseStringArgs(arguments)
+        [threadId, start, levels] = parseCommandArguments(arguments)
         threadId = int(threadId)
         levels = int(levels)
         start = int(start)
         try:
             currentFrame = gdb.selected_frame()
-            (t, f) = executionContext.set_context(threadId, start)
+            (t, f) = config.executionContext.set_context(threadId, start)
             result = []
-            try:
-                for x in range(levels + 1):
+            for x in range(levels + 1):
+                if f is not None:
                     item = createVSCodeStackFrame(f)
                     result.append(item)
                     f = f.older()
-            except Exception as e:
-                logExceptionBacktrace(err_logger, "Stack trace build exception for frame {}: {}".format(start + x, e), e)
-            writeResultToStream(self.name, result, prepareCommandOutput)
+                else:
+                    break
+            sendResponse(self.name, result, prepareCommandResponse)
             currentFrame.select()
         except:
             # means selectThreadAndFrame failed; we have no frames from `start` and down
-            writeResultToStream(self.name, [], prepareCommandOutput)
+            sendResponse(self.name, [], prepareCommandResponse)
 
 stackFrameRequestCommand = StackFrameRequest()
 
@@ -311,10 +232,10 @@ class ContentsOfStatic(gdb.Command):
         super(ContentsOfStatic, self).__init__("gdbjs-get-contents-of-static", gdb.COMMAND_USER)
         self.name = "get-contents-of-static"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression] = parseStringArgs(arguments)
-        (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
+        [threadId, frameLevel, expression] = parseCommandArguments(arguments)
+        (thread, frame) = config.executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         it = gdb.parse_and_eval(components[0])
 
@@ -346,7 +267,7 @@ class ContentsOfStatic(gdb.Command):
                 result.append(item)
         except:
             result.append({ "name": "static value", "display": "{}".format(it), "isPrimitive": True, "static": True })
-        writeResultToStream(self.name, result, prepareCommandOutput)
+        sendResponse(self.name, result, prepareCommandResponse)
 
 contentsOfStaticCommand = ContentsOfStatic()
 
@@ -356,11 +277,11 @@ class ContentsOfBaseClass(gdb.Command):
         super(ContentsOfBaseClass, self).__init__("gdbjs-get-contents-of-base-class", gdb.COMMAND_USER)
         self.name = "get-contents-of-base-class"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression, base_classes] = parseStringArgs(arguments)
-        (thread, frame) = executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
-        base_classes = parseStringArgs(base_classes)
+        [threadId, frameLevel, expression, base_classes] = parseCommandArguments(arguments)
+        (thread, frame) = config.executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
+        base_classes = parseCommandArguments(base_classes)
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
 
         if it.type.code == gdb.TYPE_CODE_PTR:
@@ -384,10 +305,10 @@ class ContentsOfBaseClass(gdb.Command):
                 for child in pp.children():
                     (name, value) = child
                     memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
+                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
             else:
                 memberResults.append(display("value", pp.to_string().value(), True, True))
-                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
+                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
             return
 
         try:
@@ -411,49 +332,12 @@ class ContentsOfBaseClass(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 baseClassResult.append(item)
-            writeResultToStream(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult), prepareCommandOutput)
+            sendResponse(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult), prepareCommandResponse)
         except Exception as e:
             misc_logger.error("Couldn't get base class contents")
-            writeResultToStream(self.name, None, prepareCommandOutput)
+            sendResponse(self.name, None, prepareCommandResponse)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
-
-# When parsing closely related blocks, this is faster than gdb.parse_and_eval on average.
-def getClosest(frame, name):
-    block = frame.block()
-    while (not block.is_static) and (not block.superblock.is_global):
-        for symbol in block:
-            if symbol.name == name:
-                return symbol.value(frame)
-        block = block.superblock
-    return None
-
-# Function that is able to utilize pretty printers, so that we can resolve
-# a value (which often does _not_ have the same expression path as regular structured types).
-# For instance used for std::tuple, which has a difficult member "layout", with ambiguous names.
-# Since ContentsOf command always takes a full "expression path", now it doesn't matter if the sub-paths of the expression
-# contain non-member names; because if there's a pretty printer that rename the members (like in std::tuple, it's [1], [2], ... [N])
-# these will be found and traversed properly, anyway
-def resolveGdbValue(value, components):
-    it = value
-    while len(components) > 0:
-        if memberIsReference(it.type):
-            it = it.referenced_value()
-        pp = gdb.default_visualizer(it)
-        component = components.pop(0)
-        if pp is not None:
-            found = False
-            for child in pp.children():
-                (name, val) = child
-                if component == name:
-                    it = val
-                    found = True
-                    break
-            if not found:
-                raise NotImplementedError()
-        else:
-            it = it[component]
-    return it
 
 def getAndTraverseExpressionPath(frame, expression):
     components = expression.split(".")
@@ -466,10 +350,10 @@ class ContentsOf(gdb.Command):
         super(ContentsOf, self).__init__("gdbjs-get-contents-of", gdb.COMMAND_USER)
         self.name = "get-contents-of"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression] = parseStringArgs(arguments)
-        (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
+        [threadId, frameLevel, expression] = parseCommandArguments(arguments)
+        (thread, frame) = config.executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
         pp = gdb.default_visualizer(it)
         memberResults = []
@@ -482,7 +366,7 @@ class ContentsOf(gdb.Command):
                         misc_logger.error(("trying to get name and value of child"))
                         (name, value) = child
                         memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                    writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
+                    sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
                 except Exception as e:
                     logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
                     raise e
@@ -495,7 +379,7 @@ class ContentsOf(gdb.Command):
                     memberResults.append(pp_display_simple("value", res.value()))
                 else:
                     memberResults.append(pp_display_simple("value", res))
-                writeResultToStream(self.name, variables_response(members=memberResults), prepareCommandOutput)
+                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
             return
 
         if memberIsReference(it.type):
@@ -513,14 +397,14 @@ class ContentsOf(gdb.Command):
                     item = static_display(field.name, it.type[field.name].type)
                     staticsResults.append(item)
 
-            writeResultToStream(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults), prepareCommandOutput)
+            sendResponse(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults), prepareCommandResponse)
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
             logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
-            writeResultToStream(self.name, None, prepareCommandOutput)
+            sendResponse(self.name, None, prepareCommandResponse)
 
 
 updatesOfCommand = ContentsOf()
@@ -542,10 +426,10 @@ class GetLocals(gdb.Command):
         super(GetLocals, self).__init__("gdbjs-get-locals", gdb.COMMAND_USER)
         self.name = "get-locals"
 
-    @time_command_invocation
+    @timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, scope] = parseStringArgs(arguments)
-        (thread, frame) = executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
+        [threadId, frameLevel, scope] = parseCommandArguments(arguments)
+        (thread, frame) = config.executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         predicate = parseScopeParam(scope)
         try:
             block = frame.block()
@@ -565,10 +449,10 @@ class GetLocals(gdb.Command):
                             logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
-            writeResultToStream(self.name, result, prepareCommandOutput)
+            sendResponse(self.name, result, prepareCommandResponse)
         except Exception as e:
             logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
-            writeResultToStream(self.name, [], prepareCommandOutput)
+            sendResponse(self.name, [], prepareCommandResponse)
 
 getLocalsCommand = GetLocals()
 
@@ -578,7 +462,7 @@ class SetWatchPoint(gdb.Command):
         self.name = "watchpoint"
 
     def invoke(self, args, from_tty):
-        [type, expression] = parseStringArgs(args)
+        [type, expression] = parseCommandArguments(args)
         misc_logger.error("set wp for {} and {}".format(type, expression))
         if type == "access":
             gdb.execute(f"awatch -l {expression}")
@@ -589,6 +473,6 @@ class SetWatchPoint(gdb.Command):
         else:
             raise RuntimeError("Unknown watchpoint class")
         bp = gdb.breakpoints()[-1]
-        writeResultToStream(self.name, { "number": bp.number }, prepareCommandOutput)
+        sendResponse(self.name, { "number": bp.number }, prepareCommandResponse)
 
 setWatchPointCommand = SetWatchPoint()
