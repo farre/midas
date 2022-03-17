@@ -25,10 +25,16 @@ class MidasRunMode {
     }
 
     if(this.#debug) {
-      await gdb.execPy("isDevelopmentBuild = True");
+      await gdb.execPy("config.isDevelopmentBuild = True");
     } else {
-      await gdb.execPy("isDevelopmentBuild = False");
+      await gdb.execPy("config.isDevelopmentBuild = False");
     }
+  }
+
+  getCommandParameters() {
+    const traceparam = this.#trace ? "True" : "False";
+    const debugparam = this.#debug ? "True" : "False";
+    return ["-iex", `py config.setTrace = ${traceparam}`, "-iex", `py config.isDevelopmentBuild = ${debugparam}`];
   }
 
   async reloadStdLib(gdb) {

@@ -88,7 +88,7 @@ class VSCodeStackFrame extends StackFrame {
 }
 const ext = vscode.extensions.getExtension("farrese.midas");
 const dir = `${ext.extensionPath}/modules/python`;
-const MidasSetupArgs = ["-iex", `source ${dir}/stdlib.py`];
+
 
 const DefaultRRSpawnArgs = [
   "-l",
@@ -103,20 +103,39 @@ const DefaultRRSpawnArgs = [
   "set sysroot /",
 ];
 
-function spawnRRGDB(gdbPath, setupCommands, binary, serverAddress, cwd) {
+/**
+ * @param {string} gdbPath - path to GDB
+ * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
+ * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
+ * @param {string} binary - binary to debug
+ * @param {string} serverAddress - server address rr is listening on
+ * @param {string} cwd - current working directory to set GDB to
+ * @returns
+ */
+function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress, cwd) {
+  const MidasSetupArgs = [["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
   const spawnParameters =
     setupCommands
       .flatMap(c => ["-iex", `${c}`])
-      .concat(MidasSetupArgs)
+      .concat(MidasSetupArgs.flatMap(i => i))
       .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`])
   return spawn(gdbPath, spawnParameters);
 }
 
-function spawnGDB(gdbPath, setupCommands, binary, ...args) {
+/**
+ * @param {string} gdbPath - path to GDB
+ * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
+ * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
+ * @param {string} binary - binary to debug
+ * @param {...string} args - arguments to pass to debuggee
+ * @returns
+ */
+function spawnGDB(gdbPath, traceSettings, setupCommands, binary, ...args) {
+  const MidasSetupArgs = [["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
   const spawnParameters =
     setupCommands
       .flatMap(command => ["-iex", `${command}`])
-      .concat(MidasSetupArgs)
+      .concat(MidasSetupArgs.flatMap(i => i))
       .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
@@ -168,11 +187,11 @@ class GDB extends GDBMixin(GDBBase) {
     super(
       (() => {
         if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.gdbPath, args.setupCommands, args.program, args.serverAddress, args.cwd);
+          let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.gdbPath, args.setupCommands, args.program, ...(args.args ?? []));
+          let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
           gdbProcess = gdb;
           return gdb;
         }
