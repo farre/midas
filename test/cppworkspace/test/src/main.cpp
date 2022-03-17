@@ -32,8 +32,14 @@ Number<Num> add_two(Num a, Num b)
   return Number<Num>::sum(l, r);
 }
 
+struct S {
+  int j;
+  int k;
+};
+
 int main(int argc, const char **argv)
 {
+  S fooBar{.j = 10, .k = 100};
   const auto somelocal = 42;
   constexpr int array[42] = {};
   auto iptr = new int{42};
