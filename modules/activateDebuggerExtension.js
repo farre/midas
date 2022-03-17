@@ -5,7 +5,6 @@ const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./sessionConfig");
 
 /**
- *
  * @param {vscode.ExtensionContext} context
  * @param {vscode.DebugAdapterDescriptorFactory} [descriptorFactory]
  */

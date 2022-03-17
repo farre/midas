@@ -12,6 +12,8 @@ test/cppworkspace/simple_input/.vscode
 test/cppworkspace/simple_input/build
 test/cppworkspace/simple_input/testapp
 .vscode/settings.json
+__pycache__
+
 
 update.log
 time.log
