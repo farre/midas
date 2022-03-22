@@ -225,54 +225,25 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async stackTraceRequestPython(response, {threadId, startFrame, levels}) {
-    response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`);
-    return response.body;
+    response.body = {
+      stackFrames: await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`)
+    };
+    return response;
   }
 
   async stackTraceRequest(response, args) {
-    // const test = this.stackTraceRequestPython(response, args);
-    let ec = this.gdb.getExecutionContext(args.threadId);
-    // this is an unfortunate hack, since VSCode double-fires this request, possibly a VSCode bug.
-    if(ec == undefined) {
-      ec = this.gdb.newExecutionContext(args.threadId);
-    }
-    await ec.pendingStackTrace;
-    ec.pendingStackTrace = new Promise(async resolve => {
-      let exec_ctx = this.gdb.executionContexts.get(args.threadId);
-      if (args.startFrame == 0) {
-        await this.gdb.buildExecutionState(args.threadId, args.levels);
-        response.body = {
-          stackFrames: exec_ctx.stack,
-        };
-      } else {
-        const frames = await this.gdb.requestMoreFrames(args.threadId, args.levels);
-        response.body = {
-          stackFrames: frames
-        };
-      }
-      this.sendResponse(response);
-      resolve();
-    });
+    this.sendResponse(await this.stackTraceRequestPython(response, args));
+  }
+
+  async variablesRequestPython(response, {variablesReference}) {
+    response.body = {
+      variables: []
+    };
+    return response;
   }
 
   async variablesRequest(response, args) {
-    // unfortunately, due to the convoluted nature of GDB MI's approach, we discard the changelist
-    // and instead read the values with -var-evaluate-expression calls.
-    // However, we must call this, otherwise the var objs do not get updated in the backend
-    const { variablesReference } = args;
-
-    let handler = this.gdb.references.get(variablesReference);
-    if (handler) {
-      const prepared_response = await handler.handleRequest(response, this.gdb);
-      this.sendResponse(prepared_response);
-      return;
-    }
-
-    let evaluatableVar = this.gdb.evaluatableStructuredVars.get(variablesReference);
-    if (evaluatableVar) {
-      await this.handleStructFromEvaluatableRequest(response, evaluatableVar);
-      return;
-    }
+    this.sendResponse(await this.variablesRequestPython(response, args));
   }
 
   async handleStructFromEvaluatableRequest(response, struct) {
@@ -703,7 +674,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async exec(cmd) {
-    this.gdb.execCMD(cmd);
+    return await this.gdb.execCMD(cmd);
   }
 }
 

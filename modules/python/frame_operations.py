@@ -1,5 +1,10 @@
 import gdb
 
+def frame_iterator(frame):
+    while frame is not None:
+        yield(frame)
+        frame = frame.older()
+
 def take_n_frames(frame, num):
     count = num
     for f in frame_iterator(frame):
@@ -8,11 +13,6 @@ def take_n_frames(frame, num):
         else:
             yield f
         count -= 1
-
-def frame_iterator(frame):
-    while frame is not None:
-        yield(frame)
-        frame = frame.older()
 
 def find_first_equal_frame(stackFrameList, frameList):
     for x, sf in enumerate(stackFrameList):
@@ -27,7 +27,7 @@ def find_first_identical_frames(stackFrameList, frame, stopCount):
     for x in range(stopCount):
         fa = stackFrameList[x].frame
         for y, fb in enumerate(f):
-            if fa.frame == fb:
+            if fa == fb:
                 return (x, y)
     return None
 

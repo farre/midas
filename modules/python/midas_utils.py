@@ -5,7 +5,33 @@ import logging
 import functools
 import time
 import traceback
-import modules.python.config as config
+import config as config
+
+def typeIsPrimitive(valueType):
+    try:
+        for f in valueType.fields():
+            if hasattr(f, "enumval"):
+                return True
+            else:
+                return False
+    except TypeError:
+        return True
+
+def getMembersRecursively(field, memberList, statics):
+    if field.bitsize > 0:
+        misc_logger = logging.getLogger("update-logger")
+        misc_logger.info("field {} is possibly a bitfield of size {}".format(
+            field.name, field.bitsize))
+    if hasattr(field, 'bitpos'):
+        if field.is_base_class:
+            for f in field.type.fields():
+                getMembersRecursively(
+                    f, memberList=memberList, statics=statics)
+        else:
+            if field.name is not None and not field.name.startswith("_vptr"):
+                memberList.append(field.name)
+    else:
+        statics.append(field.name)
 
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
