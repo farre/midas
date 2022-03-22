@@ -224,12 +224,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
+  async stackTraceRequestPython(response, {threadId, startFrame, levels}) {
+    response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`);
+    return response.body;
+  }
+
   async stackTraceRequest(response, args) {
+    // const test = this.stackTraceRequestPython(response, args);
     let ec = this.gdb.getExecutionContext(args.threadId);
     // this is an unfortunate hack, since VSCode double-fires this request, possibly a VSCode bug.
     if(ec == undefined) {
-      this.gdb.executionContexts.set(args.threadId, new ExecutionContextState(args.threadId));
-      ec = this.gdb.getExecutionContext(args.threadId);
+      ec = this.gdb.newExecutionContext(args.threadId);
     }
     await ec.pendingStackTrace;
     ec.pendingStackTrace = new Promise(async resolve => {
@@ -695,6 +700,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   reloadScripts() {
     this.gdb.setup();
+  }
+
+  async exec(cmd) {
+    this.gdb.execCMD(cmd);
   }
 }
 

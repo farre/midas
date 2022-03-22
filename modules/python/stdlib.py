@@ -5,7 +5,7 @@ import gdb.types
 import logging
 import logging.handlers
 from os import path
-import config
+
 
 def resolveExtensionFile(fileName):
     extensionPath = os.path.dirname(os.path.realpath(__file__))
@@ -40,8 +40,12 @@ if sys.path.count(extensionPath) == 0:
     err_logger.error("Module path not set. Setting it")
     sys.path.append(extensionPath)
 
-import midas_utils
 from midas_utils import prepareCommandResponse, parseCommandArguments, sendResponse, timeInvocation, logExceptionBacktrace, getClosest, resolveGdbValue, memberIsReference
+
+import config
+import stack
+
+stackFrameRequestCommand = stack.StackTraceRequest()
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
@@ -115,7 +119,6 @@ def pp_display_simple(name, value):
 def base_class_display(name, type):
     return {"name": name, "display": "{} (base)".format(type)}
 
-
 def static_display(name, type):
     isPrimitive = True if type.tag is None else False
     typeName = type.tag if type.tag is not None else type
@@ -185,7 +188,7 @@ class GetTopFrame(gdb.Command):
     @timeInvocation
     def invoke(self, threadId, from_tty):
         try:
-            t = config.executionContext.set_thread(int(threadId))
+            t = config.currentExecutionContext.set_thread(int(threadId))
             frame = gdb.newest_frame()
             res = createVSCodeStackFrame(frame)
             sendResponse(self.name, res, prepareCommandResponse)
@@ -209,7 +212,7 @@ class StackFrameRequest(gdb.Command):
         start = int(start)
         try:
             currentFrame = gdb.selected_frame()
-            (t, f) = config.executionContext.set_context(threadId, start)
+            (t, f) = config.currentExecutionContext.set_context(threadId, start)
             result = []
             for x in range(levels + 1):
                 if f is not None:
@@ -235,7 +238,7 @@ class ContentsOfStatic(gdb.Command):
     @timeInvocation
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression] = parseCommandArguments(arguments)
-        (thread, frame) = config.executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         it = gdb.parse_and_eval(components[0])
 
@@ -280,7 +283,7 @@ class ContentsOfBaseClass(gdb.Command):
     @timeInvocation
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression, base_classes] = parseCommandArguments(arguments)
-        (thread, frame) = config.executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         base_classes = parseCommandArguments(base_classes)
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
 
@@ -353,7 +356,7 @@ class ContentsOf(gdb.Command):
     @timeInvocation
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, expression] = parseCommandArguments(arguments)
-        (thread, frame) = config.executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
+        (thread, frame) = config.currentExecutionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
         pp = gdb.default_visualizer(it)
         memberResults = []
@@ -429,7 +432,7 @@ class GetLocals(gdb.Command):
     @timeInvocation
     def invoke(self, arguments, from_tty):
         [threadId, frameLevel, scope] = parseCommandArguments(arguments)
-        (thread, frame) = config.executionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
+        (thread, frame) = config.currentExecutionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         predicate = parseScopeParam(scope)
         try:
             block = frame.block()
