@@ -19,9 +19,9 @@ class MidasRunMode {
 
   async setProductionMode(gdb) {
     if(this.#trace) {
-      await gdb.execPy("setTrace = True");
+      await gdb.execPy("config.setTrace = True");
     } else {
-      await gdb.execPy("setTrace = False");
+      await gdb.execPy("config.setTrace = False");
     }
 
     if(this.#debug) {

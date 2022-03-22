@@ -13,7 +13,7 @@ class WatchVariable(gdb.Command):
     @timeInvocation
     def invoke(self, args, from_tty):
         [expr, threadId, frameLevel] = parseCommandArguments(args)
-        (thread, frame) = config.executionContext.set_context(threadId=threadId, frameLevel=frameLevel)
+        (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expr.split(".")
         it = getClosest(frame, components[0])
         it = resolveGdbValue(it, components=components[1:])

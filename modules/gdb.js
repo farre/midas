@@ -108,7 +108,7 @@ const DefaultRRSpawnArgs = [
  * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
  * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
  * @param {string} binary - binary to debug
- * @param {string} serverAddress - server address rr is listening on
+  * @param {string} serverAddress - server address rr is listening on
  * @param {string} cwd - current working directory to set GDB to
  * @returns
  */
@@ -1211,6 +1211,10 @@ class GDB extends GDBMixin(GDBBase) {
     return frames;
   }
 
+  newExecutionContext(threadId) {
+    this.executionContexts.set(threadId, new ExecutionContextState(threadId));
+    return this.gdb.getExecutionContext(threadId);
+  }
 }
 
 exports.GDB = GDB;
