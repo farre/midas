@@ -39,13 +39,11 @@ extensionPath = os.path.dirname(os.path.realpath(__file__))
 if sys.path.count(extensionPath) == 0:
     err_logger.error("Module path not set. Setting it")
     sys.path.append(extensionPath)
-
-from midas_utils import prepareCommandResponse, parseCommandArguments, sendResponse, timeInvocation, logExceptionBacktrace, getClosest, resolveGdbValue, memberIsReference
-
 import config
-import stack
+from midas_utils import getMembersRecursively, prepareCommandResponse, parseCommandArguments, sendResponse, timeInvocation, logExceptionBacktrace, getClosest, resolveGdbValue, memberIsReference, typeIsPrimitive
 
-stackFrameRequestCommand = stack.StackTraceRequest()
+from stacktracerequest import StackTraceRequest
+stackFrameRequestCommand = StackTraceRequest()
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
@@ -54,33 +52,6 @@ if config.isDevelopmentBuild:
 def selectThreadAndFrame(threadId, frameLevel):
     gdb.execute("thread {}".format(threadId))
     gdb.execute("frame {}".format(frameLevel))
-
-def typeIsPrimitive(valueType):
-    try:
-        for f in valueType.fields():
-            if hasattr(f, "enumval"):
-                return True
-            else:
-                return False
-    except TypeError:
-        return True
-
-
-def getMembersRecursively(field, memberList, statics):
-    if field.bitsize > 0:
-        misc_logger.info("field {} is possibly a bitfield of size {}".format(
-            field.name, field.bitsize))
-    if hasattr(field, 'bitpos'):
-        if field.is_base_class:
-            for f in field.type.fields():
-                getMembersRecursively(
-                    f, memberList=memberList, statics=statics)
-        else:
-            if field.name is not None and not field.name.startswith("_vptr"):
-                memberList.append(field.name)
-    else:
-        statics.append(field.name)
-
 
 def getMembers(field, memberList, statics, baseclasses):
     if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:

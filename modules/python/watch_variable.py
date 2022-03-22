@@ -1,7 +1,7 @@
 from pydoc import resolve
 import gdb
 
-import modules.python.config as config
+import config as config
 from midas_utils import parseCommandArguments, timeInvocation, getClosest, resolveGdbValue
 
 class WatchVariable(gdb.Command):
