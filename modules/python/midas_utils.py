@@ -2,10 +2,6 @@ import gdb
 import json
 import sys
 import logging
-import functools
-import time
-import traceback
-import config as config
 
 def typeIsPrimitive(valueType):
     try:
@@ -52,30 +48,14 @@ def prepareEventResponse(name, payload):
 
 def sendResponse(name, result, prepareFnPtr):
     """Writes result of an operation to client stream."""
+    import config
     res = json.dumps(result, ensure_ascii=False)
+    if config.isDevelopmentBuild:
+        log = logging.getLogger("update-logger")
+        log.debug("{} Response: {}".format(name, res))
     packet = prepareFnPtr(name, res)
     sys.stdout.write(packet)
     sys.stdout.flush()
-
-def timeInvocation(f):
-    if not config.isDevelopmentBuild:
-        return f
-    """Measure performance (time) of command or function"""
-    @functools.wraps(f)
-    def timer_decorator(*args, **kwargs):
-        invokeBegin = time.perf_counter_ns()
-        f(*args, **kwargs)
-        invokeEnd = time.perf_counter_ns()
-        logger = logging.getLogger("time-logger")
-        elapsed_time = int((invokeEnd - invokeBegin) / 1000) # we don't need nano-second measuring, but the accuracy of the timer is nice.
-        logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
-        # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
-    return timer_decorator
-
-def logExceptionBacktrace(logger, errmsg, exception):
-    logger.error("{} Exception info: {}".format(errmsg, exception))
-    logger.error(traceback.format_exc())
-    logger.error("Current dev setting: {}".format(config.isDevelopmentBuild))
 
 def memberIsReference(type):
     code = type.code

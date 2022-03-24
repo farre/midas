@@ -5,12 +5,11 @@ const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
 const { DebugProtocol } = require("@vscode/debugprotocol");
-const { GDB, VSCodeVariable } = require("./gdb");
+const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { isReplaySession } = require("./utils");
-const { ExecutionContextState } = require("./executionContextState");
 
 let server;
 
@@ -161,17 +160,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
-
+  // eslint-disable-next-line no-unused-vars
   dataBreakpointInfoRequest(response, args, request) {
-    let container = this.gdb.references.get(args.variablesReference);
-    let dataId;
-    if(container) {
-      let prefix = container.evaluatePath();
-      if(prefix == "") dataId = args.name;
-      else dataId = `${prefix}.${args.name}`;
-    } else {
-      dataId = args.name;
-    }
+    let dataId = args.name;
     response.body = {
       dataId: dataId,
       accessTypes: ["read", "write", "readWrite"],
@@ -179,7 +170,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
-
+  // eslint-disable-next-line no-unused-vars
   async setDataBreakpointsRequest(response, args, request) {
     const res = await this.gdb.updateWatchpoints(args.breakpoints);
     response.body = {
@@ -224,103 +215,24 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async stackTraceRequestPython(response, {threadId, startFrame, levels}) {
+  async stackTraceRequest(response, {threadId, startFrame, levels}) {
     response.body = {
       stackFrames: await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`)
     };
-    return response;
+    this.sendResponse(response);
   }
 
-  async stackTraceRequest(response, args) {
-    this.sendResponse(await this.stackTraceRequestPython(response, args));
-  }
-
-  async variablesRequestPython(response, {variablesReference}) {
+  async variablesRequest(response, {variablesReference}) {
     response.body = {
-      variables: []
+      variables: await this.exec(`variable-request ${variablesReference}`)
     };
-    return response;
+    this.sendResponse(response);
   }
 
-  async variablesRequest(response, args) {
-    this.sendResponse(await this.variablesRequestPython(response, args));
-  }
-
-  async handleStructFromEvaluatableRequest(response, struct) {
-    // todo(simon): this is logic that DebugSession should not handle. Partially, this stuff gdb.js should be responsible for
-    if (struct.memberVariables.length == 0) {
-      // we haven't cached it's members
-      let structAccessModifierList = await this.gdb.execMI(`-var-list-children --all-values "${struct.variableObjectName}"`);
-      let requests = [];
-      for (const accessModifier of structAccessModifierList.children) {
-        const membersCommands = `-var-list-children --all-values "${accessModifier.value.name}"`;
-        let members = await this.gdb.execMI(membersCommands);
-        const expr = members.children[0].value.exp;
-        if (expr) {
-          requests.push(members);
-        }
-      }
-      for (let v of requests.flatMap((i) => i.children)) {
-        let nextRef = 0;
-        let displayValue = "";
-        let isStruct = false;
-        if (!v.value.value || v.value.value == "{...}") {
-          let nextRef = this.gdb.nextVarRef;
-          this.gdb.evaluatableStructuredVars.set(nextRef, {
-            variableObjectName: v.value.name,
-            memberVariables: [],
-          });
-          displayValue = v.value.type;
-          isStruct = true;
-        } else {
-          displayValue = v.value.value;
-          isStruct = false;
-        }
-        struct.memberVariables.push(new VSCodeVariable(v.value.exp, displayValue, nextRef, v.value.name, isStruct));
-      }
-      response.body = {
-        variables: struct.memberVariables,
-      };
-      this.sendResponse(response);
-    } else {
-      for (const member of struct.memberVariables) {
-        if (!member.isStruct) {
-          let r = (await this.gdb.execMI(`-var-evaluate-expression ${member.voName}`)).value;
-          if (r) {
-            member.value = r;
-          }
-        }
-      }
-      response.body = {
-        variables: struct.memberVariables,
-      };
-      this.sendResponse(response);
-    }
-  }
-
-  createScope(name, hint, variablesReference, expensive = false) {
-    return {
-      name: name,
-      variablesReference: variablesReference,
-      expensive: expensive,
-      presentationHint: hint,
+  async scopesRequest(response, {frameId}) {
+    response.body = {
+      scopes: await this.exec(`scopes-request ${frameId}`)
     };
-  }
-  scopesRequest(response, args) {
-    const scopes = [];
-    let locals = this.gdb.getReferenceContext(args.frameId);
-    // @ts-ignore
-    if(locals) {
-      let registers = this.createScope("Register", "registers", locals.registerScopeIdentifier, false);
-      let locals_scope = this.createScope("Locals", "locals", args.frameId, false);
-      // @ts-ignore
-      let args_scope = this.createScope("Args", "arguments", locals.argScopeIdentifier, false);
-  
-      scopes.push(args_scope, locals_scope, registers);
-      response.body = {
-        scopes: scopes,
-      };
-    }
     this.sendResponse(response);
   }
 
@@ -365,15 +277,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async setVariableRequest(response, { variablesReference, name, value }) {
-    let ref = this.gdb.references.get(variablesReference);
-    if (!ref) {
-      // for now, we disallow setting value of watch variables.
-      // todo(simon): fix this.
-      this.sendResponse(response);
-    } else {
-      const prepared_response = await ref.update(response, this.gdb, name, value);
-      this.sendResponse(prepared_response);
-    }
+    // todo: needs impl in new backend
+    this.sendResponse(response);
   }
 
   runInTerminalRequest(...args) {
@@ -493,7 +398,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   setExpressionRequest(...args) {
     return this.virtualDispatch(...args);
   }
-
+  // eslint-disable-next-line no-unused-vars
   async evaluateRequest(response, args, request) {
     response.body = {
       result: null,
@@ -505,21 +410,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     let { expression, frameId, context } = args;
     if (context == "watch") {
-      await this.gdb
-        .evaluateExpression(expression, frameId)
-        .then((data) => {
-          if (data) {
-            response.body.variablesReference = data.variablesReference;
-            response.body.result = data.value;
-          }
-          this.sendResponse(response);
-        })
-        .catch((err) => {
-          // means expression did not exist
-          response.success = false;
-          response.message = "could not be evaluated";
-          this.sendResponse(response);
-        });
+      // todo(simon): needs implementation in new backend
+      response.success = false;
+      response.message = "could not be evaluated (unimplemented)";
+      this.sendResponse(response);
     } else if (context == "repl") {
       vscode.debug.activeDebugConsole.appendLine(
         "REPL is semi-unsupported currently: any side effects you cause are not guaranteed to be seen in the UI"
@@ -584,6 +478,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /**
    * Override this hook to implement custom requests.
    */
+  // eslint-disable-next-line no-unused-vars
   async customRequest(command, response, args) {
     switch (command) {
       case "continueAll":
@@ -603,10 +498,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       case "hot-reload-scripts":
         try {
           await this.gdb.reload_scripts();
-          console.log(`Successfully hot reloaded scripts`);
+          vscode.window.showInformationMessage(`Successfully reloaded backend scripts`);
         } catch(err) {
-          console.log(`failed to reload scripts ${err}`);
+          vscode.window.showInformationMessage(`Failed to re-initialize midas`);
         }
+        break;
       default:
         vscode.window.showInformationMessage(`Unknown request: ${command}`);
     }

@@ -1,14 +1,10 @@
 """the config module holds settings for Midas but it also keeps global state for the backend."""
 
 import gdb
+import functools
+import time
 import logging
-
-from midas_utils import memberIsReference, typeIsPrimitive
-from frame_operations import find_first_identical_frames, take_n_frames
-
-from os import path
-from stackframe import StackFrame
-from variablesrequest import Variable, BaseClass, StaticVariable
+import traceback
 
 global isDevelopmentBuild
 global setTrace
@@ -16,9 +12,6 @@ global currentExecutionContext
 global executionContexts
 
 variableReferenceCounter = 0
-isDevelopmentBuild = False
-setTrace = False
-executionContexts = {}
 
 def nextVariableReference():
     global variableReferenceCounter
@@ -26,87 +19,56 @@ def nextVariableReference():
     variableReferenceCounter += 1
     return res
 
-# Midas Terminology
-# Execution Context: Thread (id) and Frame (level)
-# Registers the current execution context
-class CurrentExecutionContext:
-    inferior = None
-    def __init__(self):
-        self.threadId = -1
-        self.frameLevel = -1
-        CurrentExecutionContext.inferior = gdb.selected_inferior()
+isDevelopmentBuild = False
+setTrace = False
+executionContexts = {}
+currentExecutionContext = None
 
-    def set_thread(self, threadId):
-        if self.threadId != threadId:
-            for t in CurrentExecutionContext.inferior.threads():
-                if t.num == threadId:
-                    t.switch()
-                    self.threadId = t.num
-                    return t
-        else:
-            return gdb.selected_thread()
+varRefToThreadMap = {}
+varRefToStackFrameMap = {}
 
-    def set_frame(self, level):
-        if self.frameLevel != int(level):
-            gdb.execute("frame {}".format(level))
-            frame = gdb.selected_frame()
-            self.frameLevel = frame.level()
-            return frame
-        else:
-            return gdb.selected_frame()
-
-    def set_context(self, threadId, frameLevel):
-        t = self.set_thread(threadId=int(threadId))
-        f = self.set_frame(level=int(frameLevel))
-        return (t, f)
-
-currentExecutionContext = CurrentExecutionContext()
-
-class ExecutionContext:
-    def __init__(self, threadId):
+class ReferenceKey:
+    def __init__(self, threadId, stackFrameId):
         self.threadId = threadId
-        # Hallelujah (ironic) for type info. I miss Rust.
-        self.stack = []
-        # gdb.Frame[]
-        self.backtrace = []
+        self.frameId = stackFrameId
 
-    def get_frames(self, start, levels):
-        (t, f) = currentExecutionContext.set_context(self.threadId, start)
-        result = []
-        if len(self.stack) > 0:
-            if self.stack[0].is_same_frame(f):
-                for sf in self.stack:
-                    result.append(sf.getVSFrame())
-                return result
-            res = find_first_identical_frames(self.stack, f, 10)
-            if res is not None:
-                (x, y) = res
-                if x < y:
-                    frames_to_add = [f for f in take_n_frames(f, y - x)]
-                    for f in reversed(frames_to_add):
-                        self.stack.insert(0, StackFrame(f))
-                elif x > y:
-                    self.stack = self.stack[y:]
-                    if len(self.stack) < start + levels:
-                        remainder = (start + levels) - len(self.stack)
-                        for frame in take_n_frames(self.stack[-1].frame, remainder):
-                            self.stack.append(StackFrame(f))
-                else:
-                    raise gdb.GdbError("This should not be possible.")
-            else:
-                for frame in take_n_frames(f, levels):
-                    self.stack.append(StackFrame(frame))
-        else:
-            for frame in take_n_frames(f, levels):
-                self.stack.append(StackFrame(frame))
-        result = []
-        for sf in self.stack:
-            result.append(sf.getVSFrame())
-        return result
+class VariableReferenceMap:
+    def __init__(self):
+        self.lookup = {}
 
-def createExecutionContext(threadId: int):
-    if executionContexts.get(threadId) is not None:
-        raise gdb.GdbError("Trying to create execution context for an already created context.")
-    ec = ExecutionContext(threadId)
-    executionContexts[threadId] = ec
-    return ec
+    def add_mapping(self, variableReference, threadId, stackFrameId):
+        self.lookup[variableReference] = ReferenceKey(threadId, stackFrameId)
+
+    def get_context(self, variableReference) -> ReferenceKey:
+        return self.lookup.get(variableReference)
+
+variableReferences = VariableReferenceMap()
+
+def timeInvocation(f):
+    if not isDevelopmentBuild:
+        return f
+    """Measure performance (time) of command or function"""
+    @functools.wraps(f)
+    def timer_decorator(*args, **kwargs):
+        invokeBegin = time.perf_counter_ns()
+        f(*args, **kwargs)
+        invokeEnd = time.perf_counter_ns()
+        logger = logging.getLogger("time-logger")
+        elapsed_time = int((invokeEnd - invokeBegin) / 1000) # we don't need nano-second measuring, but the accuracy of the timer is nice.
+        logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
+        # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
+    return timer_decorator
+
+def error_logger():
+    return logging.getLogger("error-logger")
+
+def update_logger():
+    return logging.getLogger("update-logger")
+
+def timing_logger():
+    return logging.getLogger("time-logger")
+
+def logExceptionBacktrace(logger, errmsg, exception):
+    logger.error("{} Exception info: {}".format(errmsg, exception))
+    logger.error(traceback.format_exc())
+    logger.error("Current dev setting: {}".format(isDevelopmentBuild))

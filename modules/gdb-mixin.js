@@ -2,8 +2,6 @@
 
 const { Thread, ThreadGroup } = require("gdb-js");
 const { trace } = require("./gdb");
-const vscode = require("vscode");
-const { MidasRunMode } = require("./buildMode");
 
 const WatchPointType = {
   ACCESS: "access",
@@ -182,54 +180,7 @@ function GDBMixin(GDBBase) {
       }
 
     }
-
-    // todo(simon): when we've implemented thread id and framelevel selection for backend
-    //  it also needs parameters passed here
-    async inspectVariable(variableToInspect, threadId, frameLevel) {
-      return await this.execCMD(`inspect ${variableToInspect} ${threadId} ${frameLevel}`);
-    }
-
-    async getLocalsOf(threadId, frameLevel, scopeType) {
-      return await this.execCMD(`get-locals ${threadId} ${frameLevel} ${scopeType}`);
-    }
-
-    async getContentsOf(threadId, frameLevel, expression) {
-      return await this.execCMD(`get-contents-of ${threadId} ${frameLevel} ${expression}`);
-    }
-
-    async getContentsOfStatic(threadId, frameLevel, expression) { 
-      return await this.execCMD(`get-contents-of-static ${threadId} ${frameLevel} ${expression}`);
-    }
-
-    /**
-     * Returns member fields of a base class belonging to the type that `expression` represents, or in other words
-     * returns the member fields of the type of `expression` defined in it's base class.
-     * @param {number} threadId
-     * @param {number} frameLevel 
-     * @param {number} expression 
-     * @param {string[]} baseClassHierarchy - a list of base classes, in ascending order of the hierarchy.
-     * @returns
-     */
-    async getContentsOfBaseClass(threadId, frameLevel, expression, baseClassHierarchy) {
-      // nb! we can't have types containing spaces in the parameter list; so we do this tragic looking thing.
-      const FORMAT_PARAMETER_REPLACEMENT = "_*_*_";
-      let baseClassHierarchyParameter = "";
-      if(baseClassHierarchy.length == 1) {
-        baseClassHierarchyParameter = `'${baseClassHierarchy[0].replaceAll(" ", FORMAT_PARAMETER_REPLACEMENT)}'`;
-      } else {
-        baseClassHierarchyParameter = `'${baseClassHierarchy.map(name => `${name.replaceAll(" ", FORMAT_PARAMETER_REPLACEMENT)}`).join(" ")}'`
-      }
-      return await this.execCMD(`get-contents-of-base-class ${threadId} ${frameLevel} ${expression} ${baseClassHierarchyParameter}`);
-    }
-
-    async getStackTrace(threadId, start, levels) {
-      return await this.execCMD(`request-stackframes ${threadId} ${start} ${levels}`);
-    }
-
-    async getTopFrame(threadId) {
-      return await this.execCMD(`get-top-frame ${threadId}`);
-    }
-
+    
   };
 }
 
