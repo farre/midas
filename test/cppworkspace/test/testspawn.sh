@@ -1,1 +1,1 @@
-gdb build/testapp -iex "source ../../../modules/python/setup.py" -iex "source ../../../modules/python/stdlib.py" 
+gdb build/testapp -iex "source ../../../modules/python/setup.py" -iex "source ../../../modules/python/midas.py" 
