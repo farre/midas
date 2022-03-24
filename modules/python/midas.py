@@ -45,14 +45,16 @@ import config
 import execution_context
 config.currentExecutionContext = execution_context.CurrentExecutionContext()
 
-import stacktracerequest
-stackFrameRequestCommand = stacktracerequest.StackTraceRequest(config.executionContexts)
+executionContexts = {}
 
-import variablesrequest
-variableRequestCommand = variablesrequest.VariableRequest(config.executionContexts)
+import stacktrace_request
+stackFrameRequestCommand = stacktrace_request.StackTraceRequest(executionContexts)
+
+import variables_request
+variableRequestCommand = variables_request.VariableRequest(executionContexts)
 
 import scopes_request
-scopesRequestCommand = scopes_request.ScopesRequest(config.executionContexts)
+scopesRequestCommand = scopes_request.ScopesRequest(executionContexts)
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
@@ -173,7 +175,7 @@ class GetTopFrame(gdb.Command):
             res = createVSCodeStackFrame(frame)
             midas_utils.sendResponse(self.name, res, midas_utils.prepareCommandResponse)
         except Exception as e:
-            config.logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
+            config.log_exception(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
             midas_utils.sendResponse(self.name, None, midas_utils.prepareCommandResponse)
 
 
@@ -230,7 +232,7 @@ class ContentsOfStatic(gdb.Command):
             if midas_utils.memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            config.logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
+            config.log_exception(err_logger, "Couldn't dereference value {}".format(expression), e)
             raise e
         result = []
         try:
@@ -273,7 +275,7 @@ class ContentsOfBaseClass(gdb.Command):
             if midas_utils.memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            config.logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
+            config.log_exception(err_logger, "Couldn't dereference value {}".format(expression), e)
 
         members = []
         statics = []
@@ -351,7 +353,7 @@ class ContentsOf(gdb.Command):
                         memberResults.append(display(name, value, midas_utils.typeIsPrimitive(value.type)))
                     midas_utils.sendResponse(self.name, variables_response(members=memberResults), midas_utils.prepareCommandResponse)
                 except Exception as e:
-                    config.logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
+                    config.log_exception(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
                     raise e
             else:
                 # means the pretty printed result, doesn't have any children or shouldn't show any of them. Therefore it's safe
@@ -386,7 +388,7 @@ class ContentsOf(gdb.Command):
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
-            config.logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
+            config.log_exception(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
             midas_utils.sendResponse(self.name, None, midas_utils.prepareCommandResponse)
 
 
@@ -429,12 +431,12 @@ class GetLocals(gdb.Command):
                             item = display(symbol.name, value, midas_utils.typeIsPrimitive(value.type))
                             result.append(item)
                         except Exception as e:
-                            midas_utils.logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
+                            midas_utils.log_exception(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
             midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
         except Exception as e:
-            config.logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
+            config.log_exception(err_logger, "Exception thrown in GetLocals.invoke", e)
             midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
 
 getLocalsCommand = GetLocals()

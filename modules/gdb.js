@@ -63,7 +63,7 @@ const DefaultRRSpawnArgs = [
 ];
 
 function spawn_settings(traceSettings) {
-  return [["-iex", "set pagination off"], ["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
+  return [["-iex", "set pagination off"], ["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/midas.py`]];
 }
 
 /**
