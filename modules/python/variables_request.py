@@ -24,5 +24,5 @@ class VariableRequest(gdb.Command):
         if sf.manages_variable_reference(variableReference):
             res = sf.get(variableReference)
             midas_utils.sendResponse(self.name, res, midas_utils.prepareCommandResponse)
-            return
-        midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
+        else:
+            midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
