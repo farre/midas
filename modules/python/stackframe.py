@@ -1,8 +1,12 @@
+from typing import Union
 import gdb
+import logging
+import json
+
 from os import path
 import config
-from midas_utils import memberIsReference
-from variablesrequest import Variable, BaseClass, StaticVariable
+from variable import Variable, BaseClass, StaticVariable
+
 
 def createVSCStackFrame(frame, alreadyReffedId = None):
     try:
@@ -12,7 +16,7 @@ def createVSCStackFrame(frame, alreadyReffedId = None):
         res = vscFrameFromNoSymtab(frame.name(), frame, alreadyReffedId)
         return res
 
-def vscFrameFromFn(frame, functionSymbol, alreadyReffedId = None):
+def vscFrameFromFn(frame, functionSymbol, alreadyReffedId):
     sal = frame.find_sal()
     functionSymbolTab = functionSymbol.symtab
     filename = path.basename(functionSymbolTab.filename)
@@ -21,7 +25,7 @@ def vscFrameFromFn(frame, functionSymbol, alreadyReffedId = None):
     # DebugProtocol.Source
     src = { "name": filename, "path": fullname, "sourceReference": 0 }
     stackStart = frame.read_register("rbp")
-    id = alreadyReffedId if alreadyReffedId is not None else config.nextVariableReference()
+    id = alreadyReffedId
     sf = {
         "id": id,
         "source": src,
@@ -57,19 +61,33 @@ def vscFrameFromNoSymtab(name, frame, alreadyReffedId = None):
     return sf
 
 class StackFrame:
-    def __init__(self, frame):
+    def __init__(self, frame, threadId):
+        """Creates a stack frame. Used for querying about local variables, arguments etc.
+        Mutates the global VariableReference map by registering it's 3 'top level' variable references."""
         self.frame = frame
+        self.threadId = threadId
         self.blocks = []
 
         self.locals = {}
         self.localsReference = config.nextVariableReference()
         self.args = []
         self.argsReference = config.nextVariableReference()
-        self.variableReferences = {}
 
+        self.variableReferences: dict[int, Union[Variable, BaseClass, StaticVariable]] = {}
         self.registerReference = config.nextVariableReference()
+
         self.block_values = []
         self.init = False
+
+        self.scopes = [
+            { "name": "Locals", "variablesReference": self.localsReference, "expensive": False, "presentationHint": "locals" },
+            { "name": "Args", "variablesReference": self.argsReference, "expensive": False, "presentationHint": "arguments" },
+            { "name": "Register", "variablesReference": self.registerReference, "expensive": False, "presentationHint": "register" } ]
+
+        config.variableReferences.add_mapping(self.localsReference, self.threadId, self.localsReference)
+        config.variableReferences.add_mapping(self.argsReference, self.threadId, self.localsReference)
+        config.variableReferences.add_mapping(self.registerReference, self.threadId, self.localsReference)
+
 
     def initialize(self):
         """Initialize this stack frame based on the current block it's in. This does not mean
@@ -93,12 +111,16 @@ class StackFrame:
                     if symbol.is_variable and not symbol.is_argument:
                         v = Variable.from_symbol(symbol, self.frame)
                         vr = v.get_variable_reference()
-                        self.variableReferences[vr] = v
+                        if vr != 0:
+                            config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
+                            self.variableReferences[vr] = v
                         blockvalues.append(v)
                     elif symbol.is_argument:
                         v = Variable.from_symbol(symbol, self.frame)
                         vr = v.get_variable_reference()
-                        self.variableReferences[vr] = v
+                        if vr != 0:
+                            config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
+                            self.variableReferences[vr] = v
                         self.args.append(v)
                 self.block_values.append(blockvalues)
                 index += 1
@@ -131,6 +153,8 @@ class StackFrame:
                                 v = Variable.from_symbol(symbol, self.frame)
                                 blockvalues.append(v)
                                 vr = v.get_variable_reference()
+                                if vr != 0:
+                                    config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
                                 self.variableReferences[vr] = v
 
                     self.block_values.append(blockvalues)
@@ -138,7 +162,7 @@ class StackFrame:
             newblocks.insert(0, currentBlock)
             currentBlock = currentBlock.superblock
 
-    def getLocals(self):
+    def get_locals(self):
         self.update_blocks()
         res = {}
         for block_values in self.block_values:
@@ -146,83 +170,59 @@ class StackFrame:
                 res[v.name] = v
         result = []
         for v in res.values():
-            vr = v.getVariableReference()
+            vr = v.get_variable_reference()
             if vr != 0:
+                config.variableReferences.add_mapping(vr, self.threadId, self.frame_id())
                 self.variableReferences[vr] = v
-            result.append(v.display())
+            result.append(v.to_vs())
+        return result
 
-    def getRegisters(self):
-        0
-
-    def getArgs(self):
-        0
-
-    def getVariableMembers(self, variableReference):
-        var = self.variableReferences.get(variableReference)
-        vr = var.getVariableReference()
-        if vr == 0:
-            raise gdb.GdbError("Primitive types do not have members")
-        pp = gdb.default_visualizer(var.get_value())
+    def get_registers(self):
         result = []
-        if var.is_init:
-            return 0
+        return result
 
-        # if pp exist _and_ it has children produce members from that. otherwise brute force it
-        if pp is not None:
-            if hasattr(pp, "children"):
-                for name, value in pp.children():
-                    v = Variable(name, value)
-                    vref = v.get_variable_reference()
-                    if vref != 0:
-                        self.variableReferences[vref] = v
-                    result.append(v.display())
-                return result
-            else:
-                res = pp.to_string()
-                if hasattr(res, "value"):
-                    result.append({"name": "value", "display": res.value(), "variableReference": 0 })
-                else:
-                    result.append({"name": "value", "display": "{}".format(res), "variableReference": 0})
-                return result
+    def get_args(self):
+        result = []
+        for arg in self.args:
+            result.append(arg.to_vs())
+        return result
 
-        it = var.get_value()
-        if memberIsReference(it.type):
-            it = it.referenced_value()
-            fields = it.type.fields()
-            for field in fields:
-                if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-                    v = Variable(field.name, it[field])
-                    vr = v.get_variable_reference()
-                    if vr != 0:
-                        self.variableReferences[vr] = v
-                    result.append(v.display())
-                elif field.is_base_class:
-                    v = BaseClass(field.name, it)
-                    vr = v.get_variable_reference()
-                    self.variableReferences[vr] = v
-                    result.append(v.display())
-                elif not hasattr(field, "bitpos"):
-                    v = StaticVariable(field.name, it)
-                    vr = v.get_variable_reference()
-                    self.variableReferences[vr] = v
-                    result.append(v.display())
-
+    def get_variable_members(self, variableReference):
+        var = self.variableReferences.get(variableReference)
+        return var.get_children(self)
 
     def get(self, variableReference):
         if variableReference == self.localsReference:
-            return self.getLocals()
+            return self.get_locals()
         elif variableReference == self.argsReference:
-            return self.getArgs()
+            return self.get_args()
         elif variableReference == self.registerReference:
-            return self.getRegisters()
+            return self.get_registers()
         else:
-            return self.getVariableMembers(variableReference=variableReference)
+            return self.get_variable_members(variableReference=variableReference)
 
-    def getVSFrame(self):
-        return createVSCStackFrame(self.frame, self.localsReference)
+    def get_vs_frame(self):
+        res = createVSCStackFrame(self.frame, self.localsReference)
+        return res
 
     def get_frame(self):
         return self.frame
 
     def is_same_frame(self, frame):
         return self.frame == frame
+
+    def get_scopes(self):
+        return self.scopes
+
+    def manages_variable_reference(self, variableReference):
+        isScope = self.argsReference == variableReference or self.localsReference == variableReference or self.registerReference == variableReference
+        if isScope:
+            return True
+        else:
+            if self.variableReferences.get(variableReference) is not None:
+                return True
+            else:
+                return False
+
+    def frame_id(self):
+        return self.localsReference

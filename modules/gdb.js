@@ -4,26 +4,17 @@ const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
 const { Source, ContinuedEvent } = require("@vscode/debugadapter");
-const { performance } = require('perf_hooks');
 const path = require("path");
 const {
   InitializedEvent,
   StoppedEvent,
   BreakpointEvent,
   TerminatedEvent,
-  ThreadEvent,
-  Variable,
-  StackFrame,
+  ThreadEvent
 } = require("@vscode/debugadapter");
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
-const gdbTypes = require("./gdbtypes");
 const { getFunctionName, spawn, isReplaySession, ArrayMap, ExclusiveArray } = require("./utils");
-const { LocalsReference } = require("./variablesrequest/locals");
-const { ExecutionContextState } = require("./executionContextState");
-const { RegistersReference } = require("./variablesrequest/registers");
-const {StackFrameState} = require("./variablesrequest/stackFramestate");
-const {ArgsReference} = require("./variablesrequest/args");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -45,6 +36,7 @@ function newStoppedEvent(reason, description, allThreadsStopped, threadId = unde
   let stopevt = new StoppedEvent(reason, threadId);
   stopevt.body = {
     reason,
+    // @ts-ignore
     allThreadsStopped,
     description,
     threadId: threadId,
@@ -54,41 +46,8 @@ function newStoppedEvent(reason, description, allThreadsStopped, threadId = unde
 
 /** @constructor */
 let GDBBase = gdbjs.GDB;
-
-// A bridge between GDB Variable Objects and VSCode "Variable" from the vscode-debugadapter module
-class VSCodeVariable extends Variable {
-  constructor(name, value, ref, variableObjectName, isStructureType, evaluateName) {
-    super(name, value, ref);
-    this.variableObjectName = variableObjectName;
-    this.isStruct = isStructureType;
-    if (isStructureType) {
-      this.presentationHint = { kind: "class" };
-    }
-    this.evaluateName = evaluateName;
-  }
-}
-
-class VSCodeStackFrame extends StackFrame {
-  /**
-   *
-   * @param {number} variablesReference
-   * @param {string} name
-   * @param {import("@vscode/debugadapter").Source} src
-   * @param {number} ln
-   * @param {?number} col
-   */
-  constructor(variablesReference, name, src, ln, col, frameAddress) {
-    super(variablesReference, name, src, ln, col);
-  }
-
-  /** @type {number} */
-  stackAddressStart;
-  /** @type {string} */
-  func;
-}
 const ext = vscode.extensions.getExtension("farrese.midas");
 const dir = `${ext.extensionPath}/modules/python`;
-
 
 const DefaultRRSpawnArgs = [
   "-l",
@@ -103,6 +62,10 @@ const DefaultRRSpawnArgs = [
   "set sysroot /",
 ];
 
+function spawn_settings(traceSettings) {
+  return [["-iex", "set pagination off"], ["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
+}
+
 /**
  * @param {string} gdbPath - path to GDB
  * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
@@ -113,7 +76,7 @@ const DefaultRRSpawnArgs = [
  * @returns
  */
 function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress, cwd) {
-  const MidasSetupArgs = [["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
+  const MidasSetupArgs = spawn_settings(traceSettings);
   const spawnParameters =
     setupCommands
       .flatMap(c => ["-iex", `${c}`])
@@ -131,7 +94,7 @@ function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress
  * @returns
  */
 function spawnGDB(gdbPath, traceSettings, setupCommands, binary, ...args) {
-  const MidasSetupArgs = [["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/stdlib.py`]];
+  const MidasSetupArgs = spawn_settings(traceSettings);
   const spawnParameters =
     setupCommands
       .flatMap(command => ["-iex", `${command}`])
@@ -164,18 +127,6 @@ class GDB extends GDBMixin(GDBBase) {
   // Are we debugging a normal session or an rr session
   #rrSession = false;
 
-  /** @type { Map<ThreadId, ExecutionContextState> } */
-  executionContexts = new Map();
-  /** @typedef {import("./variablesrequest/registers").RegistersReference | import("./variablesrequest/args").ArgsReference | import("./variablesrequest/locals").LocalsReference | import("./variablesrequest/structs").StructsReference } VariablesReferenceHandler*/
-  /** @type { Map<number, VariablesReferenceHandler >} */
-  references = new Map();
-
-  /** @type {Map<string, VariablesReference>} */
-  evaluatable = new Map();
-
-  /** @type {Map<number, { variableObjectName: string, memberVariables: VSCodeVariable[] }>} */
-  evaluatableStructuredVars = new Map();
-
   #threads = new Map();
   // threads which we haven't been able to get systag for, yet
   #uninitializedThread = new Map();
@@ -198,14 +149,6 @@ class GDB extends GDBMixin(GDBBase) {
       })()
     );
     this.#target = target;
-  }
-
-  /**
-   * @param {ThreadId} threadId
-   * @returns { ExecutionContextState }
-   */
-  getExecutionContext(threadId) {
-    return this.executionContexts.get(threadId);
   }
 
   get nextVarRef() {
@@ -412,34 +355,6 @@ class GDB extends GDBMixin(GDBBase) {
     return result;
   }
 
-  /**
-   *
-   * @param {number} levels
-   * @param {number} [threadId]
-   * @returns {Promise<{ addr: string, arch: string, file: string, fullname:string, func:string, level:string, line:string }[]>}
-   */
-  async getStack(startFrame, levels, threadId) {
-    const depth = await this.getStackDepth(threadId, startFrame + levels);
-    if(depth <= startFrame) return [];
-    const command = `-stack-list-frames ${startFrame} ${startFrame + levels}`;
-    let { stack } = await this.execMI(command, threadId);
-    return stack.map((frame) => {
-      return frame.value;
-    });
-  }
-
-  async getStackDepth(threadId, maxDepth) {
-    const cmd = `-stack-info-depth ${maxDepth}`;
-    const depth = await this.execMI(cmd, threadId);
-    return +depth.depth;
-  }
-
-  async getCurrentFrameInfo(threadId) {
-    const cmd = `-stack-info-frame`;
-    const frame = await this.execMI(cmd, threadId);
-    return frame.frame;
-  }
-
   async threads() {
     let unit_threads = [...this.#uninitializedThread.values()];
     for(let t of unit_threads) {
@@ -459,33 +374,6 @@ class GDB extends GDBMixin(GDBBase) {
       res.push(t);
     }
     return res;
-  }
-
-  /**
-   * @typedef {Object} Local
-   * @property {string} name
-   * @property {string} type
-   * @property {string | null} value
-   * @property {string | null} [arg]
-   * @returns {Promise<Local[]>}
-   */
-  async getStackLocals(threadId, frameLevel) {
-    const command = `-stack-list-variables --thread ${threadId} --frame ${frameLevel ?? 0} --simple-values`;
-    const { variables } = await this.execMI(command);
-    return variables;
-  }
-
-  /**
-   *
-   * @param {number} threadId
-   * @param {number} frame
-   * @returns {Promise<gdbTypes.VariableCompact[]>}
-   */
-  async getStackVariables(threadId, frame) {
-    const { variables } = this.execMI(`stack-list-variables --frame ${frame} --simple-values`, threadId);
-    return variables.map(({ name, value, type }) => {
-      return new gdbTypes.VariableCompact(name, value, type);
-    });
   }
 
   /**
@@ -590,43 +478,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  async buildExecutionState(threadId, levels) {
-    let ec = this.getExecutionContext(threadId);
-    let frame = await this.getTopFrame(threadId);
-    if(frame) {
-      if (!ec.isSameContextAsCurrent(frame.stackAddressStart, frame.name)) {
-        const start = await ec.setNewContext(frame.stackAddressStart, frame.name, this);
-        // means we've not cleared state; add remaining frames to state (which for VSCode tend to be 20)
-        if(start >= 0 && start < levels) {
-          const remainder = levels - start;
-          await this.newBuildExecutionState(threadId, start, remainder);
-        }
-      }
-      if(ec.stack[0]) ec.stack[0].line = +frame.line;
-    } else {
-      // if we have no top frame, we're screwed any how
-      await ec.clear(this);
-    }
-  }
-
-  async newBuildExecutionState(threadId, start, levels)  {
-    let ec = this.getExecutionContext(threadId);
-    let frames  = await this.getStackTrace(threadId, start, levels);
-    for(let f of frames) {
-      const argsVarRef = this.nextVarRef;
-      const frameIdVarRef = this.nextVarRef;
-      const registerVarRef = this.nextVarRef;
-      let state = new StackFrameState(frameIdVarRef, argsVarRef, threadId);
-      this.references.set(registerVarRef, new RegistersReference(frameIdVarRef, threadId));
-      this.references.set(frameIdVarRef, new LocalsReference(frameIdVarRef, threadId, argsVarRef, registerVarRef, state));
-      this.references.set(argsVarRef, new ArgsReference(argsVarRef, threadId, state));
-      ec.addTrackedVariableReference(registerVarRef, frameIdVarRef);
-      ec.addTrackedVariableReference(argsVarRef, frameIdVarRef);
-      f.id = frameIdVarRef;
-      ec.pushStackFrame(f, state)
-    }
-  }
-
   #onStopped(payload) {
     log(getFunctionName(), payload);
     let reason;
@@ -653,8 +504,6 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "end-stepping-range": {
-        let ec = this.executionContexts.get(payload.thread.id);
-        ec.updateTopFrame(payload.thread.frame, this);
         this.sendEvent(newStoppedEvent("step", "Stepping finished", this.allStopMode, payload.thread.id));
         break;
       }
@@ -665,8 +514,6 @@ class GDB extends GDBMixin(GDBBase) {
       }
       case "watchpoint-trigger":
       case "read-watchpoint-trigger": {
-        let ec = this.executionContexts.get(payload.thread.id);
-        ec.updateTopFrame(payload.thread.frame, this);
         this.sendEvent(newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
         break;
       }
@@ -691,7 +538,6 @@ class GDB extends GDBMixin(GDBBase) {
     thread.name = `${this.#program}`
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
-    this.executionContexts.set(thread.id, new ExecutionContextState(thread.id));
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
     console.log(`Thread ${thread.id} started`);
   }
@@ -699,11 +545,6 @@ class GDB extends GDBMixin(GDBBase) {
   #onThreadExited(thread) {
     this.#threads.delete(thread.id);
     this.#uninitializedThread.delete(thread.id);
-    let ec = this.executionContexts.get(thread.id);
-    if (ec) {
-      // ec.releaseVariableReferences(this);
-    }
-    this.executionContexts.delete(thread.id);
     this.#target.sendEvent(new ThreadEvent("exited", thread.id));
   }
 
@@ -802,6 +643,7 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param { { id: number, groupId: number }} payload
    */
+  // eslint-disable-next-line no-unused-vars
   #onNotifyThreadCreated(payload) {
     // this does nothing, handled by onThreadCreated
   }
@@ -868,6 +710,7 @@ class GDB extends GDBMixin(GDBBase) {
         enabled: enabled == "y",
         verified: addr != "<PENDING>"
       };
+      // @ts-ignore
       vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp).then(dapbkpt => {
         if (!dapbkpt) {
           if(!file && !line) {
@@ -913,6 +756,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
+    // eslint-disable-next-line no-unused-vars
     const { number, type, disp, enabled, addr, func, file, fullname, line } = payload.bkpt;
     const num = payload.bkpt.number;
     const bp = {
@@ -1000,42 +844,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async evaluateExpression(expr, frameId) {
-    let ref = this.references.get(frameId);
-    const threadId = ref.threadId;
-    const voName = `${expr}.${frameId}`;
-    if (this.evaluatable.has(voName)) {
-      const res = await this.execMI(`-var-evaluate-expression ${voName}`, threadId);
-      let ref = this.evaluatable.get(voName);
-      return {
-        variablesReference: ref,
-        value: res.value,
-      };
-    } else {
-      const res = await this.execMI(`-var-create ${voName} @ ${expr}`, threadId);
-      if (res.numchild > 0) {
-        let nextRef = this.nextVarRef;
-        this.evaluatable.set(voName, nextRef);
-        let result = {
-          variablesReference: nextRef,
-          value: res.type,
-        };
-        this.evaluatableStructuredVars.set(nextRef, {
-          variableObjectName: voName,
-          memberVariables: [],
-        });
-        return result;
-      } else {
-        this.evaluatable.set(voName, 0);
-        return {
-          variablesReference: 0,
-          value: res.value,
-        };
-      }
-    }
-  }
-
-  getReferenceContext(variablesReference) {
-    return this.references.get(variablesReference);
+    // todo(simon): needs implementation in new backend
   }
 
   kill() {
@@ -1104,23 +913,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.execMI(`-var-delete ${name}`);
   }
 
-  async createVariableObjectForPointerType(name, threadId) {
-    const nextRef = this.generateVariableReference();
-    const varObjectName = `vr_${nextRef}`;
-    // notice the extra * -> we are dereferencing a this pointer
-    const cmd = `-var-create ${varObjectName} * *${name}`;
-    const result = await this.execMI(cmd, threadId);
-    return { nextRef, varObjectName, result };
-  }
-
-  async createVariableObject(name, threadId) {
-    const nextRef = this.generateVariableReference();
-    const varObjectName = `vr_${nextRef}`;
-    const cmd = `-var-create ${varObjectName} * ${name}`;
-    const result = await this.execMI(cmd, threadId);
-    return { nextRef, varObjectName, result };
-  }
-
   registerBreakpoint(bp) {
     this.#lineBreakpoints.add_to(bp.file, bp);
   }
@@ -1151,73 +943,7 @@ class GDB extends GDBMixin(GDBBase) {
     return res;
   }
 
-  async oldRequestMoreFrames(threadId, levels) {
-    let ec = this.getExecutionContext(threadId);
-    try {
-      // getStack throws if we're trying to request frames that do not exist.
-      let frames = await this.getStack(ec.stack.length, levels, threadId);
-      let result = [];
-      let states = [];
-      for (let frame of frames) {
-        const stackFrameArgsIdentifier = this.nextVarRef;
-        const stackFrameIdentifier = this.nextVarRef;
-        const registerScopeVariablesReference = this.nextVarRef;
-        this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId));
-        let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId);
-        this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
-        this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, state));
-        ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
-        ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
-        let src = null;
-        if (frame.file && frame.line) {
-          src = new Source(frame.file, frame.fullname);
-        }
-        let r = new StackFrame(stackFrameIdentifier, `${frame.func} @ 0x${frame.addr}`, src, +frame.line ?? 0, 0);
-        r.func = frame.func;
-        result.push(r);
-        states.push(state);
-      }
-
-      let level = ec.stack.length;
-      for (let i = 0; i < result.length; i++) {
-        const stackAddressStart = +(await this.readStackFrameStart(level++, ec.threadId));
-        result[i].stackAddressStart = stackAddressStart;
-        ec.pushStackFrame(result[i], states[i]);
-      }
-      await this.selectStackFrame(0, ec.threadId);
-      return result;
-    } catch (e) {
-      console.log(e);
-      return [];
-    }
-  }
-
-  async newRequestMoreFrames(threadId, levels) {
-    let ec = this.getExecutionContext(threadId);
-    let frames = await this.getStackTrace(threadId, ec.stack.length, levels);
-    for (let frame of frames) {
-      const stackFrameArgsIdentifier = this.nextVarRef;
-      const stackFrameIdentifier = this.nextVarRef;
-      const registerScopeVariablesReference = this.nextVarRef;
-      this.references.set(registerScopeVariablesReference, new RegistersReference(stackFrameIdentifier, threadId));
-      let state = new StackFrameState(stackFrameIdentifier, stackFrameArgsIdentifier, threadId);
-      this.references.set(stackFrameIdentifier, new LocalsReference(stackFrameIdentifier, threadId, stackFrameArgsIdentifier, registerScopeVariablesReference, state));
-      this.references.set(stackFrameArgsIdentifier, new ArgsReference(stackFrameArgsIdentifier, threadId, state));
-      ec.addTrackedVariableReference(registerScopeVariablesReference, stackFrameArgsIdentifier);
-      ec.addTrackedVariableReference(stackFrameArgsIdentifier, stackFrameArgsIdentifier);
-      frame.id = stackFrameIdentifier
-      ec.pushStackFrame(frame, state);
-    }
-    return frames;
-  }
-
-  newExecutionContext(threadId) {
-    this.executionContexts.set(threadId, new ExecutionContextState(threadId));
-    return this.gdb.getExecutionContext(threadId);
-  }
 }
 
 exports.GDB = GDB;
-exports.VSCodeVariable = VSCodeVariable;
-exports.VSCodeStackFrame = VSCodeStackFrame;
 exports.trace = trace;

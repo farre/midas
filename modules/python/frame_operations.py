@@ -24,6 +24,7 @@ def find_first_equal_frame(stackFrameList, frameList):
 
 def find_first_identical_frames(stackFrameList, frame, stopCount):
     f = [f for f in take_n_frames(frame, stopCount)]
+    stopCount = min(stopCount, len(stackFrameList))
     for x in range(stopCount):
         fa = stackFrameList[x].frame
         for y, fb in enumerate(f):

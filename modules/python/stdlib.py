@@ -1,11 +1,11 @@
 import gdb
+import gdb.types
 import os
 import sys
-import gdb.types
+
 import logging
 import logging.handlers
 from os import path
-
 
 def resolveExtensionFile(fileName):
     extensionPath = os.path.dirname(os.path.realpath(__file__))
@@ -39,11 +39,20 @@ extensionPath = os.path.dirname(os.path.realpath(__file__))
 if sys.path.count(extensionPath) == 0:
     err_logger.error("Module path not set. Setting it")
     sys.path.append(extensionPath)
+import midas_utils
 import config
-from midas_utils import getMembersRecursively, prepareCommandResponse, parseCommandArguments, sendResponse, timeInvocation, logExceptionBacktrace, getClosest, resolveGdbValue, memberIsReference, typeIsPrimitive
 
-from stacktracerequest import StackTraceRequest
-stackFrameRequestCommand = StackTraceRequest()
+import execution_context
+config.currentExecutionContext = execution_context.CurrentExecutionContext()
+
+import stacktracerequest
+stackFrameRequestCommand = stacktracerequest.StackTraceRequest(config.executionContexts)
+
+import variablesrequest
+variableRequestCommand = variablesrequest.VariableRequest(config.executionContexts)
+
+import scopes_request
+scopesRequestCommand = scopes_request.ScopesRequest(config.executionContexts)
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
@@ -156,16 +165,16 @@ class GetTopFrame(gdb.Command):
         super(GetTopFrame, self).__init__("gdbjs-get-top-frame", gdb.COMMAND_USER)
         self.name = "get-top-frame"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, threadId, from_tty):
         try:
             t = config.currentExecutionContext.set_thread(int(threadId))
             frame = gdb.newest_frame()
             res = createVSCodeStackFrame(frame)
-            sendResponse(self.name, res, prepareCommandResponse)
+            midas_utils.sendResponse(self.name, res, midas_utils.prepareCommandResponse)
         except Exception as e:
-            logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
-            sendResponse(self.name, None, prepareCommandResponse)
+            config.logExceptionBacktrace(err_logger, "Couldn't get top frame: {}. Frame info: Type: {} | Function: {} | Level: {}".format(e, frame.type(), frame.function(), frame.level()), e)
+            midas_utils.sendResponse(self.name, None, midas_utils.prepareCommandResponse)
 
 
 getTopFrameCommand = GetTopFrame()
@@ -175,9 +184,9 @@ class StackFrameRequest(gdb.Command):
         super(StackFrameRequest, self).__init__("gdbjs-request-stackframes", gdb.COMMAND_USER)
         self.name = "request-stackframes"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, start, levels] = parseCommandArguments(arguments)
+        [threadId, start, levels] = midas_utils.parseCommandArguments(arguments)
         threadId = int(threadId)
         levels = int(levels)
         start = int(start)
@@ -192,11 +201,11 @@ class StackFrameRequest(gdb.Command):
                     f = f.older()
                 else:
                     break
-            sendResponse(self.name, result, prepareCommandResponse)
+            midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
             currentFrame.select()
         except:
             # means selectThreadAndFrame failed; we have no frames from `start` and down
-            sendResponse(self.name, [], prepareCommandResponse)
+            midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
 
 stackFrameRequestCommand = StackFrameRequest()
 
@@ -206,9 +215,9 @@ class ContentsOfStatic(gdb.Command):
         super(ContentsOfStatic, self).__init__("gdbjs-get-contents-of-static", gdb.COMMAND_USER)
         self.name = "get-contents-of-static"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression] = parseCommandArguments(arguments)
+        [threadId, frameLevel, expression] = midas_utils.parseCommandArguments(arguments)
         (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expression.split(".")
         it = gdb.parse_and_eval(components[0])
@@ -218,10 +227,10 @@ class ContentsOfStatic(gdb.Command):
         if it.type.code == gdb.TYPE_CODE_PTR:
             it = it.dereference()
         try:
-            if memberIsReference(it.type):
+            if midas_utils.memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
+            config.logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
             raise e
         result = []
         try:
@@ -229,11 +238,11 @@ class ContentsOfStatic(gdb.Command):
             statics = []
             fields = it.type.fields()
             for f in fields:
-                getMembersRecursively(f, memberList=members, statics=statics)
+                midas_utils.getMembersRecursively(f, memberList=members, statics=statics)
             result = []
 
             for member in members:
-                item = display(member, it[member], typeIsPrimitive(it[member].type))
+                item = display(member, it[member], midas_utils.typeIsPrimitive(it[member].type))
                 result.append(item)
 
             for static in statics:
@@ -241,7 +250,7 @@ class ContentsOfStatic(gdb.Command):
                 result.append(item)
         except:
             result.append({ "name": "static value", "display": "{}".format(it), "isPrimitive": True, "static": True })
-        sendResponse(self.name, result, prepareCommandResponse)
+        midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
 
 contentsOfStaticCommand = ContentsOfStatic()
 
@@ -251,20 +260,20 @@ class ContentsOfBaseClass(gdb.Command):
         super(ContentsOfBaseClass, self).__init__("gdbjs-get-contents-of-base-class", gdb.COMMAND_USER)
         self.name = "get-contents-of-base-class"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression, base_classes] = parseCommandArguments(arguments)
+        [threadId, frameLevel, expression, base_classes] = midas_utils.parseCommandArguments(arguments)
         (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
-        base_classes = parseCommandArguments(base_classes)
+        base_classes = midas_utils.parseCommandArguments(base_classes)
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
 
         if it.type.code == gdb.TYPE_CODE_PTR:
             it = it.dereference()
         try:
-            if memberIsReference(it.type):
+            if midas_utils.memberIsReference(it.type):
                 it = it.referenced_value()
         except Exception as e:
-            logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
+            config.logExceptionBacktrace(err_logger, "Couldn't dereference value {}".format(expression), e)
 
         members = []
         statics = []
@@ -278,11 +287,11 @@ class ContentsOfBaseClass(gdb.Command):
             if hasattr(pp, "children"):
                 for child in pp.children():
                     (name, value) = child
-                    memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
+                    memberResults.append(display(name, value, midas_utils.typeIsPrimitive(value.type)))
+                midas_utils.sendResponse(self.name, variables_response(members=memberResults), midas_utils.prepareCommandResponse)
             else:
                 memberResults.append(display("value", pp.to_string().value(), True, True))
-                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
+                midas_utils.sendResponse(self.name, variables_response(members=memberResults), midas_utils.prepareCommandResponse)
             return
 
         try:
@@ -296,7 +305,7 @@ class ContentsOfBaseClass(gdb.Command):
                 getMembers(f, memberList=members, statics=statics, baseclasses=baseclasses)
 
             for member in members:
-                item = display(member, it[member], typeIsPrimitive(it[member].type))
+                item = display(member, it[member], midas_utils.typeIsPrimitive(it[member].type))
                 memberResults.append(item)
 
             for static in statics:
@@ -306,17 +315,17 @@ class ContentsOfBaseClass(gdb.Command):
             for baseclass in baseclasses:
                 item = base_class_display(baseclass, it.type[baseclass].type)
                 baseClassResult.append(item)
-            sendResponse(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult), prepareCommandResponse)
+            midas_utils.sendResponse(self.name, variables_response(members=memberResults, statics=staticResult, base_classes=baseClassResult), midas_utils.prepareCommandResponse)
         except Exception as e:
             misc_logger.error("Couldn't get base class contents")
-            sendResponse(self.name, None, prepareCommandResponse)
+            midas_utils.sendResponse(self.name, None, midas_utils.prepareCommandResponse)
 
 contentsOfBaseClassCommand = ContentsOfBaseClass()
 
 def getAndTraverseExpressionPath(frame, expression):
     components = expression.split(".")
-    ancestor = getClosest(frame, components[0])
-    it = resolveGdbValue(ancestor, components[1:])
+    ancestor = midas_utils.getClosest(frame, components[0])
+    it = midas_utils.resolveGdbValue(ancestor, components[1:])
     return it
 
 class ContentsOf(gdb.Command):
@@ -324,9 +333,9 @@ class ContentsOf(gdb.Command):
         super(ContentsOf, self).__init__("gdbjs-get-contents-of", gdb.COMMAND_USER)
         self.name = "get-contents-of"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, expression] = parseCommandArguments(arguments)
+        [threadId, frameLevel, expression] = midas_utils.parseCommandArguments(arguments)
         (thread, frame) = config.currentExecutionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         it = getAndTraverseExpressionPath(frame=frame, expression=expression)
         pp = gdb.default_visualizer(it)
@@ -339,10 +348,10 @@ class ContentsOf(gdb.Command):
                     for child in pp.children():
                         misc_logger.error(("trying to get name and value of child"))
                         (name, value) = child
-                        memberResults.append(display(name, value, typeIsPrimitive(value.type)))
-                    sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
+                        memberResults.append(display(name, value, midas_utils.typeIsPrimitive(value.type)))
+                    midas_utils.sendResponse(self.name, variables_response(members=memberResults), midas_utils.prepareCommandResponse)
                 except Exception as e:
-                    logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
+                    config.logExceptionBacktrace(err_logger, "failed to get pretty printed value: {}. There's no value attribute?".format(e), e)
                     raise e
             else:
                 # means the pretty printed result, doesn't have any children or shouldn't show any of them. Therefore it's safe
@@ -353,16 +362,16 @@ class ContentsOf(gdb.Command):
                     memberResults.append(pp_display_simple("value", res.value()))
                 else:
                     memberResults.append(pp_display_simple("value", res))
-                sendResponse(self.name, variables_response(members=memberResults), prepareCommandResponse)
+                midas_utils.sendResponse(self.name, variables_response(members=memberResults), midas_utils.prepareCommandResponse)
             return
 
-        if memberIsReference(it.type):
+        if midas_utils.memberIsReference(it.type):
             it = it.referenced_value()
         try:
             fields = it.type.fields()
             for field in fields:
                 if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-                    item = display(field.name, it[field.name], typeIsPrimitive(it[field.name].type))
+                    item = display(field.name, it[field.name], midas_utils.typeIsPrimitive(it[field.name].type))
                     memberResults.append(item)
                 elif field.is_base_class:
                     item = base_class_display(field.name, it.type[field.name].type)
@@ -371,14 +380,14 @@ class ContentsOf(gdb.Command):
                     item = static_display(field.name, it.type[field.name].type)
                     staticsResults.append(item)
 
-            sendResponse(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults), prepareCommandResponse)
+            midas_utils.sendResponse(self.name, variables_response(members=memberResults, statics=staticsResults, base_classes=baseClassResults), midas_utils.prepareCommandResponse)
         except Exception as e:
             extype, exvalue, extraceback = sys.exc_info()
             fieldsNames = []
             for field in fields:
                 fieldsNames.append("{}".format(field.name))
-            logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
-            sendResponse(self.name, None, prepareCommandResponse)
+            config.logExceptionBacktrace(err_logger, "Couldn't retrieve contents of {}. Exception type: {} - Exception value: {}. Fields: {}".format(expression, extype, exvalue, fieldsNames), e)
+            midas_utils.sendResponse(self.name, None, midas_utils.prepareCommandResponse)
 
 
 updatesOfCommand = ContentsOf()
@@ -400,9 +409,9 @@ class GetLocals(gdb.Command):
         super(GetLocals, self).__init__("gdbjs-get-locals", gdb.COMMAND_USER)
         self.name = "get-locals"
 
-    @timeInvocation
+    @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, frameLevel, scope] = parseCommandArguments(arguments)
+        [threadId, frameLevel, scope] = midas_utils.parseCommandArguments(arguments)
         (thread, frame) = config.currentExecutionContext.set_context(threadId=int(threadId), frameLevel=int(frameLevel))
         predicate = parseScopeParam(scope)
         try:
@@ -417,16 +426,16 @@ class GetLocals(gdb.Command):
                         names.add(name)
                         try:
                             value = symbol.value(frame)
-                            item = display(symbol.name, value, typeIsPrimitive(value.type))
+                            item = display(symbol.name, value, midas_utils.typeIsPrimitive(value.type))
                             result.append(item)
                         except Exception as e:
-                            logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
+                            midas_utils.logExceptionBacktrace(err_logger, "Err was thrown in GetLocals (gdbjs-get-locals). Name of symbol that caused error: {0}\n".format(name), e)
                             names.remove(name)
                 block = block.superblock
-            sendResponse(self.name, result, prepareCommandResponse)
+            midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
         except Exception as e:
-            logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
-            sendResponse(self.name, [], prepareCommandResponse)
+            config.logExceptionBacktrace(err_logger, "Exception thrown in GetLocals.invoke", e)
+            midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
 
 getLocalsCommand = GetLocals()
 
@@ -436,7 +445,7 @@ class SetWatchPoint(gdb.Command):
         self.name = "watchpoint"
 
     def invoke(self, args, from_tty):
-        [type, expression] = parseCommandArguments(args)
+        [type, expression] = midas_utils.parseCommandArguments(args)
         misc_logger.error("set wp for {} and {}".format(type, expression))
         if type == "access":
             gdb.execute(f"awatch -l {expression}")
@@ -447,6 +456,6 @@ class SetWatchPoint(gdb.Command):
         else:
             raise RuntimeError("Unknown watchpoint class")
         bp = gdb.breakpoints()[-1]
-        sendResponse(self.name, { "number": bp.number }, prepareCommandResponse)
+        midas_utils.sendResponse(self.name, { "number": bp.number }, midas_utils.prepareCommandResponse)
 
 setWatchPointCommand = SetWatchPoint()

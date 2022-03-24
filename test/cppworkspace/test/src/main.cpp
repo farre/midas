@@ -37,9 +37,15 @@ struct S {
   int k;
 };
 
+struct T {
+  S s;
+  float f;
+};
+
 int main(int argc, const char **argv)
 {
   S fooBar{.j = 10, .k = 100};
+  T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
   constexpr int array[42] = {};
   auto iptr = new int{42};

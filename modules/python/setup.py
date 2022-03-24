@@ -7,6 +7,5 @@ stdlibpath = os.path.dirname(os.path.realpath(__file__))
 if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
-# We import this here; so that we can set the global variables from VSCode *before* any of the functionality from python is loaded in
-# that way we can set logging, tracing, debug msgs so on and so forth.
+# Imported here; so that we can set config.isDevelopmentBuild etc after this file has been loaded by GDB
 import config
