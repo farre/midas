@@ -96,7 +96,7 @@ class Variable(ReferencedValue):
     def get_variable_reference(self):
         if self.variableRef == -1:
             if not midas_utils.typeIsPrimitive(self.value.type):
-                vr = config.nextVariableReference()
+                vr = config.next_variable_reference()
                 self.variableRef = vr
             else:
                 self.variableRef = 0
@@ -138,7 +138,7 @@ class BaseClass(ReferencedValue):
     """
     def __init__(self, name, rootValue):
         super(BaseClass, self).__init__(name, rootValue)
-        self.variableRef = config.nextVariableReference()
+        self.variableRef = config.next_variable_reference()
 
     def from_value(name, value, type):
         v = value.cast(type).reference_value()
@@ -167,7 +167,7 @@ class StaticVariable(ReferencedValue):
     @config.timeInvocation
     def __init__(self, name, rootvalue, field):
         super(StaticVariable, self).__init__(name, rootvalue)
-        self.variableRef = config.nextVariableReference()
+        self.variableRef = config.next_variable_reference()
         self.display = rootvalue.type[field.name].type.name
         self.field = field
 
