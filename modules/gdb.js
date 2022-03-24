@@ -806,43 +806,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  /** Returns info about current stack frame.
-   * @returns {Promise<{level: string, addr: string, func: string, file: string, fullname: string, line: string, arch: string}>}
-   */
-  async stackInfoFrame() {
-    let miResult = await this.execMI(`-stack-info-frame`);
-    return miResult.frame;
-  }
-
-  generateVariableReference() {
-    let nextRef = this.nextVarRef;
-    return nextRef;
-  }
-
-  generateEvalsVarRef() {
-    let nextRef = this.nextVarRef;
-    return nextRef;
-  }
-
-  selectStackFrame(frameLevel, threadId) {
-    return this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
-  }
-
-  async readRBP(threadId) {
-    let r = await this.execMI(`-data-evaluate-expression $rbp`, threadId);
-    return +(r.value);
-  }
-
-  async readProgramCounter(threadId) {
-    let r = await this.execMI(`-data-evaluate-expression $pc`, threadId);
-    return r.value;
-  }
-
-  async readStackFrameStart(frameLevel, threadId) {
-    await this.execMI(`-stack-select-frame ${frameLevel}`, threadId);
-    return this.readRBP(threadId);
-  }
-
   async evaluateExpression(expr, frameId) {
     // todo(simon): needs implementation in new backend
   }
