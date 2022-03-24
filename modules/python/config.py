@@ -9,11 +9,10 @@ import traceback
 global isDevelopmentBuild
 global setTrace
 global currentExecutionContext
-global executionContexts
 
 variableReferenceCounter = 0
 
-def nextVariableReference():
+def next_variable_reference():
     global variableReferenceCounter
     res = variableReferenceCounter + 1
     variableReferenceCounter += 1
@@ -21,11 +20,7 @@ def nextVariableReference():
 
 isDevelopmentBuild = False
 setTrace = False
-executionContexts = {}
 currentExecutionContext = None
-
-varRefToThreadMap = {}
-varRefToStackFrameMap = {}
 
 class ReferenceKey:
     def __init__(self, threadId, stackFrameId):
@@ -68,7 +63,7 @@ def update_logger():
 def timing_logger():
     return logging.getLogger("time-logger")
 
-def logExceptionBacktrace(logger, errmsg, exception):
+def log_exception(logger, errmsg, exception):
     logger.error("{} Exception info: {}".format(errmsg, exception))
     logger.error(traceback.format_exc())
     logger.error("Current dev setting: {}".format(isDevelopmentBuild))

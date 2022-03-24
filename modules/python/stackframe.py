@@ -48,7 +48,7 @@ def vscFrameFromNoSymtab(name, frame, alreadyReffedId = None):
         pass
 
     stackStart = frame.read_register("rbp")
-    id = alreadyReffedId if alreadyReffedId is not None else config.nextVariableReference()
+    id = alreadyReffedId if alreadyReffedId is not None else config.next_variable_reference()
     sf = {
         "id": id,
         "source": src,
@@ -69,12 +69,12 @@ class StackFrame:
         self.blocks = []
 
         self.locals = {}
-        self.localsReference = config.nextVariableReference()
+        self.localsReference = config.next_variable_reference()
         self.args = []
-        self.argsReference = config.nextVariableReference()
+        self.argsReference = config.next_variable_reference()
 
         self.variableReferences: dict[int, Union[Variable, BaseClass, StaticVariable]] = {}
-        self.registerReference = config.nextVariableReference()
+        self.registerReference = config.next_variable_reference()
 
         self.block_values = []
         self.init = False

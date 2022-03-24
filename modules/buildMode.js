@@ -40,7 +40,7 @@ class MidasRunMode {
   async reloadStdLib(gdb) {
     const ext = vscode.extensions.getExtension("farrese.midas");
     const dir = `${ext.extensionPath}/modules/python`
-    await gdb.execCMD(`source ${dir}/stdlib.py`);
+    await gdb.execCMD(`source ${dir}/midas.py`);
   }
 
   get trace() {
