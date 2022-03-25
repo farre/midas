@@ -24,9 +24,10 @@ class VariableRequest(gdb.Command):
             sf = ec.get_stackframe(refId.frameId)
             if sf.manages_variable_reference(variableReference):
                 res = sf.get(variableReference)
-                midas_utils.sendResponse(self.name, res, midas_utils.prepareCommandResponse)
+                result = { "variables": res }
+                midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
             else:
-                midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
+                midas_utils.sendResponse(self.name, { "variables": [] }, midas_utils.prepareCommandResponse)
         except Exception as e:
             config.log_exception(config.error_logger(), "Variable Request failed for variable reference {}: {}".format(variableReference, e), e)
-            midas_utils.sendResponse(self.name, [], midas_utils.prepareCommandResponse)
+            midas_utils.sendResponse(self.name, { "variables": [] }, midas_utils.prepareCommandResponse)
