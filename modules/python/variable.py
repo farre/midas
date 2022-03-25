@@ -95,7 +95,10 @@ class Variable(ReferencedValue):
 
     def get_variable_reference(self):
         if self.variableRef == -1:
-            if not midas_utils.typeIsPrimitive(self.value.type):
+            v = self.value
+            if midas_utils.memberIsReference(v.type):
+                v = v.referenced_value()
+            if not midas_utils.typeIsPrimitive(v.type):
                 vr = config.next_variable_reference()
                 self.variableRef = vr
             else:
