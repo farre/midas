@@ -46,12 +46,12 @@ def timeInvocation(f):
     @functools.wraps(f)
     def timer_decorator(*args, **kwargs):
         invokeBegin = time.perf_counter_ns()
-        f(*args, **kwargs)
+        result = f(*args, **kwargs)
         invokeEnd = time.perf_counter_ns()
         logger = logging.getLogger("time-logger")
         elapsed_time = int((invokeEnd - invokeBegin) / 1000) # we don't need nano-second measuring, but the accuracy of the timer is nice.
         logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
-        # note, we're not returning anything from Command invocations, as these are meant to be sent over the wire
+        return result
     return timer_decorator
 
 def error_logger():
