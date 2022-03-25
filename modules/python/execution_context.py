@@ -43,7 +43,9 @@ class ExecutionContext:
         self.threadId: int = threadId
         # Hallelujah (ironic) for type info. I miss Rust.
         self.stack: list[stackframe.StackFrame] = []
+        self.last_calculated_stack_depth = -1
 
+    @config.timeInvocation
     def get_frames(self, start, levels):
         (t, f) = config.currentExecutionContext.set_context(self.threadId, start)
         result = []
@@ -81,6 +83,21 @@ class ExecutionContext:
         for sf in self.stack:
             result.append(sf.get_vs_frame())
         return result
+
+    @config.timeInvocation
+    def get_stack_depth(self):
+        if self.last_calculated_stack_depth != -1:
+            if gdb.newest_frame() == self.stack[0].frame:
+                return self.last_calculated_stack_depth
+
+        last_visited = self.stack[-1]
+        count = len(self.stack)
+        f = last_visited.frame.older()
+        while f is not None:
+            count += 1
+            f = f.older()
+        self.last_calculated_stack_depth = count
+        return count
 
     def get_stackframe(self, frameId) -> stackframe.StackFrame:
         for sf in self.stack:

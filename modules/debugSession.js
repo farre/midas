@@ -216,23 +216,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async stackTraceRequest(response, {threadId, startFrame, levels}) {
-    response.body = {
-      stackFrames: await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`)
-    };
+    response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`)
     this.sendResponse(response);
   }
 
   async variablesRequest(response, {variablesReference}) {
-    response.body = {
-      variables: await this.exec(`variable-request ${variablesReference}`)
-    };
+    response.body = await this.exec(`variable-request ${variablesReference}`);
     this.sendResponse(response);
   }
 
   async scopesRequest(response, {frameId}) {
-    response.body = {
-      scopes: await this.exec(`scopes-request ${frameId}`)
-    };
+    response.body = await this.exec(`scopes-request ${frameId}`);
     this.sendResponse(response);
   }
 
