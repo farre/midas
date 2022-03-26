@@ -5,6 +5,7 @@ import json
 
 from os import path
 import config
+from frame_operations import iterate_frame_blocks
 from variable import Variable, BaseClass, StaticVariable
 
 
@@ -88,7 +89,7 @@ class StackFrame:
         config.variableReferences.add_mapping(self.argsReference, self.threadId, self.localsReference)
         config.variableReferences.add_mapping(self.registerReference, self.threadId, self.localsReference)
 
-
+    @config.timeInvocation
     def initialize(self):
         """Initialize this stack frame based on the current block it's in. This does not mean
         it is fully initialized as new sub blocks may come into existence."""
@@ -133,19 +134,20 @@ class StackFrame:
                 self.block_values.pop(idx)
         self.init = True
 
+    @config.timeInvocation
     def update_blocks(self):
         self.initialize()
-        currentBlock = self.frame.block()
         # means we're still in the same block as last time we checked
-        if currentBlock.start == self.blocks[-1].start:
+        if self.frame.block() == self.blocks[-1].start:
             return
 
         newblocks = []
-        while not currentBlock.is_static and not currentBlock.superblock.is_global:
-            for index, block in reversed(list(enumerate(self.blocks))):
+        length = len(self.blocks)
+        for currentBlock in iterate_frame_blocks(self.frame):
+            for index, block in enumerate(reversed(self.blocks)):
                 if block.start == currentBlock.start:
-                    self.blocks = self.blocks[:index+1]
-                    self.block_values = self.block_values[:index+1]
+                    self.blocks = self.blocks[:(length - index)]
+                    self.block_values = self.block_values[:(length - index)]
                     for newblock in newblocks:
                         blockvalues = []
                         for symbol in newblock:
@@ -155,13 +157,13 @@ class StackFrame:
                                 vr = v.get_variable_reference()
                                 if vr != 0:
                                     config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
-                                self.variableReferences[vr] = v
-
-                    self.block_values.append(blockvalues)
+                                    self.variableReferences[vr] = v
+                        self.block_values.append(blockvalues)
+                        self.blocks.append(newblock)
                     return
             newblocks.insert(0, currentBlock)
-            currentBlock = currentBlock.superblock
 
+    @config.timeInvocation
     def get_locals(self):
         self.update_blocks()
         res = {}
@@ -170,10 +172,6 @@ class StackFrame:
                 res[v.name] = v
         result = []
         for v in res.values():
-            vr = v.get_variable_reference()
-            if vr != 0:
-                config.variableReferences.add_mapping(vr, self.threadId, self.frame_id())
-                self.variableReferences[vr] = v
             result.append(v.to_vs())
         return result
 
@@ -187,6 +185,7 @@ class StackFrame:
             result.append(arg.to_vs())
         return result
 
+    @config.timeInvocation
     def get_variable_members(self, variableReference):
         var = self.variableReferences.get(variableReference)
         return var.get_children(self)
