@@ -2,7 +2,7 @@ from pydoc import resolve
 import gdb
 
 import config as config
-from midas_utils import parseCommandArguments, timeInvocation, getClosest, resolveGdbValue
+from midas_utils import parse_command_args, timeInvocation, getClosest, resolve_gdb_value
 
 class WatchVariable(gdb.Command):
     """Not to be confused with watch point."""
@@ -12,11 +12,11 @@ class WatchVariable(gdb.Command):
 
     @timeInvocation
     def invoke(self, args, from_tty):
-        [expr, threadId, frameLevel] = parseCommandArguments(args)
+        [expr, threadId, frameLevel] = parse_command_args(args)
         (thread, frame) = config.currentExecutionContext.set_context(threadId=threadId, frameLevel=frameLevel)
         components = expr.split(".")
         it = getClosest(frame, components[0])
-        it = resolveGdbValue(it, components=components[1:])
+        it = resolve_gdb_value(it, components=components[1:])
         pp = gdb.default_visualizer(it)
         if pp is None:
             0

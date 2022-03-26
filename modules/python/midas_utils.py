@@ -3,7 +3,7 @@ import json
 import sys
 import logging
 
-def typeIsPrimitive(valueType):
+def type_is_primitive(valueType):
     try:
         for f in valueType.fields():
             if hasattr(f, "enumval"):
@@ -13,7 +13,7 @@ def typeIsPrimitive(valueType):
     except TypeError:
         return True
 
-def getMembersRecursively(field, memberList, statics):
+def get_members_recursively(field, memberList, statics):
     if field.bitsize > 0:
         misc_logger = logging.getLogger("update-logger")
         misc_logger.info("field {} is possibly a bitfield of size {}".format(
@@ -21,7 +21,7 @@ def getMembersRecursively(field, memberList, statics):
     if hasattr(field, 'bitpos'):
         if field.is_base_class:
             for f in field.type.fields():
-                getMembersRecursively(
+                get_members_recursively(
                     f, memberList=memberList, statics=statics)
         else:
             if field.name is not None and not field.name.startswith("_vptr"):
@@ -37,16 +37,16 @@ def getFunctionBlock(frame) -> gdb.Block:
         return None
     return block
 
-def parseCommandArguments(arg):
+def parse_command_args(arg):
     return gdb.string_to_argv(arg)
 
-def prepareCommandResponse(cmdName, contents):
+def prepare_command_response(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
 
-def prepareEventResponse(name, payload):
+def prepare_event_response(name, payload):
     return '<gdbjs:event:{0} {1} {0}:event:gdbjs>'.format(name, payload)
 
-def sendResponse(name, result, prepareFnPtr):
+def send_response(name, result, prepareFnPtr):
     """Writes result of an operation to client stream."""
     import config
     res = json.dumps(result, ensure_ascii=False)
@@ -57,7 +57,7 @@ def sendResponse(name, result, prepareFnPtr):
     sys.stdout.write(packet)
     sys.stdout.flush()
 
-def memberIsReference(type):
+def value_is_reference(type):
     code = type.code
     return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
@@ -77,10 +77,10 @@ def getClosest(frame, name):
 # Since ContentsOf command always takes a full "expression path", now it doesn't matter if the sub-paths of the expression
 # contain non-member names; because if there's a pretty printer that rename the members (like in std::tuple, it's [1], [2], ... [N])
 # these will be found and traversed properly, anyway
-def resolveGdbValue(value, components):
+def resolve_gdb_value(value, components):
     it = value
     while len(components) > 0:
-        if memberIsReference(it.type):
+        if value_is_reference(it.type):
             it = it.referenced_value()
         pp = gdb.default_visualizer(it)
         component = components.pop(0)
