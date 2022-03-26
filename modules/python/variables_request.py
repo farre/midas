@@ -16,6 +16,7 @@ class VariableRequest(gdb.Command):
             variableReference = int(variableReference)
             refId = config.variableReferences.get_context(variableReference)
             if refId is None:
+                # todo(simon): this is where we start checking for watch variables, as they are context-independent and re-evaluated in every context that gets selected
                 raise gdb.GdbError("No refId referenced by {} exists".format(variableReference))
             ec = self.executionContexts.get(refId.threadId)
             if ec is None:
