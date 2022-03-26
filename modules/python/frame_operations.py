@@ -40,3 +40,9 @@ def iterate_frame(frame, levels):
         return frame
     except:
         return None
+
+def iterate_frame_blocks(frame) -> gdb.Block:
+    block = frame.block()
+    while not block.is_static and not block.superblock.is_global:
+        yield block
+        block = block.superblock
