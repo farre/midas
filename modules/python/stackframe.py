@@ -9,15 +9,15 @@ from frame_operations import iterate_frame_blocks
 from variable import Variable, BaseClass, StaticVariable
 
 
-def createVSCStackFrame(frame, alreadyReffedId = None):
+def create_stackframe_response(frame, alreadyReffedId = None):
     try:
-        res = vscFrameFromFn(frame, frame.function(), alreadyReffedId)
+        res = vs_stackframe_from_fn(frame, frame.function(), alreadyReffedId)
         return res
     except:
-        res = vscFrameFromNoSymtab(frame.name(), frame, alreadyReffedId)
+        res = vs_stackframe_from_no_symtab(frame.name(), frame, alreadyReffedId)
         return res
 
-def vscFrameFromFn(frame, functionSymbol, alreadyReffedId):
+def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
     sal = frame.find_sal()
     functionSymbolTab = functionSymbol.symtab
     filename = path.basename(functionSymbolTab.filename)
@@ -38,7 +38,7 @@ def vscFrameFromFn(frame, functionSymbol, alreadyReffedId):
     }
     return sf
 
-def vscFrameFromNoSymtab(name, frame, alreadyReffedId = None):
+def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId = None):
     sal = frame.find_sal()
     line_number = sal.line
     # DebugProtocol.Source
@@ -246,7 +246,7 @@ class StackFrame:
             return self.get_variable_members(variableReference=variableReference)
 
     def get_vs_frame(self):
-        res = createVSCStackFrame(self.frame, self.localsReference)
+        res = create_stackframe_response(self.frame, self.localsReference)
         return res
 
     def get_frame(self):
