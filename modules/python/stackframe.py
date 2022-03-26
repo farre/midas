@@ -61,6 +61,43 @@ def vscFrameFromNoSymtab(name, frame, alreadyReffedId = None):
     }
     return sf
 
+class RegisterDescriptors:
+    def __init__(self, frame):
+        self.general = []
+        self.sse = []
+        self.mmx = []
+        for register_descriptor in frame.architecture().registers("general"):
+            self.general.append(register_descriptor)
+        for register_descriptor in frame.architecture().registers("sse"):
+            self.sse.append(register_descriptor)
+        for register_descriptor in frame.architecture().registers("mmx"):
+            self.mmx.append(register_descriptor)
+
+    def register_vs_result(reg_desc, frame):
+            return {
+                "name": reg_desc.name,
+                "value": "{}".format(frame.read_register(reg_desc)),
+                "evaluateName": None,
+                "variablesReference": 0
+            }
+
+    def read_general_registers(self, frame):
+        return [
+            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.general
+        ]
+
+    def read_sse_registers(self, frame):
+        return [
+            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.sse
+        ]
+
+    def read_mmx_registers(self, frame):
+        return [
+            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.mmx
+        ]
+
+REGISTER_DESCRIPTOR_SETS: RegisterDescriptors = None
+
 class StackFrame:
     def __init__(self, frame, threadId):
         """Creates a stack frame. Used for querying about local variables, arguments etc.
@@ -91,6 +128,7 @@ class StackFrame:
 
     @config.timeInvocation
     def initialize(self):
+        global REGISTER_DESCRIPTOR_SETS
         """Initialize this stack frame based on the current block it's in. This does not mean
         it is fully initialized as new sub blocks may come into existence."""
         if self.init:
@@ -132,6 +170,9 @@ class StackFrame:
             for idx in invalidBlockIndices:
                 self.blocks.pop(idx)
                 self.block_values.pop(idx)
+
+        if REGISTER_DESCRIPTOR_SETS is None:
+            REGISTER_DESCRIPTOR_SETS = RegisterDescriptors(self.frame)
         self.init = True
 
     @config.timeInvocation
@@ -175,11 +216,15 @@ class StackFrame:
             result.append(v.to_vs())
         return result
 
+    @config.timeInvocation
     def get_registers(self):
-        result = []
-        return result
+        global REGISTER_DESCRIPTOR_SETS
+        self.initialize()
+        return REGISTER_DESCRIPTOR_SETS.read_general_registers(self.frame)
 
+    @config.timeInvocation
     def get_args(self):
+        self.initialize()
         result = []
         for arg in self.args:
             result.append(arg.to_vs())
