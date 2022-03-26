@@ -25,7 +25,7 @@ class ScopesRequest(gdb.Command):
 
         for sf in ec.stack:
             if sf.frame_id() == frameId:
-                midas_utils.sendResponse(self.name, { "scopes": sf.get_scopes() }, midas_utils.prepareCommandResponse)
+                midas_utils.send_response(self.name, { "scopes": sf.get_scopes() }, midas_utils.prepare_command_response)
                 return
 
         raise gdb.GdbError("No scopes found for frameId {} in execution context {}".format(frameId, refId.threadId))

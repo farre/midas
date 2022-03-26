@@ -1,5 +1,4 @@
 import gdb
-from os import path
 
 import midas_utils
 import config
@@ -25,9 +24,9 @@ class VariableRequest(gdb.Command):
             if sf.manages_variable_reference(variableReference):
                 res = sf.get(variableReference)
                 result = { "variables": res }
-                midas_utils.sendResponse(self.name, result, midas_utils.prepareCommandResponse)
+                midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
             else:
-                midas_utils.sendResponse(self.name, { "variables": [] }, midas_utils.prepareCommandResponse)
+                midas_utils.send_response(self.name, { "variables": [] }, midas_utils.prepare_command_response)
         except Exception as e:
-            config.log_exception(config.error_logger(), "Variable Request failed for variable reference {}: {}".format(variableReference, e), e)
-            midas_utils.sendResponse(self.name, { "variables": [] }, midas_utils.prepareCommandResponse)
+            config.log_exception(config.error_logger(), "Variable Request failed for variable reference {} (in exec context {}): {}".format(variableReference, refId.threadId, e), e)
+            midas_utils.send_response(self.name, { "variables": [] }, midas_utils.prepare_command_response)

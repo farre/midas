@@ -96,9 +96,9 @@ class Variable(ReferencedValue):
     def get_variable_reference(self):
         if self.variableRef == -1:
             v = self.value
-            if midas_utils.memberIsReference(v.type):
+            if midas_utils.value_is_reference(v.type):
                 v = v.referenced_value()
-            if not midas_utils.typeIsPrimitive(v.type):
+            if not midas_utils.type_is_primitive(v.type):
                 vr = config.next_variable_reference()
                 self.variableRef = vr
             else:
@@ -108,9 +108,12 @@ class Variable(ReferencedValue):
     def get_children(self, owningStackFrame):
         import midas_utils
         it = self.get_value()
-        if midas_utils.memberIsReference(it.type):
+        if midas_utils.value_is_reference(it.type):
             it = it.referenced_value()
-        return super().resolve_children(it, owningStackFrame)
+        try:
+            return super().resolve_children(it, owningStackFrame)
+        except gdb.MemoryError:
+            return [ { "name": "value", "value": "Invalid address: {}".format(self.get_value()), "evaluateName": None, "variablesReference": 0 } ]
 
     def to_vs(self):
         v = self.get_value()
@@ -188,7 +191,7 @@ class StaticVariable(ReferencedValue):
     @config.timeInvocation
     def get_children(self, owningStackFrame):
         value = self.value[self.name]
-        if midas_utils.typeIsPrimitive(value.type):
+        if midas_utils.type_is_primitive(value.type):
             return [vs_display(name="value", value="{}".format(value), evaluate_name=None, variable_reference=0)]
         else:
             return super().resolve_children(value, owningStackFrame=owningStackFrame)
