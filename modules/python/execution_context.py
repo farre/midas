@@ -54,11 +54,13 @@ class ExecutionContext:
                 for sf in self.stack:
                     result.append(sf.get_vs_frame())
                 return result
-            res = frame_operations.find_first_identical_frames(self.stack, f, 10)
+            newFrames = []
+            res = frame_operations.find_first_identical_frames(self.stack, f, 10, newFrames=newFrames)
             if res is not None:
                 (x, y) = res
                 if x < y:
-                    frames_to_add = [f for f in frame_operations.take_n_frames(f, y - x)]
+                    self.stack = self.stack[min(x, len(self.stack)):]
+                    frames_to_add = [f for f in frame_operations.take_n_frames(f, y)]
                     for f in reversed(frames_to_add):
                         sf = stackframe.StackFrame(f, self.threadId)
                         self.stack.insert(0, sf)
@@ -69,8 +71,12 @@ class ExecutionContext:
                         for frame in frame_operations.take_n_frames(self.stack[-1].frame, remainder):
                             sf = stackframe.StackFrame(f, self.threadId)
                             self.stack.append(sf)
-                else:
-                    raise gdb.GdbError("This should not be possible.")
+                else: # x == y
+                    self.stack = self.stack[x:]
+                    frames_to_add = [f for f in frame_operations.take_n_frames(f, y)]
+                    for f in reversed(frames_to_add):
+                        sf = stackframe.StackFrame(f, self.threadId)
+                        self.stack.insert(0, sf)
             else:
                 self.clear_frames()
                 for frame in frame_operations.take_n_frames(f, levels):
