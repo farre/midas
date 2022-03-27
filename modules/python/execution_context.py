@@ -54,29 +54,13 @@ class ExecutionContext:
                 for sf in self.stack:
                     result.append(sf.get_vs_frame())
                 return result
-            newFrames = []
-            res = frame_operations.find_first_identical_frames(self.stack, f, 10, newFrames=newFrames)
+            res = frame_operations.find_first_identical_frames(self.stack, f, 10)
             if res is not None:
-                (x, y) = res
-                if x < y:
-                    self.stack = self.stack[min(x, len(self.stack)):]
-                    frames_to_add = [f for f in frame_operations.take_n_frames(f, y)]
-                    for f in reversed(frames_to_add):
-                        sf = stackframe.StackFrame(f, self.threadId)
-                        self.stack.insert(0, sf)
-                elif x > y:
-                    self.stack = self.stack[y:]
-                    if len(self.stack) < start + levels:
-                        remainder = (start + levels) - len(self.stack)
-                        for frame in frame_operations.take_n_frames(self.stack[-1].frame, remainder):
-                            sf = stackframe.StackFrame(f, self.threadId)
-                            self.stack.append(sf)
-                else: # x == y
-                    self.stack = self.stack[x:]
-                    frames_to_add = [f for f in frame_operations.take_n_frames(f, y)]
-                    for f in reversed(frames_to_add):
-                        sf = stackframe.StackFrame(f, self.threadId)
-                        self.stack.insert(0, sf)
+                (x, newFrames) = res
+                self.stack = self.stack[x:]
+                tmp = self.stack
+                self.stack = [stackframe.StackFrame(f, self.threadId) for f in newFrames]
+                self.stack.extend(tmp)
             else:
                 self.clear_frames()
                 for frame in frame_operations.take_n_frames(f, levels):
@@ -86,6 +70,12 @@ class ExecutionContext:
             for frame in frame_operations.take_n_frames(f, levels):
                 sf = stackframe.StackFrame(frame, self.threadId)
                 self.stack.append(sf)
+
+        if len(self.stack) < start + levels:
+            remainder = (start + levels) - len(self.stack)
+            for frame in frame_operations.take_n_frames(self.stack[-1].frame.older(), remainder):
+                sf = stackframe.StackFrame(f, self.threadId)
+                self.stack.append(sf)
         for sf in self.stack:
             result.append(sf.get_vs_frame())
         return result
@@ -93,7 +83,7 @@ class ExecutionContext:
     @config.timeInvocation
     def get_stack_depth(self):
         if self.last_calculated_stack_depth != -1:
-            if gdb.newest_frame() == self.stack[0].frame:
+            if self.stack[0].is_same_frame(gdb.newest_frame()):
                 return self.last_calculated_stack_depth
 
         last_visited = self.stack[-1]
