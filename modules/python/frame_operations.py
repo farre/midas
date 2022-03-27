@@ -23,15 +23,15 @@ def find_first_equal_frame(stackFrameList, frameList):
                 return (x, y)
     return None
 
-def find_first_identical_frames(stackFrameList, frame, stopCount, newFrames = []):
-    f = [f for f in take_n_frames(frame, stopCount)]
+def find_first_identical_frames(stackFrameList, frame, stopCount):
+    frames = [f for f in take_n_frames(frame, stopCount)]
     stopCount = min(stopCount, len(stackFrameList))
     for x in range(stopCount):
         fa = stackFrameList[x].frame
-        for y, fb in enumerate(f):
+        for y, fb in enumerate(frames):
             if fa == fb:
-                newFrames = f[:y]
-                return (x, y)
+                newFrames = frames[:y]
+                return (x, newFrames)
     return None
 
 def iterate_frame(frame, levels):
