@@ -6,8 +6,9 @@ def frame_iterator(frame):
         frame = frame.older()
 
 def take_n_frames(frame, num):
+    f_iterator = frame
     count = num
-    for f in frame_iterator(frame):
+    for f in frame_iterator(f_iterator):
         if count == 0:
             return
         else:
