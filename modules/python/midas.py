@@ -2,6 +2,7 @@ import gdb
 import gdb.types
 import os
 import sys
+import json
 
 import logging
 import logging.handlers
@@ -58,7 +59,9 @@ scopesRequestCommand = scopes_request.ScopesRequest(executionContexts)
 import watchpoint_request
 setWatchPointCommand = watchpoint_request.SetWatchPoint()
 
+import setbreakpoints_request
+setBreakpointsCommand = setbreakpoints_request.SetSourceBreakpointsRequest()
+
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
     misc_logger.debug("Development mode is set. Logging enabled.")
-

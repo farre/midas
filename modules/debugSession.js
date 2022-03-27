@@ -153,6 +153,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequest(response, args, request) {
     // todo(simon): room for optimization. instead of emptying and re-setting, just remove those not in request.
+    // await this.setBreakPointsRequestPython(response, args, request)
     const res = await this.gdb.setBreakpointsInFile(args.source.path, args.breakpoints);
     this.gdb.vscodeBreakpoints.set(args.source.path, res);
     response.body = {
@@ -160,6 +161,16 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     };
     this.sendResponse(response);
   }
+
+  // eslint-disable-next-line no-unused-vars
+  async setBreakPointsRequestPython(response, args, request) {
+    const serialized_request = JSON.stringify(args);
+    const prepared = serialized_request.replaceAll(`"`, `'`);
+    const cmd = `setbreakpoints ${prepared}`;
+    response.body = await this.exec(cmd);
+    this.sendResponse(response);
+  }
+
   // eslint-disable-next-line no-unused-vars
   dataBreakpointInfoRequest(response, args, request) {
     let dataId = args.name;
