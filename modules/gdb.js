@@ -703,50 +703,19 @@ class GDB extends GDBMixin(GDBBase) {
    * @param { { bkpt: bkpt } } payload
    */
   #onNotifyBreakpointCreated(payload) {
-    try {
-      let { number, addr, func, file, enabled, line } = payload.bkpt;
-      let bp = {
-        id: number,
+    let { number, addr, func, file, fullname, enabled, line } = payload.bkpt;
+    if(!file && !line) {
+      vscode.window.showInformationMessage("Setting function breakpoints from debug console, won't register in UI.")
+    } else {
+      const newBreakpoint = {
+        id: +number,
         enabled: enabled == "y",
-        verified: addr != "<PENDING>"
+        verified: addr != "<PENDING>",
+        source: new Source(file, fullname),
+        line: +line
       };
-      // @ts-ignore
-      vscode.debug.activeDebugSession.getDebugProtocolBreakpoint(bp).then(dapbkpt => {
-        if (!dapbkpt) {
-          if(!file && !line) {
-            if(payload.bkpt["original-location"].includes("::")) { // function breakpoint
-              // todo(simon): implement. VSCode screws up breakpoints because of how it handles them.
-            } else if(payload.bkpt["original-location"].includes(":")) { // source breakpoint
-              const split = payload.bkpt["original-location"].split(":");
-              const file = split[0];
-              const line = split[1];
-              const newBreakpoint = {
-                id: +bp.id,
-                enabled: bp.enabled,
-                verified: bp.verified,
-                source: new Source(file),
-                line: +line
-              };
-              this.#lineBreakpoints.add_to(file, newBreakpoint);
-              this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
-            }
-          } else {
-            if(func) {
-              // see above todo
-            } else {
-              let pos = new vscode.Position(+line ?? 1 - 1, 0);
-              let uri = vscode.Uri.parse(file);
-              let loc = new vscode.Location(uri, pos);
-              let newBreakpoint = new vscode.SourceBreakpoint(loc, bp.enabled);
-              vscode.debug.addBreakpoints([newBreakpoint]);
-              this.#lineBreakpoints.add_to(file, bp);
-            }
-          }
-        }
-        log(getFunctionName(), payload);
-      });
-    } catch(err) {
-      console.log(`Failed to get VScode & DAP breakpoints`);
+      this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+      this.#lineBreakpoints.add_to(file, newBreakpoint);
     }
   }
 
