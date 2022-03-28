@@ -406,15 +406,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async evaluateRequest(response, args, request) {
     const { expression, frameId, context } = args;
-    response.body = {
-      result: null,
-      type: "some type",
-      presentationHint: {
-        kind: "class",
-      },
-      variablesReference: 0,
-    };
-
     if (context == "watch") {
       // todo(simon): needs implementation in new backend
       const {body, success, message} = await this.exec(`watch-variable ${expression} ${frameId}`);
