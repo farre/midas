@@ -419,12 +419,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       );
       try {
         let msg = await this.gdb.replInput(expression);
-        response.body.message = msg;
-        response.body.result = msg;
+        response.body = { result: msg }
+        response.message = msg;
         this.sendResponse(response);
       } catch (err) {
-        response.body.result = `Error: ${err}`;
-        response.body.message = `Error: ${err}`;
+        response.body = {result: `Error: ${err}` };
+        response.message = `Error: ${err}`;
+        response.success = false;
         this.sendResponse(response);
       }
     }
