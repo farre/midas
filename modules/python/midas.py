@@ -62,6 +62,10 @@ setWatchPointCommand = watchpoint_request.SetWatchPoint()
 import watch_variable
 watchVariableCommand = watch_variable.WatchVariable(executionContexts)
 
+# Request that is Midas only; it resets all backend state (for when for instance the user wants to restart a debug session).
+import reset_request
+resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.variableReferenceCounter, config.variableReferences)
+
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
     misc_logger.debug("Development mode is set. Logging enabled.")

@@ -117,8 +117,6 @@ class GDB extends GDBMixin(GDBBase) {
   vscodeBreakpoints = new Map();
   // loaded libraries
   #loadedLibraries;
-  // variablesReferences bookkeeping
-  #nextVarRef = 1;
   /** @type {import("./debugSession").MidasDebugSession } */
   #target;
   // program name
@@ -148,10 +146,6 @@ class GDB extends GDBMixin(GDBBase) {
       })()
     );
     this.#target = target;
-  }
-
-  get nextVarRef() {
-    return this.#nextVarRef++;
   }
 
   async setup() {
@@ -210,7 +204,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   async restart(program, stopOnEntry) {
-    this.clear();
+    // todo(simon): create a reset request for the python backend.
     await this.execMI("-exec-interrupt");
     if (stopOnEntry) {
       await this.execMI("-exec-run");
@@ -700,7 +694,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param { { bkpt: bkpt } } payload
    */
   #onNotifyBreakpointCreated(payload) {
-    let { number, addr, func, file, fullname, enabled, line } = payload.bkpt;
+    let { number, addr, file, fullname, enabled, line } = payload.bkpt;
     if(!file && !line) {
       vscode.window.showInformationMessage("Setting function breakpoints from debug console, won't register in UI.")
     } else {
@@ -833,11 +827,6 @@ class GDB extends GDBMixin(GDBBase) {
 
   registerBreakpoint(bp) {
     this.#lineBreakpoints.add_to(bp.file, bp);
-  }
-
-  clear() {
-    this.executionContexts.clear();
-    this.references.clear();
   }
 
   async replInput(expression) {
