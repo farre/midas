@@ -245,6 +245,17 @@ class ConfigurationProvider {
       await vscode.window.showInformationMessage("Cannot find a program to debug");
       return null;
     }
+    if(config.request == "attach") {
+      if(!config.pid) {
+        const options = { canPickMany: false, ignoreFocusOut: true, title: "Select process to debug" };
+        const pid = await vscode.window.showInputBox(options);
+        if(!pid) {
+          await vscode.window.showInformationMessage("You must provide a pid for attach requests.");
+          return null;
+        }
+        config.pid = pid;
+      }
+    }
     vscode.commands.executeCommand("setContext", "midas.rrSession", false);
     return config;
   }
@@ -261,8 +272,9 @@ class ConfigurationProvider {
       return null;
     }
     // if launch.json is missing or empty
-    if (!config || !config.type || config.type == undefined || !config.mode) {
-      await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided.");
+    if (!config || !config.type || config.type == undefined) {
+      if(config.request != "attach" && !config.mode)
+        await vscode.window.showErrorMessage("Cannot start debugging because no launch configuration has been provided (or 'mode' is not set)");
       return null;
     }
     initDefaults(config);
@@ -272,6 +284,9 @@ class ConfigurationProvider {
     } else if(config.mode == "gdb") {
       return this.resolveGdbConfig(folder, config, token);
     } else {
+      if(config.request == "attach") {
+        return this.resolveGdbConfig(folder, config, token);
+      }
       vscode.window.showErrorMessage("You have not set mode. Supported values: 'rr' or 'gdb'");
       return null;
     }
