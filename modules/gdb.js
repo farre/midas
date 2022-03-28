@@ -104,6 +104,18 @@ function spawnGDB(gdbPath, traceSettings, setupCommands, binary, ...args) {
   return gdb;
 }
 
+function attachGDB(gdbPath, traceSettings, setupCommands, binary, pid) {
+  const MidasSetupArgs = spawn_settings(traceSettings);
+  const spawnParameters =
+    setupCommands
+      .flatMap(command => ["-iex", `${command}`])
+      .concat(MidasSetupArgs.flatMap(i => i))
+      .concat(["-iex", "set mi-async on",])
+      .concat(["-i=mi3", binary, "-p", pid])
+  let gdb = spawn(gdbPath, spawnParameters);
+  return gdb;
+}
+
 let gdbProcess = null;
 /** @typedef {number} ThreadId */
 /** @typedef {number} VariablesReference */
@@ -131,17 +143,25 @@ class GDB extends GDBMixin(GDBBase) {
   userRequestedInterrupt = false;
   allStopMode;
 
-  constructor(target, args) {
+  constructor(target, args, request) {
     super(
       (() => {
-        if (isReplaySession(args)) {
-          let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
+        if(request == "launch") {
+          if (isReplaySession(args)) {
+            let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
+            gdbProcess = gdb;
+            return gdb;
+          } else {
+            let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
+            gdbProcess = gdb;
+            return gdb;
+          }
+        } else if(request == "attach") {
+          const gdb = attachGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.pid);
           gdbProcess = gdb;
           return gdb;
         } else {
-          let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
-          gdbProcess = gdb;
-          return gdb;
+          throw new Error("Unknown debug request type");
         }
       })()
     );
@@ -174,6 +194,19 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       await this.run();
     }
+  }
+
+  async attach_start(program) {
+    this.#program = path.basename(program);
+    trace = this.#target.buildSettings.trace;
+    this.allStopMode = true;
+    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
+    await this.init();
+    const printOptions = [
+      printOption(PrintOptions.HideStaticMembers),
+      printOption(PrintOptions.PrettyStruct)
+    ];
+    await this.setPrintOptions(printOptions);
   }
 
   async start(program, stopOnEntry, allStopMode) {

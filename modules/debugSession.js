@@ -139,15 +139,40 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
 
     if (isReplaySession(args)) {
-      this.gdb = new GDB(this, args);
+      this.gdb = new GDB(this, args, "launch");
       this.gdb.withRR = true;
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
     } else if (args.type == "midas") {
-      this.gdb = new GDB(this, args);
+      this.gdb = new GDB(this, args, "launch");
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.start(args.program, args.stopOnEntry, args.allStopMode ?? false);
     }
+  }
+
+  async attachRequest(response, args, request) {
+    await this.configIsDone.wait(1000);
+    let data = fs.readFileSync("/proc/sys/kernel/yama/ptrace_scope");
+    const setting = data.toString().trim();
+    if(setting == "1") {
+      const Message = {
+        /** Unique identifier for the message. */
+        id: 1,
+        format: "Ptrace privileges are restricted. Run 'sudo sysctl kernel.yama.ptrace_scope=0' to allow non-children to ptrace other processes.",
+        showUser: true,
+        /** An optional url where additional information about this message can be found. */
+        url: "https://askubuntu.com/questions/41629/after-upgrade-gdb-wont-attach-to-process",
+        /** An optional label that is presented to the user as the UI for opening the url. */
+        urlLabel: "Read more about ptrace privileges",
+      };
+      this.sendErrorResponse(response, Message);
+      return;
+    }
+    this.gdb = new GDB(this, args, "attach");
+    this.gdb.withRR = false;
+    this.gdb.setupEventHandlers(false);
+    await this.gdb.attach_start(args.program);
+    this.sendResponse(response);
   }
 
   // eslint-disable-next-line no-unused-vars
@@ -301,10 +326,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // todo(simon): add possibility to disconnect *without* killing the rr process.
     if (this.#terminal) this.#terminal.dispose();
     return super.disconnectRequest(args[0], args[1], args[3]);
-  }
-
-  attachRequest(...args) {
-    return this.virtualDispatch(...args);
   }
 
   terminateRequest(response, args, request) {
