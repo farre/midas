@@ -33,6 +33,15 @@
 			]
 		},
 		{
+			"name": "Debug extension - test attach",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"${workspaceFolder}/test/cppworkspace/attach"
+			]
+		},
+		{
 			"name": "Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",
