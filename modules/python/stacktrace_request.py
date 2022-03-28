@@ -11,14 +11,16 @@ class StackTraceRequest(gdb.Command):
 
     @config.timeInvocation
     def invoke(self, arguments, from_tty):
-        [threadId, start, levels] = midas_utils.parse_command_args(arguments)
-        threadId = int(threadId)
-        levels = int(levels)
-        start = int(start)
+        [threadId, start, levels] = midas_utils.parse_command_args(arguments, int, int, int)
         try:
             ec = self.executionContexts.get(threadId)
             if ec is None:
-                ec = execution_context.ExecutionContext(threadId)
+                thread = None
+                for t in gdb.selected_inferior().threads():
+                    if t.num == threadId:
+                        thread = t
+                        break
+                ec = execution_context.ExecutionContext(thread)
                 self.executionContexts[threadId] = ec
             stack_frames = ec.get_frames(start, levels)
             total_frames = ec.get_stack_depth()

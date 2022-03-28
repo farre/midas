@@ -7,12 +7,16 @@ import frame_operations
 import stackframe
 import config
 
+def new_thread_handler(thread):
+    config.currentExecutionContext.add_thread(thread)
+
 class CurrentExecutionContext:
     inferior = None
     def __init__(self):
         self.threadId = -1
         self.frameLevel = -1
         CurrentExecutionContext.inferior = gdb.selected_inferior()
+        self.threads = []
 
     def set_thread(self, threadId):
         if self.threadId != threadId:
@@ -38,16 +42,46 @@ class CurrentExecutionContext:
         f = self.set_frame(level=int(frameLevel))
         return (t, f)
 
+    def change_context(self, thread, frame):
+        self.threadId = thread.number
+        self.frameLevel = frame.level()
+        thread.switch()
+        frame.select()
+
+    def add_thread(self, thread):
+        self.threads.append(thread)
+
 class ExecutionContext:
-    def __init__(self, threadId):
-        self.threadId: int = threadId
+    def __init__(self, thread):
+        self.thread = thread
         # Hallelujah (ironic) for type info. I miss Rust.
         self.stack: list[stackframe.StackFrame] = []
         self.last_calculated_stack_depth = -1
 
     @config.timeInvocation
+    def set_context(self, frame_level):
+        self.thread.switch()
+        f = gdb.newest_frame()
+        while f is not None:
+            if f.level() == frame_level:
+                f.select()
+                return f
+            f = f.older()
+
+    @config.timeInvocation
+    def set_known_context(self, frame_id):
+        self.thread.switch()
+        for sf in self.stack:
+            if sf.frame_id() == frame_id:
+                sf.frame.select()
+                return sf.frame
+
+    def thread_id(self):
+        return self.thread.num
+
+    @config.timeInvocation
     def get_frames(self, start, levels):
-        (t, f) = config.currentExecutionContext.set_context(self.threadId, start)
+        f = self.set_context(start)
         result = []
         if len(self.stack) > 0:
             if self.stack[0].is_same_frame(f):
@@ -59,22 +93,26 @@ class ExecutionContext:
                 (x, newFrames) = res
                 self.stack = self.stack[x:]
                 tmp = self.stack
-                self.stack = [stackframe.StackFrame(f, self.threadId) for f in newFrames]
+                threadId = self.thread_id()
+                self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
                 self.stack.extend(tmp)
             else:
                 self.clear_frames()
+                threadId = self.thread_id()
                 for frame in frame_operations.take_n_frames(f, levels):
-                    sf = stackframe.StackFrame(frame, self.threadId)
+                    sf = stackframe.StackFrame(frame, threadId)
                     self.stack.append(sf)
         else:
+            threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(f, levels):
-                sf = stackframe.StackFrame(frame, self.threadId)
+                sf = stackframe.StackFrame(frame, threadId)
                 self.stack.append(sf)
 
         if len(self.stack) < start + levels:
             remainder = (start + levels) - len(self.stack)
+            threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(self.stack[-1].frame.older(), remainder):
-                sf = stackframe.StackFrame(f, self.threadId)
+                sf = stackframe.StackFrame(f, threadId)
                 self.stack.append(sf)
         for sf in self.stack:
             result.append(sf.get_vs_frame())

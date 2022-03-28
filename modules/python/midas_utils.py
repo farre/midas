@@ -37,8 +37,25 @@ def getFunctionBlock(frame) -> gdb.Block:
         return None
     return block
 
-def parse_command_args(arg):
-    return gdb.string_to_argv(arg)
+
+def parse_command_args(arg_string, *argv):
+    """Parses the arguments passed in the argument string for commands.
+    `*argv` contains a variable amount of type informations, which arguments in the argument string will be converted to.
+    `argv` can not be a longer list than arg_string as this will throw an exception. If the type list is shorter than parsed arguments
+    the remaining args will be returned as strings"""
+
+    parsed_arguments = gdb.string_to_argv(arg_string)
+    if len(argv) > len(parsed_arguments):
+        raise gdb.GdbError("Parsed arguments less than arguments in type list")
+    index = 0
+    result = []
+    for Type in argv:
+        result.append(Type(parsed_arguments[index]))
+        index += 1
+    while index != len(parsed_arguments):
+        result.append(parsed_arguments[index])
+        index += 1
+    return result
 
 def prepare_command_response(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
@@ -62,7 +79,7 @@ def value_is_reference(type):
     return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
 # When parsing closely related blocks, this is faster than gdb.parse_and_eval on average.
-def getClosest(frame, name):
+def get_closest(frame, name):
     block = frame.block()
     while (not block.is_static) and (not block.superblock.is_global):
         for symbol in block:
