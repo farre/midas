@@ -126,6 +126,9 @@ class StackFrame:
         config.variableReferences.add_mapping(self.argsReference, self.threadId, self.localsReference)
         config.variableReferences.add_mapping(self.registerReference, self.threadId, self.localsReference)
 
+        self.watch_variables: dict[str, Variable] = {}
+        config.variableReferences.add_mapping(self.localsReference, threadId, self.localsReference)
+
     @config.timeInvocation
     def initialize(self):
         global REGISTER_DESCRIPTOR_SETS
@@ -270,3 +273,19 @@ class StackFrame:
 
     def frame_id(self):
         return self.localsReference
+
+    def add_watched_variable(self, expr, variable):
+        """ Adds variable to watch if it doesn't exist and returns created/existing `Variable`"""
+        if self.watch_variables.get(expr) is None:
+            v = Variable.from_value(expr, variable)
+            self.watch_variables[expr] = v
+            vr = v.get_variable_reference()
+            if vr != 0:
+                config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
+                self.variableReferences[vr] = v
+                config.variableReferences.add_mapping(vr, self.threadId, self.frame_id())
+            return v
+        else:
+            return self.watch_variables[expr]
+
+

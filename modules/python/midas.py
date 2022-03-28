@@ -59,6 +59,9 @@ scopesRequestCommand = scopes_request.ScopesRequest(executionContexts)
 import watchpoint_request
 setWatchPointCommand = watchpoint_request.SetWatchPoint()
 
+import watch_variable
+watchVariableCommand = watch_variable.WatchVariable(executionContexts)
+
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
     misc_logger.debug("Development mode is set. Logging enabled.")

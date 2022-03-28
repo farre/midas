@@ -405,6 +405,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
   // eslint-disable-next-line no-unused-vars
   async evaluateRequest(response, args, request) {
+    const { expression, frameId, context } = args;
     response.body = {
       result: null,
       type: "some type",
@@ -413,11 +414,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       },
       variablesReference: 0,
     };
-    let { expression, frameId, context } = args;
+
     if (context == "watch") {
       // todo(simon): needs implementation in new backend
-      response.success = false;
-      response.message = "could not be evaluated (unimplemented)";
+      const {body, success, message} = await this.exec(`watch-variable ${expression} ${frameId}`);
+      response.body = body;
+      response.success = success;
+      response.message = message;
       this.sendResponse(response);
     } else if (context == "repl") {
       vscode.debug.activeDebugConsole.appendLine(
