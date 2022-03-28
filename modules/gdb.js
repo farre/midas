@@ -115,7 +115,6 @@ class GDB extends GDBMixin(GDBBase) {
   #fnBreakpoints = new Map();
   #watchpoints = new ExclusiveArray();
   vscodeBreakpoints = new Map();
-  registerFile = [];
   // loaded libraries
   #loadedLibraries;
   // variablesReferences bookkeeping
@@ -175,7 +174,6 @@ class GDB extends GDBMixin(GDBBase) {
     // const { getVar, midasPy } = require("./scripts");
     await this.setup();
     this.#rrSession = true;
-    await this.#setUpRegistersInfo();
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
       await this.execMI("-exec-run --start");
@@ -197,7 +195,6 @@ class GDB extends GDBMixin(GDBBase) {
       await this.execMI(`-gdb-set mi-async on`);
     }
 
-    await this.#setUpRegistersInfo();
     const printOptions = [
       printOption(PrintOptions.HideStaticMembers),
       // printOption(PrintOptions.SetDepthMinimum),
@@ -725,8 +722,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
-    // eslint-disable-next-line no-unused-vars
-    const { number, type, disp, enabled, addr, func, file, fullname, line } = payload.bkpt;
+    const { enabled, file, fullname, line } = payload.bkpt;
     const num = payload.bkpt.number;
     const bp = {
       line: line,
@@ -741,10 +737,11 @@ class GDB extends GDBMixin(GDBBase) {
 
   /**
    * Reports that a breakpoint was deleted.
-   *
-   * @param {bkpt} payload
    */
   #onNotifyBreakpointDeleted(payload) {
+    const { id } = payload
+    const bp = { id: +id, verified: true};
+    this.#target.sendEvent(new BreakpointEvent("removed", bp));
     log(getFunctionName(), payload);
   }
 
@@ -775,10 +772,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  async evaluateExpression(expr, frameId) {
-    // todo(simon): needs implementation in new backend
-  }
-
   kill() {
     gdbProcess.kill("SIGINT");
   }
@@ -787,13 +780,6 @@ class GDB extends GDBMixin(GDBBase) {
   registerAsAllStopMode() {
     this.allStopMode = true;
     vscode.commands.executeCommand("setContext", "midas.allStopModeSet", true);
-  }
-
-  async #setUpRegistersInfo() {
-    let miResult = await this.execMI(`-data-list-register-names`);
-    let lastGPR = miResult["register-names"].findIndex((item) => item == "gs");
-    this.registerFile = miResult["register-names"].splice(0, lastGPR + 1);
-    this.generalPurposeRegCommandString = this.registerFile.map((v, index) => index).join(" ");
   }
 
   /**
