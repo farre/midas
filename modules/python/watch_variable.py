@@ -2,17 +2,6 @@ import gdb
 import config
 import midas_utils
 
-"""
-        body: {
-            result: string;
-            type?: string;
-            variablesReference: number;
-            namedVariables?: number;
-            indexedVariables?: number;
-            memoryReference?: string;
-        }
-"""
-
 def response(success, message, result, type=None, variableReference=0, namedVariables=None, indexedVariables=None, memoryReference=None):
     return {
             "body":
