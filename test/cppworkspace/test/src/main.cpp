@@ -42,13 +42,19 @@ struct T {
   float f;
 };
 
+void doFooBar() {
+  S fooBar{.j = 10, .k = 100};
+  fooBar.j += 1;
+}
+
 int main(int argc, const char **argv)
 {
-  S fooBar{.j = 10, .k = 100};
+  doFooBar();
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
   constexpr int array[42] = {};
   auto iptr = new int{42};
+
 
   // shadowing test
   int i = 10;
