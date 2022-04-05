@@ -30,7 +30,7 @@ in `launch.json` config:
 ### Normal debug session:
 ```json
 {
-    "type": "midas",
+    "type": "midas-gdb",
     "request": "launch",
     "name": "Launch Debug",
     "program": "/path/to/binary",
@@ -38,7 +38,6 @@ in `launch.json` config:
     "stopOnEntry": true,
     "trace": "Off",
     "allStopMode": true,
-    "mode": "gdb"
 }
 ```
 Required values are
@@ -62,13 +61,20 @@ Trace has the following settings:
 
 The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...). These are currently very bare bones though.
 
+To "run" the inferior (debugged program) in an external console, add the `externalConsole` field. It takes a string / path to the terminal of your choice.
+
+However, currently this is only tested on Ubuntu, thus it uses `x-terminal-emulator` alias with pretty specific parameters. If your linux distro, spawns
+a shell with this command, external console should work on your Linux distro as well;
+
+`x-terminal-emulator -e sh -c "tty > /tmp/someFileMidasDecidesAtRunTime && echo $$ >> /tmp/someFileMidasDecidesAtRunTime && sleep 100000000000000"`
+
 ## Setup commands
 Another field that can be added is the `setupCommands` which takes an array of strings that are GDB commands to be executed before
 loading the binary or file containing symbols (the `-iex "someCommand here"`). Below is an example of such
 
 ```json
 {
-    "type": "midas",
+    "type": "midas-gdb",
     "request": "launch",
     "name": "Launch Debug",
     "program": "${workspaceFolder}/path/binary",
@@ -76,16 +82,16 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
     "stopOnEntry": true,
     "trace": "Off",
     "allStopMode": true,
-    "mode": "gdb",
     "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```
 
 ## Replayable debug session (rr)
 
+Configuration example of a rr debug session:
 ```json
 {
-    "type": "midas",
+    "type": "midas-rr",
     "request": "launch",
     "name": "Launch replay debug session",
     "program": "${workspaceFolder}/path/binary",
@@ -93,21 +99,15 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
     "stopOnEntry": true,
     "trace": "Off",
     "gdbPath": "gdb",
-    "mode": "rr",
-    "serverAddress": "localhost:50505",
-    "replay": {
-        "rrPath": "rr"
-    }
+    "rrPath": "rr",
+    "serverAddress": "localhost:50505"
 }
 ```
-
-Required fields are the same as a normal debug session, along with:
-- The `replay` JSON object setting which takes an rrPath property, that behaves just like the gdbPath setting.
 
 rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB. If this field is not set
 Midas will use `127.0.0.1:RandomFreePort`.
 
-One thing to remember is that when debugging a replayable session, all stop mode can not be set to be true. So you can elide this option, as it will be set to true, regardless.
+rrPath behaves just like the gdbPath field and defaults to trying to find `rr` in `$PATH`.
 
 However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`), shown below.
 

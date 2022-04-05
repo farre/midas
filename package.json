@@ -8,7 +8,7 @@
     "midas",
     "debug"
   ],
-  "version": "0.1.0",
+  "version": "0.1.1",
   "engines": {
     "vscode": "^1.61.0"
   },
@@ -196,7 +196,7 @@
           {
             "type": "midas-gdb",
             "request": "launch",
-            "name": "Debug binary",
+            "name": "Midas Launch",
             "program": "${workspaceFolder}/${2:binary}",
             "stopOnEntry": true,
             "trace": "Off",
@@ -207,7 +207,7 @@
           {
             "type": "midas-gdb",
             "request": "attach",
-            "name": "Attach to process",
+            "name": "Midas Attach",
             "program": "${1:program}",
             "pid": "${2:pid}",
             "trace": "${3:Off}",
@@ -218,7 +218,7 @@
         "configurationSnippets": [
           {
             "name": "midas-gdb",
-            "label": "midas: Debug",
+            "label": "Midas GDB: Launch",
             "description": "Launch midas debugging session for binary selected by user",
             "body": {
               "type": "midas-gdb",
@@ -235,7 +235,7 @@
           },
           {
             "name": "midas-gdb",
-            "label": "midas: attach",
+            "label": "Midas GDB: Attach",
             "description": "Attach GDB to a running process",
             "body": {
               "type": "midas-gdb",
