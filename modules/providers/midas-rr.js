@@ -39,8 +39,8 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
       }
     }
   
-    if (config.replay.traceWorkspace && !config.replay.pid) {
-      config = await tracePicked(config.replay.traceWorkspace).then((replay_parameters) => {
+    if (config.traceWorkspace && !config.replay.pid) {
+      config = await tracePicked(config.traceWorkspace).then((replay_parameters) => {
         if (replay_parameters) {
           config.replay.parameters = replay_parameters;
           return config;
@@ -49,7 +49,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           return null;
         }
       });
-    } else if (!config.replay.traceWorkspace && !config.replay.pid) {
+    } else if (!config.traceWorkspace && !config.replay) {
       const options = {
         canPickMany: false,
         ignoreFocusOut: true,
@@ -66,7 +66,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
               vscode.window.showErrorMessage("Could not parse binary");
               return null;
             }
-            config.replay.parameters = replay_parameters;
+            config.replay = replay_parameters;
             return config;
           } else {
             vscode.window.showErrorMessage("You did not pick a trace.");
@@ -84,7 +84,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     } catch(err) {
       await vscode.window.showErrorMessage(err.message);
     }
-    return this.resolveReplayConfig(folder, config, token);
+    return await this.resolveReplayConfig(folder, config, token);
   }
 
   // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
@@ -100,13 +100,13 @@ class RRDebugAdapterFactory {
      */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    const rrPath = config.replay.rrPath;
-    const pid = config.replay.parameters.pid;
-    const traceWorkspace = config.replay.parameters.traceWorkspace;
-    const inet_addr = config.serverAddress;
+    const rrPath = config.rrPath;
+    const pid = config.replay.pid;
+    const traceWorkspace = config.replay.traceWorkspace;
+
+    let [addr, port] = config.serverAddress.split(":");
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
-    const addr = inet_addr[0] == "localhost" ? "127.0.0.1" : inet_addr[0];
-    const port = inet_addr[1];
+    addr = addr == "localhost" ? "127.0.0.1" : addr;
     const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
     let term = vscode.window.createTerminal("rr terminal");
     term.sendText(cmd_str);
