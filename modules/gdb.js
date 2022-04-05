@@ -14,7 +14,7 @@ const {
 } = require("@vscode/debugadapter");
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
-const { getFunctionName, spawn, isReplaySession, ArrayMap, ExclusiveArray } = require("./utils");
+const { getFunctionName, spawn, spawnExternalConsole, ArrayMap, ExclusiveArray } = require("./utils");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -146,25 +146,26 @@ class GDB extends GDBMixin(GDBBase) {
   constructor(target, args, request) {
     super(
       (() => {
-        if(request == "launch") {
-          if (isReplaySession(args)) {
-            let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
-            gdbProcess = gdb;
-            return gdb;
-          } else {
-            let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
-            gdbProcess = gdb;
-            return gdb;
-          }
-        } else if(request == "attach") {
-          const gdb = attachGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.pid);
+        if(args.type == "midas-rr") {
+          let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
           gdbProcess = gdb;
           return gdb;
         } else {
-          throw new Error("Unknown debug request type");
+          if(request == "launch") {
+            let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
+            gdbProcess = gdb;
+            return gdb;
+          } else if(request == "attach") {
+            const gdb = attachGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.pid);
+            gdbProcess = gdb;
+            return gdb;
+          } else {
+            throw new Error("Unknown debug request type");
+          }
         }
       })()
     );
+    this.withRR = args.type == "midas-rr";
     this.#target = target;
   }
 
@@ -209,7 +210,19 @@ class GDB extends GDBMixin(GDBBase) {
     await this.setPrintOptions(printOptions);
   }
 
-  async start(program, stopOnEntry, allStopMode) {
+  /**
+   * 
+   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: String | null }} args 
+   */
+  async start(args) {
+    const {program, stopOnEntry, allStopMode, externalConsole } = args;
+    let terminal = null;
+    if(externalConsole) {
+      const command = externalConsole == "" ? "x-terminal-emulator" : externalConsole;
+      terminal = await spawnExternalConsole({ terminal: command }, this.pid());
+    }
+    
+    this.console = terminal;
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
@@ -224,10 +237,11 @@ class GDB extends GDBMixin(GDBBase) {
 
     const printOptions = [
       printOption(PrintOptions.HideStaticMembers),
-      // printOption(PrintOptions.SetDepthMinimum),
-      // printOption(PrintOptions.AddressOff),
       printOption(PrintOptions.PrettyStruct)
     ];
+    if(terminal) {
+      await this.execCLI(`set inferior-tty ${terminal.tty.path}`)
+    }
     await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
@@ -800,7 +814,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   kill() {
-    gdbProcess.kill("SIGINT");
+    gdbProcess.kill();
   }
 
   // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
@@ -878,11 +892,13 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  async requestMoreFrames(threadId, levels) {
-    let res = await this.newRequestMoreFrames(threadId, levels);
-    return res;
+  closeExternalConsole() {
+    if(this.console) {
+      if(!this.console.process.kill()) {
+        console.log("Failed to send kill signal");
+      }
+    }
   }
-
 }
 
 exports.GDB = GDB;

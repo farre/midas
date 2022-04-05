@@ -9,7 +9,6 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isReplaySession } = require("./utils");
 
 let server;
 
@@ -137,16 +136,14 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // wait until configuration has finished (and configurationDoneRequest has been called)
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
-
-    if (isReplaySession(args)) {
+    if(args.type == "midas-rr") {
       this.gdb = new GDB(this, args, "launch");
-      this.gdb.withRR = true;
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
-    } else if (args.type == "midas") {
+    } else {
       this.gdb = new GDB(this, args, "launch");
       this.gdb.setupEventHandlers(args.stopOnEntry);
-      await this.gdb.start(args.program, args.stopOnEntry, args.allStopMode ?? false);
+      await this.gdb.start(args);
     }
   }
 
@@ -321,16 +318,18 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // }
 
   // Super's implementation is fine.
-  disconnectRequest(response, args) {
+  async disconnectRequest(response, args) {
     this.gdb.kill();
     // todo(simon): add possibility to disconnect *without* killing the rr process.
     if (this.#terminal) this.#terminal.dispose();
+    this.gdb.closeExternalConsole();
     return super.disconnectRequest(args[0], args[1], args[3]);
   }
 
   terminateRequest(response, args, request) {
     super.terminateRequest(response, args, request);
     this.gdb.kill();
+    this.gdb.closeExternalConsole();
   }
 
   async restartRequest(response, { arguments: args }) {
