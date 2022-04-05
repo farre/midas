@@ -25,6 +25,9 @@ class ReferencedValue:
         self.children = []
         self.resolved = False
 
+    def get_type(self):
+        return self.value.referenced_value().type
+
     def get_value(self):
         return self.value.referenced_value()
 
