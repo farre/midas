@@ -22,7 +22,7 @@ function getVSCodeCommands() {
     // retrieve values
     const values = config
       .get("configurations")
-      .filter((cfg) => cfg.type == "midas")
+      .filter((cfg) => cfg.type == "midas" || cfg.type == "midas-rr" || cfg.type == "midas-gdb")
       .map((cfg) => cfg.program);
     let programs = values.map((c) => c.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
     if (programs.length >= 1) {

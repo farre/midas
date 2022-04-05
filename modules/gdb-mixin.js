@@ -52,8 +52,14 @@ const PrintOptionType = {
  */
 function GDBMixin(GDBBase) {
   return class extends GDBBase {
-    constructor(...args) {
-      super(...args);
+    #pid;
+    constructor(gdb) {
+      super(gdb);
+      this.#pid = gdb.pid();
+    }
+
+    pid() {
+      return this.#pid;
     }
 
     _execMI(cmd, scope) {

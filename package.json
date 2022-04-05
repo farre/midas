@@ -87,7 +87,7 @@
     },
     "debuggers": [
       {
-        "type": "midas",
+        "type": "midas-gdb",
         "label": "C/C++ Midas GDB",
         "languages": [
           "c",
@@ -96,9 +96,7 @@
         ],
         "configurationAttributes": {
           "launch": {
-            "required": [
-              "mode"
-            ],
+            "required": ["program"],
             "properties": {
               "program": {
                 "type": "string",
@@ -122,7 +120,10 @@
                 ]
               },
               "args": {
-                "type": "string[]",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
                 "description": "Command line arguments passed to debuggee program",
                 "default": []
               },
@@ -141,37 +142,13 @@
                 "description": "Current working directory of GDB",
                 "default": "${workspaceFolder}"
               },
-              "mode": {
-                "type": ["string"],
-                "default": "gdb",
-                "enum": ["gdb", "rr"],
-                "enumDescriptions": [
-                  "Launch normal GDB debug session",
-                  "Launch GDB debug session against rr replay. To run in this mode you need to set the serverAddress field."
-                ]
-              },
-              "serverAddress": {
-                "type": "string",
-                "description": "Connection string to GDB server that rr spawns. Format is host:port",
-                "default": "127.0.0.1:50505"
-              },
-              "replay": {
-                "type": "object",
-                "properties": {
-                  "rrPath": {
-                    "type": "string",
-                    "description": "Path to rr. Defaults to trying to execute rr in $PATH",
-                    "default": "rr"
-                  },
-                  "traceWorkspace": {
-                    "type": "string",
-                    "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
-                  }
-                }
-              },
               "setupCommands": {
                 "type": "array",
                 "description": "GDB Commands to run before debugging."
+              },
+              "externalConsole": {
+                "type": "string",
+                "description": "path to external console to spawn debuggee in"
               }
             }
           },
@@ -217,7 +194,7 @@
         },
         "initialConfigurations": [
           {
-            "type": "midas",
+            "type": "midas-gdb",
             "request": "launch",
             "name": "Debug binary",
             "program": "${workspaceFolder}/${2:binary}",
@@ -225,26 +202,10 @@
             "trace": "Off",
             "allStopMode": true,
             "cwd": "${workspaceFolder}",
-            "mode": "gdb",
             "setupCommands": []
           },
           {
-            "type": "midas",
-            "request": "launch",
-            "name": "Launch replay session",
-            "program": "${workspaceFolder}/${2:binary}",
-            "stopOnEntry": true,
-            "trace": "Off",
-            "cwd": "${workspaceFolder}",
-            "mode": "rr",
-            "serverAddress": "localhost:50505",
-            "replay": {
-              "rrPath": "rr"
-            },
-            "setupCommands": []
-          },
-          {
-            "type": "midas",
+            "type": "midas-gdb",
             "request": "attach",
             "name": "Attach to process",
             "program": "${1:program}",
@@ -256,11 +217,11 @@
         ],
         "configurationSnippets": [
           {
-            "name": "midas",
+            "name": "midas-gdb",
             "label": "midas: Debug",
             "description": "Launch midas debugging session for binary selected by user",
             "body": {
-              "type": "midas",
+              "type": "midas-gdb",
               "request": "launch",
               "name": "${1:Launch Debug}",
               "program": "${2:/path/to/binary}",
@@ -269,37 +230,15 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "allStopMode": true,
-              "mode": "gdb",
               "setupCommands": []
             }
           },
           {
-            "name": "midas",
-            "label": "midas: rr Debug",
-            "description": "Launches midas debugging session against an rr replay",
-            "body": {
-              "type": "midas",
-              "request": "launch",
-              "name": "${1:Launch replay debug session}",
-              "program": "${2:/path/to/binary}",
-              "cwd": "^\"\\${workspaceFolder}\"",
-              "stopOnEntry": true,
-              "trace": "${3:Off}",
-              "gdbPath": "${4:gdb}",
-              "mode": "rr",
-              "serverAddress": "${5:localhost:50505}",
-              "replay": {
-                "rrPath": "rr"
-              },
-              "setupCommands": []
-            }
-          },
-          {
-            "name": "midas",
+            "name": "midas-gdb",
             "label": "midas: attach",
             "description": "Attach GDB to a running process",
             "body": {
-              "type": "midas",
+              "type": "midas-gdb",
               "request": "attach",
               "name": "${1:Attach to process}",
               "program": "${2:program}",
@@ -307,6 +246,103 @@
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${4:Off}",
               "gdbPath": "${5:gdb}",
+              "setupCommands": []
+            }
+          }
+        ]
+      },
+      {
+        "type": "midas-rr",
+        "label": "C/C++ Midas rr",
+        "languages": [
+          "c",
+          "cpp",
+          "cuda-cpp"
+        ],
+        "configurationAttributes": {
+          "required": ["serverAddress"],
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Binary to debug. Only required for 'gdb' mode."
+              },
+              "trace": {
+                "type": ["string"],
+                "description": "Debug trace logging",
+                "enum": ["Off", "GDB Events", "Python logs", "Full"],
+                "default": "Off",
+                "enumDescriptions": [
+                  "Turn all logging off",
+                  "Turn trace logging of GDB events on",
+                  "Turn debug logging of from Python on",
+                  "Turn on additional debug logging to time.log and update.log, made by Python scripts"
+                ]
+              },
+              "gdbPath": {
+                "type": "string",
+                "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
+                "default": "gdb"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Current working directory of GDB",
+                "default": "${workspaceFolder}"
+              },
+              "rrPath": {
+                "type": "string",
+                "description": "Path to rr. Defaults to trying to execute rr in $PATH",
+                "default": "rr"
+              },
+              "traceWorkspace": {
+                "type": "string",
+                "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
+              },
+              "serverAddress": {
+                "type": "string",
+                "description": "Connection string to GDB server that rr spawns. Format is host:port",
+                "default": "127.0.0.1:50505"
+              },
+              "setupCommands": {
+                "type": "array",
+                "description": "GDB Commands to run before debugging."
+              },
+              "externalConsole": {
+                "type": "string",
+                "description": "path to external console to spawn debuggee in"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "midas-rr",
+            "request": "launch",
+            "name": "Launch replay session",
+            "program": "${workspaceFolder}/${2:binary}",
+            "trace": "Off",
+            "cwd": "${workspaceFolder}",
+            "rrPath": "rr",
+            "gdbPath": "gdb",
+            "serverAddress": "localhost:50505",
+            "setupCommands": []
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "name": "midas-rr",
+            "label": "Midas rr debug session",
+            "description": "Launches midas debugging session against an rr replay",
+            "body": {
+              "type": "midas-rr",
+              "request": "launch",
+              "name": "${1:Launch replay debug session}",
+              "program": "${2:/path/to/binary}",
+              "cwd": "^\"\\${workspaceFolder}\"",
+              "trace": "${3:Off}",
+              "gdbPath": "${4:gdb}",
+              "rrPath": "rr",
+              "serverAddress": "${5:localhost:50505}",
               "setupCommands": []
             }
           }

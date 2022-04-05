@@ -2,7 +2,8 @@
 
 const vscode = require("vscode");
 const { getVSCodeCommands } = require("./commandsRegistry");
-const { ConfigurationProvider, DebugAdapterFactory } = require("./sessionConfig");
+const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
+const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -12,18 +13,19 @@ function activateExtension(context, descriptorFactory) {
   context.subscriptions.push(...getVSCodeCommands());
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider("midas", provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+    vscode.debug.registerDebugConfigurationProvider(provider.type, provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
   );
-  // TODO(simon): when we've implemented the most bare bones debugger
-  //  meaning, we can start gdb, launch a program and stop on entry
-  //  we need to implement some "frontend" functionality,
-  //  such as, "what happens when the user hoves on a variable in the text editor?"
-  //  we do that by adding subscriptions to the context, by using functions like
-  //  vscode.languages.registerEvaluatableExpressionProvider(...)
-  if (!descriptorFactory) {
-    descriptorFactory = new DebugAdapterFactory();
-  }
-  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("midas", descriptorFactory));
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new DebugAdapterFactory())
+  );
+
+  let rrProvider = new RRConfigurationProvider();
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(rrProvider.type, rrProvider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+  );
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(rrProvider.type, new RRDebugAdapterFactory())
+  );
 }
 
 function deactivateExtension() {}

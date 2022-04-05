@@ -1,10 +1,13 @@
 "use strict";
 
 const { exec, spawn: _spawn } = require("child_process");
-var fs = require("fs");
-var path = require("path");
+const vscode = require("vscode");
+const fs = require("fs");
+const path = require("path");
 
-const isReplaySession = (config) => config.mode == "rr";
+async function kill_pid(pid) {
+  return await exec(`kill -INT ${Number.parseInt(pid)}`);
+}
 
 async function buildTestFiles(testPath) {
   const buildPath = path.join(testPath, "build");
@@ -54,6 +57,9 @@ function spawn(gdbPath, args) {
     kill() {
       p.kill();
     },
+    pid() {
+      return p.pid;
+    }
   };
 }
 
@@ -161,11 +167,43 @@ class ExclusiveArray {
     return this.#data;
   }
 }
+/**
+ * 
+ * @param {{ terminal: string }} config 
+ * @returns { Promise<{ process: import("child_process").ChildProcessWithoutNullStreams, tty: { path: string, config: string }, shpid: String }> }
+ */
+async function spawnExternalConsole(config, pid) {
+
+  return new Promise((resolve, reject) => {
+    // file which we write the newly spawned terminal's tty to
+    const write_tty_to = `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
+    const terminal = config.terminal ?? "x-terminal-emulator";
+    const ext = vscode.extensions.getExtension("farrese.midas");
+    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && sleep 100000000000000" &; wait $!`;
+    const terminal_spawn_parameters = ["-e", param];
+    const process = _spawn(terminal, terminal_spawn_parameters);
+    let tries = 0;
+    const interval = setInterval(() => {
+      if (fs.existsSync(write_tty_to)) {
+        clearInterval(interval);
+        const [tty_path, shpid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
+        fs.unlinkSync(write_tty_to);
+        const tty = { path: tty_path, config: write_tty_to }
+        return resolve({ process, tty, shpid });
+      }
+      tries++;
+      if (tries > 500)
+        reject();
+    }, 10);
+  });
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
   spawn,
-  isReplaySession,
   ArrayMap,
-  ExclusiveArray
+  ExclusiveArray,
+  spawnExternalConsole,
+  kill_pid
 };
