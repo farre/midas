@@ -147,8 +147,21 @@
                 "description": "GDB Commands to run before debugging."
               },
               "externalConsole": {
-                "type": "string",
-                "description": "path to external console to spawn debuggee in"
+                "type": "object",
+                "default": { "path": "", "closeOnExit": true },
+                "description": "External console settings",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to console. Requirements that currently needs to be met, to be be able to use explained in docs.",
+                    "default": ""
+                  },
+                  "closeOnExit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Quit debug session when external console is closed"
+                  }
+                }
               }
             }
           },

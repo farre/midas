@@ -20,6 +20,12 @@ const initializer = (config) => {
   if(!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
+  if(!config.hasOwnProperty("externalConsole")) {
+    config.externalConsole = null;
+  }
+  if(!config.program) {
+    throw new Error("Cannot find a program to debug");
+  }
 }
 
 class ConfigurationProvider extends ConfigurationProviderInitializer {
@@ -33,11 +39,9 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
       super.defaultInitialize(config, initializer);
     } catch(err) {
       await vscode.window.showErrorMessage(err.message);
-    }
-    if (!config.program) {
-      await vscode.window.showInformationMessage("Cannot find a program to debug");
       return null;
     }
+    
     if(config.request == "attach") {
       if(!config.pid) {
         const options = { canPickMany: false, ignoreFocusOut: true, title: "Select process to debug" };
@@ -54,6 +58,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
+  // @ts-ignore
   async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
     return debugConfiguration;
   }

@@ -211,14 +211,21 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: String | null }} args 
+   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeOnExit: boolean} | null }} args 
    */
   async start(args) {
     const {program, stopOnEntry, allStopMode, externalConsole } = args;
     let terminal = null;
-    if(externalConsole != undefined) {
-      const command = externalConsole == "" ? "x-terminal-emulator" : externalConsole;
+    if(externalConsole != null) {
+      const { path, closeOnExit } = externalConsole;
+      const command = path == "" ? "x-terminal-emulator" : path;
       terminal = await spawnExternalConsole({ terminal: command }, this.pid());
+      terminal.process.on("close", (code) => {
+        if(closeOnExit) {
+          this.kill();
+          this.sendEvent(new TerminatedEvent(false));
+        }
+      });
     }
     
     this.console = terminal;
