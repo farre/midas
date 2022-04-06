@@ -6,9 +6,7 @@ import logging
 import frame_operations
 import stackframe
 import config
-
-def new_thread_handler(thread):
-    config.currentExecutionContext.add_thread(thread)
+import midas_utils
 
 class CurrentExecutionContext:
     inferior = None
@@ -141,3 +139,20 @@ class ExecutionContext:
 
     def clear_frames(self):
         self.stack.clear()
+
+
+class InvalidateExecutionContext(gdb.Command):
+    def __init__(self, executionContexts):
+        super(InvalidateExecutionContext, self).__init__("gdbjs-thread-died", gdb.COMMAND_USER)
+        self.name = "thread-died"
+        self.executionContexts = executionContexts
+
+    @config.timeInvocation
+    def invoke(self, args, from_tty):
+        try:
+            [threadId] = midas_utils.parse_command_args(args, str)
+            del self.executionContexts[threadId]
+        except Exception as e:
+            err_logger = config.error_logger()
+            config.log_exception(err_logger, "Removing execution context failed: {}".format(e), e)
+        midas_utils.send_response(self.name, { "ok": True }, midas_utils.prepare_command_response)

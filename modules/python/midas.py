@@ -41,11 +41,13 @@ if sys.path.count(extensionPath) == 0:
     err_logger.error("Module path not set. Setting it")
     sys.path.append(extensionPath)
 import config
-
+# Order of imports - highly important here. Do not change.
 import execution_context
 config.currentExecutionContext = execution_context.CurrentExecutionContext()
-
 executionContexts = {}
+# Order of imports not important below
+
+invalidateExecutionContextCommand = execution_context.InvalidateExecutionContext(executionContexts)
 
 import stacktrace_request
 stackFrameRequestCommand = stacktrace_request.StackTraceRequest(executionContexts)
@@ -65,6 +67,7 @@ watchVariableCommand = watch_variable.WatchVariable(executionContexts)
 # Request that is Midas only; it resets all backend state (for when for instance the user wants to restart a debug session).
 import reset_request
 resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.variableReferenceCounter, config.variableReferences)
+
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
