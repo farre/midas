@@ -147,6 +147,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     }
   }
 
+  // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
     await this.configIsDone.wait(1000);
     let data = fs.readFileSync("/proc/sys/kernel/yama/ptrace_scope");
@@ -317,13 +318,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // return super.dispatchRequest(args[0]);
   // }
 
-  // Super's implementation is fine.
   async disconnectRequest(response, args) {
     this.gdb.kill();
     // todo(simon): add possibility to disconnect *without* killing the rr process.
     if (this.#terminal) this.#terminal.dispose();
     this.gdb.closeExternalConsole();
-    return super.disconnectRequest(args[0], args[1], args[3]);
+    this.sendResponse(response);
+    this.shutdown();
   }
 
   terminateRequest(response, args, request) {
