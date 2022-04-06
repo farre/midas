@@ -6,6 +6,7 @@ const {getFreeRandomPort} = require("../netutils");
 const {tracePicked, getTraces, parseProgram } = require("../rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
+const { spawnExternalRrConsole } = require("../utils");
 
 const initializer = (config) => {
   if (!config.hasOwnProperty("trace")) {
@@ -103,17 +104,23 @@ class RRDebugAdapterFactory {
     const rrPath = config.rrPath;
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
-
     let [addr, port] = config.serverAddress.split(":");
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
     addr = addr == "localhost" ? "127.0.0.1" : addr;
     const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    let term = vscode.window.createTerminal("rr terminal");
-    term.sendText(cmd_str);
-    term.show(true);
-    let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config));
-    dbg_session.registerTerminal(term);
-    return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    
+    if(config.externalConsole) {
+      const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
+      let terminalInterface = await spawnExternalRrConsole(config, rrArgs);
+      let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), terminalInterface);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    } else {
+      let term = vscode.window.createTerminal("rr terminal");
+      term.sendText(cmd_str);
+      term.show(true);
+      let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), term);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    }
   }
 }
 

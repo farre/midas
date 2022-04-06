@@ -20,7 +20,7 @@ This will give you a list of GDB features built in. In this list, something like
 
 Midas has been tested with the following GDB versions
 - GDB 9.2, GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
-
+- rr 5.5.0: seeing as how this uses the GDB remote serial protocol, earlier versions should probably be fine
 
 ## Launch configuration
 
@@ -61,7 +61,28 @@ Trace has the following settings:
 
 The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...). These are currently very bare bones though.
 
-To "run" the inferior (debugged program) in an external console, add the `externalConsole` field. It takes a string / path to the terminal of your choice.
+To "run" the inferior (debugged program) in an external console, add the `externalConsole` field. Depending
+on the debug session type it takes different values. For a normal debug session it might look like:
+
+```json
+    "externalConsole": {
+        "path": "x-terminal-emulator", // path/command for the terminal to be spawned
+        "closeTerminalOnEndOfSession": true, // close terminal at end of debug session
+        "endSessionOnTerminalExit": true // close session if terminal exits
+    }
+```
+
+rr:
+
+```json
+    "externalConsole": {
+        "path": "x-terminal-emulator", // path/command for the terminal to be spawned
+        "closeTerminalOnEndOfSession": boolean, // close terminal at end of debug session
+    }
+```
+
+Since the rr debug session relies on rr running, closing the terminal where it's running externally, will
+end the debug session.
 
 However, currently this is only tested on Ubuntu, thus it uses `x-terminal-emulator` alias with pretty specific parameters. If your linux distro, spawns
 a shell with this command, external console should work on your Linux distro as well;

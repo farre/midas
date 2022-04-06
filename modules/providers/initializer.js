@@ -1,3 +1,5 @@
+const { isNothing } = require("../utils");
+
 class ConfigurationProviderInitializer {
   /**
    * @param {any} config 
@@ -5,7 +7,7 @@ class ConfigurationProviderInitializer {
    */
   defaultInitialize(config, initializer) {
     // if launch.json is missing or empty
-    if (!config || !config.type || config.type == undefined) {
+    if (isNothing(config) || isNothing(config.type)) {
       throw new Error("Cannot start debugging because no launch configuration has been provided")
     }
     initializer(config);

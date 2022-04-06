@@ -4,6 +4,11 @@ const { exec, spawn: _spawn } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
+const { TerminalInterface } = require("./terminalInterface");
+
+function isNothing(e) {
+  return e == undefined || e == null;
+}
 
 async function kill_pid(pid) {
   return await exec(`kill -INT ${Number.parseInt(pid)}`);
@@ -170,10 +175,9 @@ class ExclusiveArray {
 /**
  * 
  * @param {{ terminal: string }} config 
- * @returns { Promise<{ process: import("child_process").ChildProcessWithoutNullStreams, tty: { path: string, config: string }, shpid: String }> }
+ * @returns { Promise<TerminalInterface>}
  */
 async function spawnExternalConsole(config, pid) {
-
   return new Promise((resolve, reject) => {
     // file which we write the newly spawned terminal's tty to
     const write_tty_to = `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
@@ -188,12 +192,28 @@ async function spawnExternalConsole(config, pid) {
         const [tty_path, shpid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
         fs.unlinkSync(write_tty_to);
         const tty = { path: tty_path, config: write_tty_to }
-        return resolve({ process, tty, shpid });
+        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid));
+        return resolve(termInterface);
       }
       tries++;
       if (tries > 500)
         reject();
     }, 10);
+  });
+}
+/**
+ * 
+ * @param {any} config 
+ * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs 
+ * @returns {Promise<TerminalInterface>}
+ */
+async function spawnExternalRrConsole(config, rrArgs) {
+  return new Promise((resolve, reject) => {
+    const {path, addr, port, pid, traceWorkspace} = rrArgs;
+    const terminal = config.terminal ?? "x-terminal-emulator";
+    const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+    const child = _spawn(terminal, ["-e", cmd]);
+    resolve(new TerminalInterface(child, null, child.pid));
   });
 }
 
@@ -204,5 +224,7 @@ module.exports = {
   ArrayMap,
   ExclusiveArray,
   spawnExternalConsole,
+  spawnExternalRrConsole,
+  isNothing,
   kill_pid
 };
