@@ -66,9 +66,9 @@ on the debug session type it takes different values. For a normal debug session 
 
 ```json
     "externalConsole": {
-        "path": "x-terminal-emulator", // path/command for the terminal to be spawned
-        "closeTerminalOnEndOfSession": true, // close terminal at end of debug session
-        "endSessionOnTerminalExit": true // close session if terminal exits
+        "path": "x-terminal-emulator", 
+        "closeTerminalOnEndOfSession": true, 
+        "endSessionOnTerminalExit": true 
     }
 ```
 
@@ -76,13 +76,13 @@ rr:
 
 ```json
     "externalConsole": {
-        "path": "x-terminal-emulator", // path/command for the terminal to be spawned
-        "closeTerminalOnEndOfSession": boolean, // close terminal at end of debug session
+        "path": "x-terminal-emulator", 
+        "closeTerminalOnEndOfSession": true, 
     }
 ```
 
 Since the rr debug session relies on rr running, closing the terminal where it's running externally, will
-end the debug session.
+end the debug session. These fields are described in the UI when setting up a launch.json.
 
 However, currently this is only tested on Ubuntu, thus it uses `x-terminal-emulator` alias with pretty specific parameters. If your linux distro, spawns
 a shell with this command, external console should work on your Linux distro as well;
