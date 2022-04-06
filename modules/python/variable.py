@@ -58,7 +58,6 @@ class ReferencedValue:
                 else:
                     result.append({"name": "value", "value": "{}".format(res), "evaluateName": None, "variablesReference": 0 })
                 return result
-
         fields = value.type.fields()
         for field in fields:
             if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
@@ -91,10 +90,21 @@ class Variable(ReferencedValue):
         super(Variable, self).__init__(name, gdbValue)
 
     def from_value(name, value):
-        return Variable(name, value.reference_value())
+        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
+        # when trying to dereference that RVALUE reference
+        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
+            return Variable(name, value)
+        else:
+            return Variable(name, value.reference_value())
 
     def from_symbol(symbol, frame):
-        return Variable(symbol.name, symbol.value(frame).reference_value())
+        value = symbol.value(frame)
+        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
+        # when trying to dereference that RVALUE reference
+        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
+            return Variable(symbol.name, value)
+        else:
+            return Variable(symbol.name, value.reference_value())
 
     def get_variable_reference(self):
         if self.variableRef == -1:
@@ -109,7 +119,6 @@ class Variable(ReferencedValue):
         return self.variableRef
 
     def get_children(self, owningStackFrame):
-        import midas_utils
         it = self.get_value()
         if midas_utils.value_is_reference(it.type):
             it = it.referenced_value()
