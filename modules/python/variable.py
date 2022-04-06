@@ -29,9 +29,13 @@ class ReferencedValue:
         return self.value.referenced_value().type
 
     def get_value(self):
+        logger = config.update_logger()
+        logger.debug("type: {}".format(self.value.type))
         return self.value.referenced_value()
 
     def resolve_children(self, value, owningStackFrame):
+        logger = config.update_logger()
+        logger.debug("Resolving value")
         if self.resolved:
             result = []
             for child in self.children:
@@ -41,6 +45,7 @@ class ReferencedValue:
         result = []
         pp = gdb.default_visualizer(value)
         if pp is not None:
+            logger.debug("{} ({}) has a pretty printer".format(self.name, self.get_type()))
             if hasattr(pp, "children"):
                 for name, value in pp.children():
                     v = Variable.from_value(name, value)
@@ -58,7 +63,7 @@ class ReferencedValue:
                 else:
                     result.append({"name": "value", "value": "{}".format(res), "evaluateName": None, "variablesReference": 0 })
                 return result
-
+        logger.debug("{} ({}) does not have a pretty printer".format(self.name, self.get_type()))
         fields = value.type.fields()
         for field in fields:
             if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
@@ -91,10 +96,25 @@ class Variable(ReferencedValue):
         super(Variable, self).__init__(name, gdbValue)
 
     def from_value(name, value):
-        return Variable(name, value.reference_value())
+        logger = config.update_logger()
+        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
+        # when trying to dereference that RVALUE reference
+        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
+            logger.debug("value is rvalue reference")
+            return Variable(name, value)
+        else:
+            logger.debug("value_from: value is NOT rvalue reference")
+            return Variable(name, value.reference_value())
 
     def from_symbol(symbol, frame):
-        return Variable(symbol.name, symbol.value(frame).reference_value())
+        logger = config.update_logger()
+        value = symbol.value(frame)
+        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
+        # when trying to dereference that RVALUE reference
+        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
+            return Variable(symbol.name, value)
+        else:
+            return Variable(symbol.name, value.reference_value())
 
     def get_variable_reference(self):
         if self.variableRef == -1:
@@ -109,7 +129,6 @@ class Variable(ReferencedValue):
         return self.variableRef
 
     def get_children(self, owningStackFrame):
-        import midas_utils
         it = self.get_value()
         if midas_utils.value_is_reference(it.type):
             it = it.referenced_value()
