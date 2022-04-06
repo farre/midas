@@ -178,8 +178,7 @@ async function spawnExternalConsole(config, pid) {
     // file which we write the newly spawned terminal's tty to
     const write_tty_to = `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
     const terminal = config.terminal ?? "x-terminal-emulator";
-    const ext = vscode.extensions.getExtension("farrese.midas");
-    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && sleep 100000000000000" &; wait $!`;
+    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && sleep 100000000000000"`;
     const terminal_spawn_parameters = ["-e", param];
     const process = _spawn(terminal, terminal_spawn_parameters);
     let tries = 0;
