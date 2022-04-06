@@ -10,7 +10,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.1.1] - 2022-04-05
 - Added "externalConsole" as a configuration option. Currently working, although not in most preferrable way.
+- Added "externalConsole" config for rr debug sessions
+- Added TerminalInterface to wrap behavior of externally spawned consoles and VSCode's internal console
+- Added utility functions to rrutils.js, utils.js and netutils.js
 - Added different debugger types, for normal/replay (gdb / gdb+rr) in config file
 - Changed README to reflect new changes.
 - Add watch variable functionality
+- Added ability to set watchpoints from UI
+- Added invalidate execution context command
+- Added VSCode requests to python: stackTraceRequest, variablesRequest, scopesRequest
 - Initial release

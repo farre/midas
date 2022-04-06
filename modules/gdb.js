@@ -165,8 +165,15 @@ class GDB extends GDBMixin(GDBBase) {
         }
       })()
     );
-    this.withRR = args.type == "midas-rr";
     this.#target = target;
+    this.config = args;
+    if(this.config.externalConsole) {
+      this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
+    }
+    if(this.config.type == "midas-rr") {
+      if(!this.config.externalConsole)
+        this.disposeOnExit = true;
+    }
   }
 
   async setup() {
@@ -188,6 +195,12 @@ class GDB extends GDBMixin(GDBBase) {
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");
     await this.setup();
+    if(this.config.externalConsole) {
+      this.#target.addTerminalExitHandler(() => {
+        this.kill();
+        this.sendEvent(new TerminatedEvent(false));
+      });
+    }
     this.#rrSession = true;
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
@@ -215,12 +228,10 @@ class GDB extends GDBMixin(GDBBase) {
    */
   async start(args) {
     const {program, stopOnEntry, allStopMode, externalConsole } = args;
-    let terminal = null;
     if(externalConsole != null) {
       const { path, closeOnExit } = externalConsole;
       const command = path == "" ? "x-terminal-emulator" : path;
-      terminal = await spawnExternalConsole({ terminal: command }, this.pid());
-      terminal.process.on("close", (code) => {
+      this.#target.registerTerminal(await spawnExternalConsole({ terminal: command }, this.pid()), (code) => {
         if(closeOnExit) {
           this.kill();
           this.sendEvent(new TerminatedEvent(false));
@@ -228,7 +239,6 @@ class GDB extends GDBMixin(GDBBase) {
       });
     }
     
-    this.console = terminal;
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
@@ -245,8 +255,8 @@ class GDB extends GDBMixin(GDBBase) {
       printOption(PrintOptions.HideStaticMembers),
       printOption(PrintOptions.PrettyStruct)
     ];
-    if(terminal) {
-      await this.execCLI(`set inferior-tty ${terminal.tty.path}`)
+    if(this.#target.terminal) {
+      await this.execCLI(`set inferior-tty ${this.#target.terminal.tty.path}`)
     }
     await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
@@ -590,6 +600,11 @@ class GDB extends GDBMixin(GDBBase) {
     this.#threads.delete(thread.id);
     this.#uninitializedThread.delete(thread.id);
     this.#target.sendEvent(new ThreadEvent("exited", thread.id));
+    // unfortunately, thread exited event does not exist in GDB's Python. Until
+    // we've added that functionality to it, we have this workaround
+    // setImmediate(() => {
+    //   this.execCMD(`thread-died ${thread.id}`);
+    // });
   }
 
   #onThreadGroupStarted(payload) {
@@ -898,11 +913,9 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  closeExternalConsole() {
-    if(this.console) {
-      if(!this.console.process.kill()) {
-        console.log("Failed to send kill signal");
-      }
+  cleanup() {
+    if(this.disposeOnExit) {
+      this.#target.disposeTerminal();
     }
   }
 }

@@ -9,6 +9,7 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
+const { isNothing } = require("./utils");
 
 let server;
 
@@ -20,16 +21,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   configIsDone;
   _reportProgress;
   useInvalidetedEvent;
-
-  withRR = false;
-
-  /** @type {vscode.Terminal} */
+  /** @type {import("./terminalInterface").TerminalInterface} */
   #terminal;
 
   #buildSettings;
 
   // eslint-disable-next-line no-unused-vars
-  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, buildSettings) {
+  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, buildSettings, terminal) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.#buildSettings = buildSettings;
@@ -40,6 +38,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.on("error", (event) => {
       console.log(event.body);
     });
+    this.#terminal = terminal;
   }
 
   /**
@@ -167,7 +166,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       return;
     }
     this.gdb = new GDB(this, args, "attach");
-    this.gdb.withRR = false;
     this.gdb.setupEventHandlers(false);
     await this.gdb.attach_start(args.program);
     this.sendResponse(response);
@@ -320,9 +318,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async disconnectRequest(response, args) {
     this.gdb.kill();
-    // todo(simon): add possibility to disconnect *without* killing the rr process.
-    if (this.#terminal) this.#terminal.dispose();
-    this.gdb.closeExternalConsole();
+    this.gdb.cleanup();
     this.sendResponse(response);
     this.shutdown();
   }
@@ -330,7 +326,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   terminateRequest(response, args, request) {
     super.terminateRequest(response, args, request);
     this.gdb.kill();
-    this.gdb.closeExternalConsole();
+    this.gdb.cleanup();
   }
 
   async restartRequest(response, { arguments: args }) {
@@ -582,8 +578,18 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // terminal where rr has been started in
-  registerTerminal(terminal) {
+  registerTerminal(terminal, onExitHandler = null) {
     this.#terminal = terminal;
+    if(onExitHandler) {
+      this.#terminal.registerExitAction(onExitHandler);
+    }
+  }
+
+  addTerminalExitHandler(handler) {
+    if(isNothing(this.#terminal)) {
+      throw new Error("No terminal registered to register handler with");
+    }
+    this.#terminal.registerExitAction(handler);
   }
 
   reloadScripts() {
@@ -592,6 +598,14 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async exec(cmd) {
     return await this.gdb.execCMD(cmd);
+  }
+
+  disposeTerminal() {
+    this.#terminal.dispose();
+  }
+
+  get terminal() {
+    return this.#terminal;
   }
 }
 
