@@ -49,6 +49,8 @@ void doFooBar() {
 
 int main(int argc, const char **argv)
 {
+  std::string helloworld{"Hello world, I manage myself and I'm also made sure to be allocated on the heap"};
+  std::string_view v{helloworld};
   doFooBar();
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
