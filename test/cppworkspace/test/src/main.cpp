@@ -47,11 +47,18 @@ void doFooBar() {
   fooBar.j += 1;
 }
 
+void testRValueReferences(std::string&& item) {
+  auto result = item;
+  std::cout << "item is: " << result;
+}
+
 int main(int argc, const char **argv)
 {
   std::string helloworld{"Hello world, I manage myself and I'm also made sure to be allocated on the heap"};
   std::string_view v{helloworld};
+
   doFooBar();
+  testRValueReferences(std::move(helloworld));
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
   constexpr int array[42] = {};
