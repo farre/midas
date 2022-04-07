@@ -13,6 +13,8 @@ const { isNothing } = require("./utils");
 
 let server;
 
+let REPL_MESSAGE_SHOWN = 0;
+
 class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
@@ -431,9 +433,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       response.message = message;
       this.sendResponse(response);
     } else if (context == "repl") {
-      vscode.debug.activeDebugConsole.appendLine(
-        "REPL is semi-unsupported currently: any side effects you cause are not guaranteed to be seen in the UI"
-      );
+      if(!REPL_MESSAGE_SHOWN) {
+        vscode.debug.activeDebugConsole.appendLine(
+          "REPL is semi-unsupported currently: any side effects you cause are not guaranteed to be seen in the UI"
+        );
+        REPL_MESSAGE_SHOWN += 1;
+      }
       try {
         let msg = await this.gdb.replInput(expression);
         response.body = { result: msg }
