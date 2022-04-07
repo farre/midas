@@ -210,9 +210,11 @@ async function spawnExternalConsole(config, pid) {
 async function spawnExternalRrConsole(config, rrArgs) {
   return new Promise((resolve, reject) => {
     const {path, addr, port, pid, traceWorkspace} = rrArgs;
+    const write_tty_to = `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
     const terminal = config.terminal ?? "x-terminal-emulator";
     const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    const child = _spawn(terminal, ["-e", cmd]);
+    const param = `sh -c "clear && ${cmd} && sleep 1000000000000000000"`;
+    const child = _spawn(terminal, ["-e", param]);
     resolve(new TerminalInterface(child, null, child.pid));
   });
 }

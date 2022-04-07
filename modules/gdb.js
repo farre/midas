@@ -196,7 +196,7 @@ class GDB extends GDBMixin(GDBBase) {
     // const { getVar, midasPy } = require("./scripts");
     await this.setup();
     if(this.config.externalConsole) {
-      this.#target.addTerminalExitHandler(() => {
+      this.#target.registerTerminal(this.#target.terminal, () => {
         this.kill();
         this.sendEvent(new TerminatedEvent(false));
       });
@@ -224,15 +224,15 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeOnExit: boolean} | null }} args 
+   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args 
    */
   async start(args) {
     const {program, stopOnEntry, allStopMode, externalConsole } = args;
     if(externalConsole != null) {
-      const { path, closeOnExit } = externalConsole;
+      const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
       const command = path == "" ? "x-terminal-emulator" : path;
-      this.#target.registerTerminal(await spawnExternalConsole({ terminal: command }, this.pid()), (code) => {
-        if(closeOnExit) {
+      this.#target.registerTerminal(await spawnExternalConsole({ terminal: command }, this.pid()), () => {
+        if(endSessionOnTerminalExit) {
           this.kill();
           this.sendEvent(new TerminatedEvent(false));
         }
