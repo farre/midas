@@ -215,15 +215,15 @@ function randomTtyFile() {
 }
 
 /**
- * 604955
+ * Spawns external console
  * @param {{ terminal: string }} config
  * @returns { Promise<TerminalInterface>}
  */
 async function spawnExternalConsole(config, pid) {
   return new Promise((resolve, reject) => {
     // file which we write the newly spawned terminal's tty to
-    const write_tty_to = randomTtyFile();
     const terminal_command = config.terminal ?? "x-terminal-emulator";
+    const write_tty_to = randomTtyFile();
     const resolved = resolveCommand(terminal_command);
     const terminal_name = Path.basename(resolved);
     const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
