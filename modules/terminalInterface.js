@@ -24,7 +24,11 @@ class TerminalInterface {
   // Kills terminal
   dispose() {
     if (this.#ppid) {
-      execSync(`kill ${this.#ppid}`);
+      try {
+        execSync(`kill ${this.#ppid}`);
+      } catch (err) {
+        console.log(`Process ${this.#ppid} is already dead`);
+      }
     }
     this.#process.kill("SIGTERM");
   }

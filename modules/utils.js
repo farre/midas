@@ -3,7 +3,7 @@
 const { exec, spawn: _spawn, execSync } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
-const path = require("path");
+const Path = require("path");
 const { TerminalInterface } = require("./terminalInterface");
 
 function isNothing(e) {
@@ -15,7 +15,7 @@ async function kill_pid(pid) {
 }
 
 async function buildTestFiles(testPath) {
-  const buildPath = path.join(testPath, "build");
+  const buildPath = Path.join(testPath, "build");
   if (!fs.existsSync(buildPath)) {
     fs.mkdirSync(buildPath);
   }
@@ -188,7 +188,7 @@ function resolveCommand(cmd, fully = true) {
     throw new Error(`Command ${cmd} could not be resolved`);
   }
   for (const result of parts.slice(1)) {
-    if (path.basename(result) == cmd) {
+    if (Path.basename(result) == cmd) {
       return result;
     }
   }
@@ -225,7 +225,7 @@ async function spawnExternalConsole(config, pid) {
     const write_tty_to = randomTtyFile();
     const terminal_command = config.terminal ?? "x-terminal-emulator";
     const resolved = resolveCommand(terminal_command);
-    const terminal_name = path.basename(resolved);
+    const terminal_name = Path.basename(resolved);
     const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
     // why write the PPID here? Because, in some cases, multiple processes get spawned by the command
     // thus, we have to kill the parent to get rid of them all (and thus, closing the external console, if that's what the user wants)
@@ -256,11 +256,31 @@ async function spawnExternalConsole(config, pid) {
 async function spawnExternalRrConsole(config, rrArgs) {
   return new Promise((resolve, reject) => {
     const { path, addr, port, pid, traceWorkspace } = rrArgs;
-    const terminal = config.terminal ?? "x-terminal-emulator";
+    const terminal_command = config.terminal ?? "x-terminal-emulator";
+    const write_tty_to = randomTtyFile();
+    const resolved = resolveCommand(terminal_command);
+    const terminal_name = Path.basename(resolved);
+    const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
+    // why write the PPID here? Because, in some cases, multiple processes get spawned by the command
+    // thus, we have to kill the parent to get rid of them all (and thus, closing the external console, if that's what the user wants)
     const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    const param = `sh -c "clear && ${cmd} && sleep 1000000000000000000"`;
-    const child = _spawn(terminal, ["-e", param]);
-    resolve(new TerminalInterface(child, null, child.pid));
+    // eslint-disable-next-line max-len
+    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && echo $PPID >> ${write_tty_to} && ${cmd} && sleep 100000000000000"`;
+    const terminal_spawn_parameters = [newProcessParameter, "-e", param];
+    const process = _spawn(terminal_command, terminal_spawn_parameters);
+    let tries = 0;
+    const interval = setInterval(() => {
+      if (fs.existsSync(write_tty_to)) {
+        clearInterval(interval);
+        const [tty_path, shpid, ppid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
+        fs.unlinkSync(write_tty_to);
+        const tty = { path: tty_path, config: write_tty_to };
+        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
+        return resolve(termInterface);
+      }
+      tries++;
+      if (tries > 500) reject();
+    }, 10);
   });
 }
 

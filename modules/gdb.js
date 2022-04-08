@@ -236,7 +236,7 @@ class GDB extends GDBMixin(GDBBase) {
   async start(args) {
     const { program, stopOnEntry, allStopMode, externalConsole } = args;
     if (externalConsole != null) {
-      const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
+      const { path, endSessionOnTerminalExit } = externalConsole;
       this.#target.registerTerminal(await spawnExternalConsole({ terminal: path }, this.pid()), () => {
         if (endSessionOnTerminalExit) {
           this.kill();
