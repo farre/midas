@@ -7,7 +7,7 @@ class TerminalInterface {
   #ppid;
   /**
    * @param { import("child_process").ChildProcessWithoutNullStreams } process
-   * @param {{ path: string, config: string }} tty
+   * @param { { path: string } } tty
    * @param { number } pid
    */
   constructor(process, tty = null, pid = null, ppid) {

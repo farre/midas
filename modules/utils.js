@@ -215,73 +215,73 @@ function randomTtyFile() {
 }
 
 /**
- * Spawns external console
- * @param {{ terminal: string }} config
- * @returns { Promise<TerminalInterface>}
+ * Spawns a child and wraps it in a `TerminalInterface`.
+ * @param { string } command - command string that spawns terminal
+ * @param { string } ttyInfoPath - Path where tty info will be written to & read from
+ * @param { string[] } shellParameters - parameters to be passed to the shell to execute
+ * @returns { Promise<TerminalInterface> }
  */
-async function spawnExternalConsole(config, pid) {
+function spawnConsole(command, ttyInfoPath, shellParameters = []) {
+  const terminal_command = command ?? "x-terminal-emulator";
+  // the shell basically needs to indefintely wait. There's no infinite wait I can use here,
+  // so just set it to wait for 31000+ years.
+  shellParameters.push("sleep 1000000000000");
+  const shellParametersString = shellParameters.join(" && ");
+  const shellCommand = `sh -c "${shellParametersString}"`;
+
+  const resolved = resolveCommand(terminal_command);
+  const terminal_name = Path.basename(resolved);
+  const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
+
   return new Promise((resolve, reject) => {
-    // file which we write the newly spawned terminal's tty to
-    const terminal_command = config.terminal ?? "x-terminal-emulator";
-    const write_tty_to = randomTtyFile();
-    const resolved = resolveCommand(terminal_command);
-    const terminal_name = Path.basename(resolved);
-    const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
-    // why write the PPID here? Because, in some cases, multiple processes get spawned by the command
-    // thus, we have to kill the parent to get rid of them all (and thus, closing the external console, if that's what the user wants)
-    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && echo $PPID >> ${write_tty_to} && sleep 100000000000000"`;
-    const terminal_spawn_parameters = [newProcessParameter, "-e", param];
-    const process = _spawn(terminal_command, terminal_spawn_parameters);
+    const process = _spawn(command, [newProcessParameter, "-e", shellCommand]);
     let tries = 0;
     const interval = setInterval(() => {
-      if (fs.existsSync(write_tty_to)) {
+      if (fs.existsSync(ttyInfoPath)) {
         clearInterval(interval);
-        const [tty_path, shpid, ppid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
-        fs.unlinkSync(write_tty_to);
-        const tty = { path: tty_path, config: write_tty_to };
-        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
-        return resolve(termInterface);
+        const [tty_path, shpid, ppid] = fs.readFileSync(ttyInfoPath).toString("utf8").trim().split("\n");
+        fs.unlinkSync(ttyInfoPath);
+        const tty = { path: tty_path };
+        const termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
+        resolve(termInterface);
       }
       tries++;
       if (tries > 500) reject();
     }, 10);
   });
 }
+
 /**
- *
- * @param {any} config
+ * Spawns external console
+ * @param {{ terminal: string }} config
+ * @returns { Promise<TerminalInterface>}
+ */
+async function spawnExternalConsole(config) {
+  const ttyInfoPath = randomTtyFile();
+  return spawnConsole(config.terminal, ttyInfoPath, [
+    "clear",
+    `tty > ${ttyInfoPath}`,
+    `echo $$ >> ${ttyInfoPath}`,
+    `echo $PPID >> ${ttyInfoPath}`,
+  ]);
+}
+/**
+ * Spawn external console that also launches rr in it.
+ * @param { { terminal: string } } config
  * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs
  * @returns {Promise<TerminalInterface>}
  */
 async function spawnExternalRrConsole(config, rrArgs) {
-  return new Promise((resolve, reject) => {
-    const { path, addr, port, pid, traceWorkspace } = rrArgs;
-    const terminal_command = config.terminal ?? "x-terminal-emulator";
-    const write_tty_to = randomTtyFile();
-    const resolved = resolveCommand(terminal_command);
-    const terminal_name = Path.basename(resolved);
-    const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
-    // why write the PPID here? Because, in some cases, multiple processes get spawned by the command
-    // thus, we have to kill the parent to get rid of them all (and thus, closing the external console, if that's what the user wants)
-    const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    // eslint-disable-next-line max-len
-    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && echo $PPID >> ${write_tty_to} && ${cmd} && sleep 100000000000000"`;
-    const terminal_spawn_parameters = [newProcessParameter, "-e", param];
-    const process = _spawn(terminal_command, terminal_spawn_parameters);
-    let tries = 0;
-    const interval = setInterval(() => {
-      if (fs.existsSync(write_tty_to)) {
-        clearInterval(interval);
-        const [tty_path, shpid, ppid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
-        fs.unlinkSync(write_tty_to);
-        const tty = { path: tty_path, config: write_tty_to };
-        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
-        return resolve(termInterface);
-      }
-      tries++;
-      if (tries > 500) reject();
-    }, 10);
-  });
+  const { path, addr, port, pid, traceWorkspace } = rrArgs;
+  const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+  const ttyInfoPath = randomTtyFile();
+  return spawnConsole(config.terminal, ttyInfoPath, [
+    "clear",
+    `tty > ${ttyInfoPath}`,
+    `echo $$ >> ${ttyInfoPath}`,
+    `echo $PPID >> ${ttyInfoPath}`,
+    cmd,
+  ]);
 }
 
 module.exports = {

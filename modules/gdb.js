@@ -237,12 +237,18 @@ class GDB extends GDBMixin(GDBBase) {
     const { program, stopOnEntry, allStopMode, externalConsole } = args;
     if (externalConsole != null) {
       const { path, endSessionOnTerminalExit } = externalConsole;
-      this.#target.registerTerminal(await spawnExternalConsole({ terminal: path }, this.pid()), () => {
-        if (endSessionOnTerminalExit) {
-          this.kill();
-          this.sendEvent(new TerminatedEvent(false));
-        }
-      });
+      try {
+        this.#target.registerTerminal(await spawnExternalConsole({ terminal: path }), () => {
+          if (endSessionOnTerminalExit) {
+            this.kill();
+            this.sendEvent(new TerminatedEvent(false));
+          }
+        });
+      } catch (err) {
+        vscode.window.showErrorMessage("Spawning external console failed");
+        this.kill();
+        this.sendEvent(new TerminatedEvent(false));
+      }
     }
 
     this.#program = path.basename(program);
