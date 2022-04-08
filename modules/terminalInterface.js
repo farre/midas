@@ -1,17 +1,20 @@
+const { execSync } = require("child_process");
 // Make our externally spawned consoles interchangeable with VSCode terminals
 class TerminalInterface {
   #process;
   #tty;
   #pid;
+  #ppid;
   /**
-     * @param { import("child_process").ChildProcessWithoutNullStreams } process 
-     * @param {{ path: string, config: string }} tty 
-     * @param { number } pid 
-     */
-  constructor(process, tty = null, pid = null) {
+   * @param { import("child_process").ChildProcessWithoutNullStreams } process
+   * @param {{ path: string, config: string }} tty
+   * @param { number } pid
+   */
+  constructor(process, tty = null, pid = null, ppid) {
     this.#process = process;
     this.#tty = tty;
     this.#pid = pid;
+    this.#ppid = ppid;
   }
 
   get pid() {
@@ -20,7 +23,10 @@ class TerminalInterface {
 
   // Kills terminal
   dispose() {
-    this.#process.kill();
+    if (this.#ppid) {
+      execSync(`kill ${this.#ppid}`);
+    }
+    this.#process.kill("SIGTERM");
   }
 
   registerExitAction(action) {
@@ -33,5 +39,5 @@ class TerminalInterface {
 }
 
 module.exports = {
-  TerminalInterface
-}
+  TerminalInterface,
+};

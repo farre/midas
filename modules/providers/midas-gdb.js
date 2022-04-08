@@ -17,16 +17,16 @@ const initializer = (config) => {
   if (!config.hasOwnProperty("gdbPath")) {
     config.gdbPath = "gdb";
   }
-  if(!config.hasOwnProperty("setupCommands")) {
+  if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-  if(!config.hasOwnProperty("externalConsole")) {
+  if (!config.hasOwnProperty("externalConsole")) {
     config.externalConsole = null;
   }
-  if(!config.program) {
+  if (!config.program) {
     throw new Error("Cannot find a program to debug");
   }
-}
+};
 
 class ConfigurationProvider extends ConfigurationProviderInitializer {
   get type() {
@@ -37,16 +37,16 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
   async resolveDebugConfiguration(folder, config, token) {
     try {
       super.defaultInitialize(config, initializer);
-    } catch(err) {
+    } catch (err) {
       await vscode.window.showErrorMessage(err.message);
       return null;
     }
-    
-    if(config.request == "attach") {
-      if(!config.pid) {
+
+    if (config.request == "attach") {
+      if (!config.pid) {
         const options = { canPickMany: false, ignoreFocusOut: true, title: "Select process to debug" };
         const pid = await vscode.window.showInputBox(options);
-        if(!pid) {
+        if (!pid) {
           await vscode.window.showInformationMessage("You must provide a pid for attach requests.");
           return null;
         }
@@ -78,5 +78,5 @@ class DebugAdapterFactory {
 
 module.exports = {
   ConfigurationProvider,
-  DebugAdapterFactory
+  DebugAdapterFactory,
 };

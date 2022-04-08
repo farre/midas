@@ -40,7 +40,7 @@ function* get_field(line) {
   }
   return null;
 }
-    
+
 function fallbackParseOfrrps(data) {
   return data
     .split("\n")
@@ -51,15 +51,15 @@ function fallbackParseOfrrps(data) {
       return { pid, ppid, exit, cmd };
     });
 }
-  
+
 /** @type {(trace: string) => Thenable<readonly (vscode.QuickPickItem & {value: string})[]>} */
 function getTraceInfo(trace) {
   const prefix = `'BEGIN { OFS = ","; printf "["; sep="" } NR!=1`;
   const suffix = `END { print "]" }`;
-  
+
   const json = `\\"pid\\": %d,\\"ppid\\": \\"%s\\",\\"exit\\": \\"%d\\",\\"cmd\\": \\"%s\\"`;
   const rrps = `rr ps ${trace} | awk ${prefix} { printf "%s{ ${json} }",sep,$1,$2,$3,substr($0, index($0, $4));sep=","} ${suffix}'`;
-  
+
   return new Promise((resolve, reject) => {
     subprocess.exec(`rr ps ${trace}`, (error, stdout, stderr) => {
       if (error) {
@@ -80,7 +80,7 @@ function getTraceInfo(trace) {
     })
   );
 }
-  
+
 function initDefaults(config) {
   if (!config.hasOwnProperty("stopOnEntry")) {
     config.stopOnEntry = false;
@@ -94,28 +94,28 @@ function initDefaults(config) {
   if (!config.hasOwnProperty("gdbPath")) {
     config.gdbPath = "gdb";
   }
-  if(!config.hasOwnProperty("setupCommands")) {
+  if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
 }
-  
+
 /**
-   * Parse the required launch config `program` field from the field `cmd` of the `rr ps` result
-   * @param {string} rr_ps_output_cmd - the `cmd` field returned from `tracePicked`
-   * @returns {string} - path to binary to debug
-   * @throws Throws an exception if a file can't be parsed from `rr_ps_output_cmd`
-   */
+ * Parse the required launch config `program` field from the field `cmd` of the `rr ps` result
+ * @param {string} rr_ps_output_cmd - the `cmd` field returned from `tracePicked`
+ * @returns {string} - path to binary to debug
+ * @throws Throws an exception if a file can't be parsed from `rr_ps_output_cmd`
+ */
 function parseProgram(rr_ps_output_cmd) {
   let splits = rr_ps_output_cmd.split(" ");
-  let prog = splits[splits.length-1];
-  if(prog.includes("/")) {
+  let prog = splits[splits.length - 1];
+  if (prog.includes("/")) {
     const tmp = prog.split("/");
     prog = tmp[tmp.length - 1];
     return prog;
   }
   return prog;
 }
-  
+
 const tracePicked = async (traceWorkspace) => {
   const options = {
     canPickMany: false,
@@ -135,5 +135,5 @@ module.exports = {
   tracePicked,
   getTraces,
   parseProgram,
-  initDefaults
-}
+  initDefaults,
+};

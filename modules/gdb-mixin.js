@@ -10,27 +10,27 @@ const WatchPointType = {
 };
 
 function printOption(opt, value = null) {
-  switch(opt) {
+  switch (opt) {
     case PrintOptionType.ShowStaticMembers:
-      return {name: opt, description: "Show static members" };
+      return { name: opt, description: "Show static members" };
     case PrintOptionType.HideStaticMembers:
-      return {name: opt, description: "Hide static members" };
+      return { name: opt, description: "Hide static members" };
     case PrintOptionType.MaxDepth:
-      return {name: opt, description: "Set max depth", value};
+      return { name: opt, description: "Set max depth", value };
     case PrintOptionType.SetDepthMinimum:
-      return {name: PrintOptionType.MaxDepth, description: "Set max depth to 1", value: 1 };
+      return { name: PrintOptionType.MaxDepth, description: "Set max depth to 1", value: 1 };
     case PrintOptionType.PrintObjectOn:
-      return {name: opt, description: "Set print objects on" };
+      return { name: opt, description: "Set print objects on" };
     case PrintOptionType.PrintObjectOff:
-      return {name: opt, description: "Set print objects off" };
+      return { name: opt, description: "Set print objects off" };
     case PrintOptionType.AddressOff:
-      return {name: opt, description: "Don't print address of pointers / values" };
+      return { name: opt, description: "Don't print address of pointers / values" };
     case PrintOptionType.AddressOn:
-      return {name: opt, description: "Print address of pointers / values" };
+      return { name: opt, description: "Print address of pointers / values" };
     case PrintOptionType.CharLength:
-      return {name: opt, description: "Print only N elements of an array or string", value };;
+      return { name: opt, description: "Print only N elements of an array or string", value };
     case PrintOptionType.PrettyStruct:
-      return {name: opt, description: "Pretty layout of printed struct" };
+      return { name: opt, description: "Pretty layout of printed struct" };
   }
 }
 
@@ -45,7 +45,7 @@ const PrintOptionType = {
   AddressOn: 7,
   CharLength: 8,
   PrettyStruct: 9,
-}
+};
 
 /**
  * @param {typeof import("gdb-js").GDB} GDBBase
@@ -130,7 +130,7 @@ function GDBMixin(GDBBase) {
     }
 
     async setWatchPoint(location, wpType) {
-      let result = await this.execCMD(`watchpoint ${wpType} ${location}`)
+      let result = await this.execCMD(`watchpoint ${wpType} ${location}`);
       return result;
     }
 
@@ -146,8 +146,8 @@ function GDBMixin(GDBBase) {
 
     async setPrintOptions(printOptions) {
       let cmd_list = [];
-      for(const opt of printOptions) {
-        switch(opt.name) {
+      for (const opt of printOptions) {
+        switch (opt.name) {
           case PrintOptionType.ShowStaticMembers:
             cmd_list.push(`set print static-members on`);
             break;
@@ -180,18 +180,16 @@ function GDBMixin(GDBBase) {
         }
       }
       let optIndex = 0;
-      for(const cmd of cmd_list) {
-        if(trace) console.log(`Setting: ${printOptions[optIndex++].description}`);
+      for (const cmd of cmd_list) {
+        if (trace) console.log(`Setting: ${printOptions[optIndex++].description}`);
         await this.execCLI(cmd);
       }
-
     }
-    
   };
 }
 
 module.exports = {
   GDBMixin,
   PrintOptions: PrintOptionType,
-  printOption
+  printOption,
 };

@@ -1,18 +1,22 @@
 const vscode = require("vscode");
 
-const DebugLogging =  {
+const DebugLogging = {
   Off: "off",
   GdbEventsOnly: "gdb events",
   PythonLogsOnly: "python logs",
-  Full: "full"
+  Full: "full",
 };
 
 function debugLogging(setting) {
-  switch(setting.toLowerCase()) {
-    case DebugLogging.Off: return { trace: false, pythonLogging: false };
-    case DebugLogging.GdbEventsOnly: return { trace: true, pythonLogging: false };
-    case DebugLogging.PythonLogsOnly: return { trace: false, pythonLogging: true };
-    case DebugLogging.Full: return { trace: true, pythonLogging: true };
+  switch (setting.toLowerCase()) {
+    case DebugLogging.Off:
+      return { trace: false, pythonLogging: false };
+    case DebugLogging.GdbEventsOnly:
+      return { trace: true, pythonLogging: false };
+    case DebugLogging.PythonLogsOnly:
+      return { trace: false, pythonLogging: true };
+    case DebugLogging.Full:
+      return { trace: true, pythonLogging: true };
   }
   throw new Error(`Debug log settings set to incorrect value: ${setting}`);
 }
@@ -35,13 +39,13 @@ class MidasRunMode {
   }
 
   async setProductionMode(gdb) {
-    if(this.#trace) {
+    if (this.#trace) {
       await gdb.execPy("config.setTrace = True");
     } else {
       await gdb.execPy("config.setTrace = False");
     }
 
-    if(this.#debug) {
+    if (this.#debug) {
       await gdb.execPy("config.isDevelopmentBuild = True");
     } else {
       await gdb.execPy("config.isDevelopmentBuild = False");
@@ -56,7 +60,7 @@ class MidasRunMode {
 
   async reloadStdLib(gdb) {
     const ext = vscode.extensions.getExtension("farrese.midas");
-    const dir = `${ext.extensionPath}/modules/python`
+    const dir = `${ext.extensionPath}/modules/python`;
     await gdb.execCMD(`source ${dir}/midas.py`);
   }
 
@@ -70,5 +74,5 @@ class MidasRunMode {
 }
 
 module.exports = {
-  MidasRunMode
-}
+  MidasRunMode,
+};

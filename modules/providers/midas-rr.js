@@ -2,8 +2,8 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 
-const {getFreeRandomPort} = require("../netutils");
-const {tracePicked, getTraces, parseProgram } = require("../rrutils");
+const { getFreeRandomPort } = require("../netutils");
+const { tracePicked, getTraces, parseProgram } = require("../rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
 const { spawnExternalRrConsole } = require("../utils");
@@ -15,31 +15,30 @@ const initializer = (config) => {
   if (!config.hasOwnProperty("gdbPath")) {
     config.gdbPath = "gdb";
   }
-  if(!config.hasOwnProperty("rrPath")) {
+  if (!config.hasOwnProperty("rrPath")) {
     config.rrPath = "rr";
   }
-  if(!config.hasOwnProperty("setupCommands")) {
+  if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-}
+};
 
 class RRConfigurationProvider extends ConfigurationProviderInitializer {
-
   get type() {
     return "midas-rr";
   }
 
   async resolveReplayConfig(folder, config, token) {
-    if(!config.serverAddress) {
+    if (!config.serverAddress) {
       try {
         let port = await getFreeRandomPort();
         config.serverAddress = `127.0.0.1:${port}`;
-      } catch(err) {
+      } catch (err) {
         vscode.window.showErrorMessage("No port available for rr to listen on");
         return null;
       }
     }
-  
+
     if (config.traceWorkspace && !config.replay.pid) {
       config = await tracePicked(config.traceWorkspace).then((replay_parameters) => {
         if (replay_parameters) {
@@ -62,8 +61,8 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         .then((replay_parameters) => {
           if (replay_parameters) {
             try {
-              config.program = parseProgram(replay_parameters.cmd)
-            } catch(e) {
+              config.program = parseProgram(replay_parameters.cmd);
+            } catch (e) {
               vscode.window.showErrorMessage("Could not parse binary");
               return null;
             }
@@ -82,7 +81,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
   async resolveDebugConfiguration(folder, config, token) {
     try {
       super.defaultInitialize(config, initializer);
-    } catch(err) {
+    } catch (err) {
       await vscode.window.showErrorMessage(err.message);
     }
     return await this.resolveReplayConfig(folder, config, token);
@@ -96,9 +95,9 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
 
 class RRDebugAdapterFactory {
   /**
-     * @param { vscode.DebugSession } session
-     * @returns ProviderResult<vscode.DebugAdapterDescriptor>
-     */
+   * @param { vscode.DebugSession } session
+   * @returns ProviderResult<vscode.DebugAdapterDescriptor>
+   */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     const rrPath = config.rrPath;
@@ -108,8 +107,8 @@ class RRDebugAdapterFactory {
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
     addr = addr == "localhost" ? "127.0.0.1" : addr;
     const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    
-    if(config.externalConsole) {
+
+    if (config.externalConsole) {
       const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
       let terminalInterface = await spawnExternalRrConsole(config, rrArgs);
       let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), terminalInterface);
@@ -126,5 +125,5 @@ class RRDebugAdapterFactory {
 
 module.exports = {
   RRConfigurationProvider,
-  RRDebugAdapterFactory
-}
+  RRDebugAdapterFactory,
+};

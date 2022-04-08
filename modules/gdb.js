@@ -5,13 +5,7 @@ require("regenerator-runtime");
 const vscode = require("vscode");
 const { Source, ContinuedEvent } = require("@vscode/debugadapter");
 const path = require("path");
-const {
-  InitializedEvent,
-  StoppedEvent,
-  BreakpointEvent,
-  TerminatedEvent,
-  ThreadEvent
-} = require("@vscode/debugadapter");
+const { InitializedEvent, StoppedEvent, BreakpointEvent, TerminatedEvent, ThreadEvent } = require("@vscode/debugadapter");
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const { getFunctionName, spawn, spawnExternalConsole, ArrayMap, ExclusiveArray } = require("./utils");
@@ -63,7 +57,12 @@ const DefaultRRSpawnArgs = [
 ];
 
 function spawn_settings(traceSettings) {
-  return [["-iex", "set pagination off"], ["-iex", `source ${dir}/setup.py`], traceSettings.getCommandParameters(), ["-iex", `source ${dir}/midas.py`]];
+  return [
+    ["-iex", "set pagination off"],
+    ["-iex", `source ${dir}/setup.py`],
+    traceSettings.getCommandParameters(),
+    ["-iex", `source ${dir}/midas.py`],
+  ];
 }
 
 /**
@@ -71,17 +70,24 @@ function spawn_settings(traceSettings) {
  * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
  * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
  * @param {string} binary - binary to debug
-  * @param {string} serverAddress - server address rr is listening on
+ * @param {string} serverAddress - server address rr is listening on
  * @param {string} cwd - current working directory to set GDB to
  * @returns
  */
 function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress, cwd) {
   const MidasSetupArgs = spawn_settings(traceSettings);
-  const spawnParameters =
-    setupCommands
-      .flatMap(c => ["-iex", `${c}`])
-      .concat(MidasSetupArgs.flatMap(i => i))
-      .concat([...DefaultRRSpawnArgs, "-ex", `target extended-remote ${serverAddress}`, "-i=mi3", binary, "-ex", `"set cwd ${cwd}"`])
+  const spawnParameters = setupCommands
+    .flatMap((c) => ["-iex", `${c}`])
+    .concat(MidasSetupArgs.flatMap((i) => i))
+    .concat([
+      ...DefaultRRSpawnArgs,
+      "-ex",
+      `target extended-remote ${serverAddress}`,
+      "-i=mi3",
+      binary,
+      "-ex",
+      `"set cwd ${cwd}"`,
+    ]);
   return spawn(gdbPath, spawnParameters);
 }
 
@@ -95,23 +101,21 @@ function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress
  */
 function spawnGDB(gdbPath, traceSettings, setupCommands, binary, ...args) {
   const MidasSetupArgs = spawn_settings(traceSettings);
-  const spawnParameters =
-    setupCommands
-      .flatMap(command => ["-iex", `${command}`])
-      .concat(MidasSetupArgs.flatMap(i => i))
-      .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
+  const spawnParameters = setupCommands
+    .flatMap((command) => ["-iex", `${command}`])
+    .concat(MidasSetupArgs.flatMap((i) => i))
+    .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
 }
 
 function attachGDB(gdbPath, traceSettings, setupCommands, binary, pid) {
   const MidasSetupArgs = spawn_settings(traceSettings);
-  const spawnParameters =
-    setupCommands
-      .flatMap(command => ["-iex", `${command}`])
-      .concat(MidasSetupArgs.flatMap(i => i))
-      .concat(["-iex", "set mi-async on",])
-      .concat(["-i=mi3", binary, "-p", pid])
+  const spawnParameters = setupCommands
+    .flatMap((command) => ["-iex", `${command}`])
+    .concat(MidasSetupArgs.flatMap((i) => i))
+    .concat(["-iex", "set mi-async on"])
+    .concat(["-i=mi3", binary, "-p", pid]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
 }
@@ -146,16 +150,23 @@ class GDB extends GDBMixin(GDBBase) {
   constructor(target, args, request) {
     super(
       (() => {
-        if(args.type == "midas-rr") {
-          let gdb = spawnRRGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.serverAddress, args.cwd);
+        if (args.type == "midas-rr") {
+          let gdb = spawnRRGDB(
+            args.gdbPath,
+            target.buildSettings,
+            args.setupCommands,
+            args.program,
+            args.serverAddress,
+            args.cwd
+          );
           gdbProcess = gdb;
           return gdb;
         } else {
-          if(request == "launch") {
+          if (request == "launch") {
             let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
             gdbProcess = gdb;
             return gdb;
-          } else if(request == "attach") {
+          } else if (request == "attach") {
             const gdb = attachGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.pid);
             gdbProcess = gdb;
             return gdb;
@@ -167,12 +178,11 @@ class GDB extends GDBMixin(GDBBase) {
     );
     this.#target = target;
     this.config = args;
-    if(this.config.externalConsole) {
+    if (this.config.externalConsole) {
       this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
     }
-    if(this.config.type == "midas-rr") {
-      if(!this.config.externalConsole)
-        this.disposeOnExit = true;
+    if (this.config.type == "midas-rr") {
+      if (!this.config.externalConsole) this.disposeOnExit = true;
     }
   }
 
@@ -195,7 +205,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");
     await this.setup();
-    if(this.config.externalConsole) {
+    if (this.config.externalConsole) {
       this.#target.registerTerminal(this.#target.terminal, () => {
         this.kill();
         this.sendEvent(new TerminatedEvent(false));
@@ -216,29 +226,25 @@ class GDB extends GDBMixin(GDBBase) {
     this.allStopMode = true;
     vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
     await this.init();
-    const printOptions = [
-      printOption(PrintOptions.HideStaticMembers),
-      printOption(PrintOptions.PrettyStruct)
-    ];
+    const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
   }
 
   /**
-   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args 
+   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args
    */
   async start(args) {
-    const {program, stopOnEntry, allStopMode, externalConsole } = args;
-    if(externalConsole != null) {
+    const { program, stopOnEntry, allStopMode, externalConsole } = args;
+    if (externalConsole != null) {
       const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
-      const command = path == "" ? "x-terminal-emulator" : path;
-      this.#target.registerTerminal(await spawnExternalConsole({ terminal: command }, this.pid()), () => {
-        if(endSessionOnTerminalExit) {
+      this.#target.registerTerminal(await spawnExternalConsole({ terminal: path }, this.pid()), () => {
+        if (endSessionOnTerminalExit) {
           this.kill();
           this.sendEvent(new TerminatedEvent(false));
         }
       });
     }
-    
+
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
@@ -251,12 +257,9 @@ class GDB extends GDBMixin(GDBBase) {
       await this.execMI(`-gdb-set mi-async on`);
     }
 
-    const printOptions = [
-      printOption(PrintOptions.HideStaticMembers),
-      printOption(PrintOptions.PrettyStruct)
-    ];
-    if(this.#target.terminal) {
-      await this.execCLI(`set inferior-tty ${this.#target.terminal.tty.path}`)
+    const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
+    if (this.#target.terminal) {
+      await this.execCLI(`set inferior-tty ${this.#target.terminal.tty.path}`);
     }
     await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
@@ -380,25 +383,25 @@ class GDB extends GDBMixin(GDBBase) {
 
   async updateWatchpoints(wpRequest) {
     const { removeIndices, newIndices } = this.#watchpoints.unionIndices(wpRequest, (a, b) => a.id == b.id);
-    if(removeIndices.length > 0) {
-      const bpNumbers = removeIndices.map(idx => this.#watchpoints.get(idx).id);
+    if (removeIndices.length > 0) {
+      const bpNumbers = removeIndices.map((idx) => this.#watchpoints.get(idx).id);
       const cmdParameter = bpNumbers.join(" ");
       this.execMI(`-break-delete ${cmdParameter}`);
     }
     this.#watchpoints.pop(removeIndices);
-    for(const idx of newIndices) {
+    for (const idx of newIndices) {
       let item = wpRequest[idx];
       let wp;
-      switch(item.accessType) {
-        case "write": {
+      switch (item.accessType) {
+        case "write":
           wp = await this.setWatchPoint(item.dataId, "write");
-        } break;
-        case "read": {
+          break;
+        case "read":
           wp = await this.setWatchPoint(item.dataId, "read");
-        } break;
-        case "readWrite": {
+          break;
+        case "readWrite":
           wp = await this.setWatchPoint(item.dataId, "access");
-        } break;
+          break;
       }
       item.id = wp.number;
       item.message = item.dataId;
@@ -411,20 +414,20 @@ class GDB extends GDBMixin(GDBBase) {
 
   async threads() {
     let unit_threads = [...this.#uninitializedThread.values()];
-    for(let t of unit_threads) {
+    for (let t of unit_threads) {
       try {
-        let r = await this.execMI(`-thread-info ${t.id}`)
-        if(r.threads.length > 0) {
+        let r = await this.execMI(`-thread-info ${t.id}`);
+        if (r.threads.length > 0) {
           let details = r.threads[0]["details"] ? ` (${r.threads[0]["details"]})` : "";
           this.#threads.get(t.id).name = `${r.threads[0]["target-id"]}${details}`;
           this.#uninitializedThread.delete(t.id);
         }
-      } catch(err) {
+      } catch (err) {
         console.log("Thread is running...");
       }
     }
     let res = [];
-    for(const t of this.#threads.values()) {
+    for (const t of this.#threads.values()) {
       res.push(t);
     }
     return res;
@@ -589,7 +592,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onThreadCreated(thread) {
-    thread.name = `${this.#program}`
+    thread.name = `${this.#program}`;
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
     this.#target.sendEvent(new ThreadEvent("started", thread.id));
@@ -627,7 +630,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{threadId: number}} payload
    */
   // eslint-disable-next-line no-unused-vars
-  #onNotifyRunning(payload) { }
+  #onNotifyRunning(payload) {}
 
   /**
    * The target has stopped.
@@ -763,15 +766,15 @@ class GDB extends GDBMixin(GDBBase) {
    */
   #onNotifyBreakpointCreated(payload) {
     let { number, addr, file, fullname, enabled, line } = payload.bkpt;
-    if(!file && !line) {
-      vscode.window.showInformationMessage("Setting function breakpoints from debug console, won't register in UI.")
+    if (!file && !line) {
+      vscode.window.showInformationMessage("Setting function breakpoints from debug console, won't register in UI.");
     } else {
       const newBreakpoint = {
         id: +number,
         enabled: enabled == "y",
         verified: addr != "<PENDING>",
         source: new Source(file, fullname),
-        line: +line
+        line: +line,
       };
       this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
       this.#lineBreakpoints.add_to(file, newBreakpoint);
@@ -791,7 +794,7 @@ class GDB extends GDBMixin(GDBBase) {
       id: +num,
       verified: true,
       enabled: enabled == "y",
-      source: new Source(file, fullname)
+      source: new Source(file, fullname),
     };
     this.#target.sendEvent(new BreakpointEvent("changed", bp));
     log(getFunctionName(), payload);
@@ -801,8 +804,8 @@ class GDB extends GDBMixin(GDBBase) {
    * Reports that a breakpoint was deleted.
    */
   #onNotifyBreakpointDeleted(payload) {
-    const { id } = payload
-    const bp = { id: +id, verified: true};
+    const { id } = payload;
+    const bp = { id: +id, verified: true };
     this.#target.sendEvent(new BreakpointEvent("removed", bp));
     log(getFunctionName(), payload);
   }
@@ -884,7 +887,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
-    const breakpoint = await (this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`)).bkpt;
+    const breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).bkpt;
     this.registerBreakpoint(breakpoint);
     return breakpoint;
   }
@@ -914,7 +917,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   cleanup() {
-    if(this.disposeOnExit) {
+    if (this.disposeOnExit) {
       this.#target.disposeTerminal();
     }
   }

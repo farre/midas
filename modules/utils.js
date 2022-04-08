@@ -1,6 +1,6 @@
 "use strict";
 
-const { exec, spawn: _spawn } = require("child_process");
+const { exec, spawn: _spawn, execSync } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
 const path = require("path");
@@ -64,7 +64,7 @@ function spawn(gdbPath, args) {
     },
     pid() {
       return p.pid;
-    }
+    },
   };
 }
 
@@ -73,11 +73,11 @@ function spawn(gdbPath, args) {
  */
 class ArrayMap {
   #storage = new Map();
-  constructor() { }
+  constructor() {}
   /**
    * Adds `value` to the array keyed by `key`. If no array is referenced by key, one is created.
-   * @param {any} key 
-   * @param {any} value 
+   * @param {any} key
+   * @param {any} value
    */
   add_to(key, value) {
     let set = this.#storage.get(key) ?? [];
@@ -96,8 +96,8 @@ class ArrayMap {
   }
 
   /**
-   * @param {any} key 
-   * @param {any[]} array 
+   * @param {any} key
+   * @param {any[]} array
    */
   set(key, array) {
     this.#storage.set(key, array);
@@ -116,7 +116,7 @@ class ArrayMap {
 class ExclusiveArray {
   /** @type { T[] } */
   #data = [];
-  constructor() {  }
+  constructor() {}
 
   /**
    * Compares `items` with the elements in this array and returns what elements needs removing from this array
@@ -129,22 +129,22 @@ class ExclusiveArray {
   unionIndices(items, comparator) {
     let removeIndices = [];
     let duplicateIndices = [];
-    for(let i = 0; i < this.#data.length; i++) {
+    for (let i = 0; i < this.#data.length; i++) {
       let ith_should_keep = false;
-      for(let j = 0; j < items.length; j++) {
-        if(comparator(this.#data[i], items[j])) {
+      for (let j = 0; j < items.length; j++) {
+        if (comparator(this.#data[i], items[j])) {
           ith_should_keep = true;
           duplicateIndices.push(j);
           break;
         }
       }
-      if(!ith_should_keep) {
+      if (!ith_should_keep) {
         removeIndices.push(i);
       }
     }
     let newIndices = [];
-    for(let i = 0; i < items.length; i++) {
-      if(!duplicateIndices.includes(i)) newIndices.push(i);
+    for (let i = 0; i < items.length; i++) {
+      if (!duplicateIndices.includes(i)) newIndices.push(i);
     }
     return { removeIndices, newIndices };
   }
@@ -153,7 +153,7 @@ class ExclusiveArray {
     let sorted = indices.sort((a, b) => a < b);
     let remove = [];
     let shift = 0;
-    for(const idx of sorted) {
+    for (const idx of sorted) {
       remove.push(this.#data.splice(idx - shift, 1)[0]);
       shift += 1;
     }
@@ -173,43 +173,89 @@ class ExclusiveArray {
   }
 }
 /**
- * 
- * @param {{ terminal: string }} config 
+ * Resolve a symlink to where it points to. `fully` sets if
+ * it should be resolved fully (i.e, if it's a symlink to a symlink etc
+ * follow the entire chain to it's end).
+ * @param {boolean} fully
+ */
+function resolveCommand(cmd, fully = true) {
+  if (fs.existsSync(cmd)) {
+    return fs.realpathSync(cmd);
+  }
+  const whereis = execSync(`whereis ${cmd}`);
+  const parts = whereis.toString().split(" ");
+  if (parts.length < 2) {
+    throw new Error(`Command ${cmd} could not be resolved`);
+  }
+  for (const result of parts.slice(1)) {
+    if (path.basename(result) == cmd) {
+      return result;
+    }
+  }
+  throw new Error(`Command ${cmd} could not properly be resolved. Try providing the fully qualified path`);
+}
+
+// Due to the client/server architecture that has been introduced to
+// many linux terminals, we need to *force* it to spawn a new process
+// otherwise, when we spawn our new terminal, it will from Midas perspective
+// exit immediately (with code = 0). We need the NodeJS child to stay alive, thus
+// it is _required_ to be able to be spawned as a new process. Terminals that do not
+// provide this functionality will *not* work for Midas - with the exception
+// of if it is the _only_ terminal that you have alive/open as then
+// it *most likely* will be the "server process" that gets spawned.
+// Add more terminals to this object.
+const LinuxTerminalSettings = {
+  "gnome-terminal": "--disable-factory",
+  tilix: "--new-process",
+  xterm: "",
+};
+
+function randomTtyFile() {
+  return `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
+}
+
+/**
+ * 604955
+ * @param {{ terminal: string }} config
  * @returns { Promise<TerminalInterface>}
  */
 async function spawnExternalConsole(config, pid) {
   return new Promise((resolve, reject) => {
     // file which we write the newly spawned terminal's tty to
-    const write_tty_to = `/tmp/midas-tty-for-gdb-${Math.ceil(Math.random() * 100000)}`;
-    const terminal = config.terminal ?? "x-terminal-emulator";
-    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && sleep 100000000000000"`;
-    const terminal_spawn_parameters = ["-e", param];
-    const process = _spawn(terminal, terminal_spawn_parameters);
+    const write_tty_to = randomTtyFile();
+    const terminal_command = config.terminal ?? "x-terminal-emulator";
+    const resolved = resolveCommand(terminal_command);
+    const terminal_name = path.basename(resolved);
+    const newProcessParameter = LinuxTerminalSettings[terminal_name] ?? "";
+    // why write the PPID here? Because, in some cases, multiple processes get spawned by the command
+    // thus, we have to kill the parent to get rid of them all (and thus, closing the external console, if that's what the user wants)
+    const param = `sh -c "clear && tty > ${write_tty_to} && echo $$ >> ${write_tty_to} && echo $PPID >> ${write_tty_to} && sleep 100000000000000"`;
+    const terminal_spawn_parameters = [newProcessParameter, "-e", param];
+    const process = _spawn(terminal_command, terminal_spawn_parameters);
     let tries = 0;
     const interval = setInterval(() => {
       if (fs.existsSync(write_tty_to)) {
         clearInterval(interval);
-        const [tty_path, shpid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
+        const [tty_path, shpid, ppid] = fs.readFileSync(write_tty_to).toString("utf8").trim().split("\n");
         fs.unlinkSync(write_tty_to);
-        const tty = { path: tty_path, config: write_tty_to }
-        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid));
+        const tty = { path: tty_path, config: write_tty_to };
+        let termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
         return resolve(termInterface);
       }
       tries++;
-      if (tries > 500)
-        reject();
+      if (tries > 500) reject();
     }, 10);
   });
 }
 /**
- * 
- * @param {any} config 
- * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs 
+ *
+ * @param {any} config
+ * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs
  * @returns {Promise<TerminalInterface>}
  */
 async function spawnExternalRrConsole(config, rrArgs) {
   return new Promise((resolve, reject) => {
-    const {path, addr, port, pid, traceWorkspace} = rrArgs;
+    const { path, addr, port, pid, traceWorkspace } = rrArgs;
     const terminal = config.terminal ?? "x-terminal-emulator";
     const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
     const param = `sh -c "clear && ${cmd} && sleep 1000000000000000000"`;
@@ -227,5 +273,5 @@ module.exports = {
   spawnExternalConsole,
   spawnExternalRrConsole,
   isNothing,
-  kill_pid
+  kill_pid,
 };
