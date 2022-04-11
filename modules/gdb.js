@@ -99,11 +99,13 @@ function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress
  * @param {...string} args - arguments to pass to debuggee
  * @returns
  */
-function spawnGDB(gdbPath, traceSettings, setupCommands, binary, ...args) {
+function spawnGDB(gdbPath, traceSettings, setupCommands, binary, cwd, ...args) {
   const MidasSetupArgs = spawn_settings(traceSettings);
+  cwd = cwd ? cwd : vscode.workspace.workspaceFolders[0].uri.fsPath;
   const spawnParameters = setupCommands
     .flatMap((command) => ["-iex", `${command}`])
     .concat(MidasSetupArgs.flatMap((i) => i))
+    .concat(["-ex", `set cwd ${cwd}`])
     .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
   let gdb = spawn(gdbPath, spawnParameters);
   return gdb;
@@ -163,7 +165,14 @@ class GDB extends GDBMixin(GDBBase) {
           return gdb;
         } else {
           if (request == "launch") {
-            let gdb = spawnGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, ...(args.args ?? []));
+            let gdb = spawnGDB(
+              args.gdbPath,
+              target.buildSettings,
+              args.setupCommands,
+              args.program,
+              args.cwd,
+              ...(args.args ?? [])
+            );
             gdbProcess = gdb;
             return gdb;
           } else if (request == "attach") {
