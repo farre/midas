@@ -21,4 +21,4 @@ debug.log
 performance_time.log
 error.log
 exception-logger.log
-launch.json
+.vscode/launch.json
