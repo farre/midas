@@ -9,13 +9,15 @@ from frame_operations import iterate_frame_blocks
 from variable import Variable, BaseClass, StaticVariable
 
 
-def create_stackframe_response(frame, alreadyReffedId = None):
+def create_stackframe_response(frame, alreadyReffedId=None):
     try:
         res = vs_stackframe_from_fn(frame, frame.function(), alreadyReffedId)
         return res
     except:
-        res = vs_stackframe_from_no_symtab(frame.name(), frame, alreadyReffedId)
+        res = vs_stackframe_from_no_symtab(
+            frame.name(), frame, alreadyReffedId)
         return res
+
 
 def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
     sal = frame.find_sal()
@@ -24,7 +26,7 @@ def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
     fullname = functionSymbolTab.fullname()
     line_number = sal.line
     # DebugProtocol.Source
-    src = { "name": filename, "path": fullname, "sourceReference": 0 }
+    src = {"name": filename, "path": fullname, "sourceReference": 0}
     stackStart = frame.read_register("rbp")
     id = alreadyReffedId
     sf = {
@@ -38,13 +40,15 @@ def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
     }
     return sf
 
-def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId = None):
+
+def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId=None):
     sal = frame.find_sal()
     line_number = sal.line
     # DebugProtocol.Source
     src = None
     try:
-        src = { "name": path.basename(sal.symtab.filename), "path": sal.symtab.fullname(), "sourceReference": 0 }
+        src = {"name": path.basename(
+            sal.symtab.filename), "path": sal.symtab.fullname(), "sourceReference": 0}
     except:
         pass
 
@@ -61,6 +65,7 @@ def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId = None):
     }
     return sf
 
+
 class RegisterDescriptors:
     def __init__(self, frame):
         self.general = []
@@ -74,12 +79,12 @@ class RegisterDescriptors:
             self.mmx.append(register_descriptor)
 
     def register_vs_result(reg_desc, frame):
-            return {
-                "name": reg_desc.name,
-                "value": "{}".format(frame.read_register(reg_desc)),
-                "evaluateName": None,
-                "variablesReference": 0
-            }
+        return {
+            "name": reg_desc.name,
+            "value": "{}".format(frame.read_register(reg_desc)),
+            "evaluateName": None,
+            "variablesReference": 0
+        }
 
     def read_general_registers(self, frame):
         return [
@@ -96,7 +101,9 @@ class RegisterDescriptors:
             RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.mmx
         ]
 
+
 REGISTER_DESCRIPTOR_SETS: RegisterDescriptors = None
+
 
 class StackFrame:
     def __init__(self, frame, threadId):
@@ -111,23 +118,30 @@ class StackFrame:
         self.args = []
         self.argsReference = config.next_variable_reference()
 
-        self.variableReferences: dict[int, Union[Variable, BaseClass, StaticVariable]] = {}
+        self.variableReferences: dict[int,
+                                      Union[Variable, BaseClass, StaticVariable]] = {}
         self.registerReference = config.next_variable_reference()
 
         self.block_values = []
         self.init = False
 
         self.scopes = [
-            { "name": "Locals", "variablesReference": self.localsReference, "expensive": False, "presentationHint": "locals" },
-            { "name": "Args", "variablesReference": self.argsReference, "expensive": False, "presentationHint": "arguments" },
-            { "name": "Register", "variablesReference": self.registerReference, "expensive": False, "presentationHint": "register" } ]
+            {"name": "Locals", "variablesReference": self.localsReference,
+                "expensive": False, "presentationHint": "locals"},
+            {"name": "Args", "variablesReference": self.argsReference,
+                "expensive": False, "presentationHint": "arguments"},
+            {"name": "Register", "variablesReference": self.registerReference, "expensive": False, "presentationHint": "register"}]
 
-        config.variableReferences.add_mapping(self.localsReference, self.threadId, self.localsReference)
-        config.variableReferences.add_mapping(self.argsReference, self.threadId, self.localsReference)
-        config.variableReferences.add_mapping(self.registerReference, self.threadId, self.localsReference)
+        config.variableReferences.add_mapping(
+            self.localsReference, self.threadId, self.localsReference)
+        config.variableReferences.add_mapping(
+            self.argsReference, self.threadId, self.localsReference)
+        config.variableReferences.add_mapping(
+            self.registerReference, self.threadId, self.localsReference)
 
         self.watch_variables: dict[str, Variable] = {}
-        config.variableReferences.add_mapping(self.localsReference, threadId, self.localsReference)
+        config.variableReferences.add_mapping(
+            self.localsReference, threadId, self.localsReference)
 
     @config.timeInvocation
     def initialize(self):
@@ -154,14 +168,16 @@ class StackFrame:
                         v = Variable.from_symbol(symbol, self.frame)
                         vr = v.get_variable_reference()
                         if vr != 0:
-                            config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
+                            config.variableReferences.add_mapping(
+                                vr, self.threadId, self.localsReference)
                             self.variableReferences[vr] = v
                         blockvalues.append(v)
                     elif symbol.is_argument:
                         v = Variable.from_symbol(symbol, self.frame)
                         vr = v.get_variable_reference()
                         if vr != 0:
-                            config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
+                            config.variableReferences.add_mapping(
+                                vr, self.threadId, self.localsReference)
                             self.variableReferences[vr] = v
                         self.args.append(v)
                 self.block_values.append(blockvalues)
@@ -200,7 +216,8 @@ class StackFrame:
                                 blockvalues.append(v)
                                 vr = v.get_variable_reference()
                                 if vr != 0:
-                                    config.variableReferences.add_mapping(vr, self.threadId, self.localsReference)
+                                    config.variableReferences.add_mapping(
+                                        vr, self.threadId, self.localsReference)
                                     self.variableReferences[vr] = v
                         self.block_values.append(blockvalues)
                         self.blocks.append(newblock)
@@ -283,9 +300,8 @@ class StackFrame:
             if vr != 0:
                 config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
                 self.variableReferences[vr] = v
-                config.variableReferences.add_mapping(vr, self.threadId, self.frame_id())
+                config.variableReferences.add_mapping(
+                    vr, self.threadId, self.frame_id())
             return v
         else:
             return self.watch_variables[expr]
-
-

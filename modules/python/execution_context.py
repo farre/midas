@@ -8,8 +8,10 @@ import stackframe
 import config
 import midas_utils
 
+
 class CurrentExecutionContext:
     inferior = None
+
     def __init__(self):
         self.threadId = -1
         self.frameLevel = -1
@@ -49,6 +51,7 @@ class CurrentExecutionContext:
     def add_thread(self, thread):
         self.threads.append(thread)
 
+
 class ExecutionContext:
     def __init__(self, thread):
         self.thread = thread
@@ -86,13 +89,15 @@ class ExecutionContext:
                 for sf in self.stack:
                     result.append(sf.get_vs_frame())
                 return result
-            res = frame_operations.find_first_identical_frames(self.stack, f, 10)
+            res = frame_operations.find_first_identical_frames(
+                self.stack, f, 10)
             if res is not None:
                 (x, newFrames) = res
                 self.stack = self.stack[x:]
                 tmp = self.stack
                 threadId = self.thread_id()
-                self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
+                self.stack = [stackframe.StackFrame(
+                    f, threadId) for f in newFrames]
                 self.stack.extend(tmp)
             else:
                 self.clear_frames()
@@ -110,7 +115,7 @@ class ExecutionContext:
             remainder = (start + levels) - len(self.stack)
             threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(self.stack[-1].frame.older(), remainder):
-                sf = stackframe.StackFrame(f, threadId)
+                sf = stackframe.StackFrame(frame, threadId)
                 self.stack.append(sf)
         for sf in self.stack:
             result.append(sf.get_vs_frame())
@@ -140,10 +145,14 @@ class ExecutionContext:
     def clear_frames(self):
         self.stack.clear()
 
+    def is_valid(self):
+        return self.thread.is_valid()
+
 
 class InvalidateExecutionContext(gdb.Command):
     def __init__(self, executionContexts):
-        super(InvalidateExecutionContext, self).__init__("gdbjs-thread-died", gdb.COMMAND_USER)
+        super(InvalidateExecutionContext, self).__init__(
+            "gdbjs-thread-died", gdb.COMMAND_USER)
         self.name = "thread-died"
         self.executionContexts = executionContexts
 
@@ -154,5 +163,7 @@ class InvalidateExecutionContext(gdb.Command):
             del self.executionContexts[threadId]
         except Exception as e:
             err_logger = config.error_logger()
-            config.log_exception(err_logger, "Removing execution context failed: {}".format(e), e)
-        midas_utils.send_response(self.name, { "ok": True }, midas_utils.prepare_command_response)
+            config.log_exception(
+                err_logger, "Removing execution context failed: {}".format(e), e)
+        midas_utils.send_response(
+            self.name, {"ok": True}, midas_utils.prepare_command_response)
