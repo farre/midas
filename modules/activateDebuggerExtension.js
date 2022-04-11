@@ -10,22 +10,22 @@ const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/
  * @param {vscode.DebugAdapterDescriptorFactory} [descriptorFactory]
  */
 function activateExtension(context, descriptorFactory) {
-  context.subscriptions.push(...getVSCodeCommands());
+  context.subscriptions.push(...getVSCodeCommands(context));
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(provider.type, provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
   );
-  context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new DebugAdapterFactory())
-  );
+  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new DebugAdapterFactory()));
 
   let rrProvider = new RRConfigurationProvider();
   context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider(rrProvider.type, rrProvider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+    vscode.debug.registerDebugConfigurationProvider(
+      rrProvider.type,
+      rrProvider,
+      vscode.DebugConfigurationProviderTriggerKind.Dynamic
+    )
   );
-  context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory(rrProvider.type, new RRDebugAdapterFactory())
-  );
+  context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory(rrProvider.type, new RRDebugAdapterFactory()));
 }
 
 function deactivateExtension() {}

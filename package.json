@@ -67,6 +67,11 @@
         "command": "midas.hot-reload-scripts",
         "title": "Re-initializes Midas",
         "shortTitle": "Re-initialize"
+      },
+      {
+        "command": "midas.show-logs",
+        "title": "Midas: Open logs",
+        "shortTitle": "Midas: Open logs"
       }
     ],
     "menus": {
@@ -74,17 +79,17 @@
         {
           "command": "midas.session-continue-all",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && debugType == midas"
+          "when": "midas.allStopModeSet == false && debugType == midas-gdb"
         },
         {
           "command": "midas.session-pause-all",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && debugType == midas"
+          "when": "midas.allStopModeSet == false && debugType == midas-gdb"
         },
         {
           "command": "midas.reverse-finish",
           "group": "midas",
-          "when": "midas.rrSession && debugType == midas"
+          "when": "midas.rrSession && debugType == midas-rr"
         }
       ]
     },
@@ -153,7 +158,7 @@
                 "type": "object",
                 "default": { "path": "", "closeTerminalOnEndOfSession": true, "endSessionOnTerminalExit": true },
                 "description": "External console settings",
-		"required": ["path"],
+    "required": ["path"],
                 "properties": {
                   "path": {
                     "type": "string",
@@ -329,15 +334,20 @@
                 "type": "array",
                 "description": "GDB Commands to run before debugging."
               },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Set breakpoint on main",
+                "default": false
+              },
               "externalConsole": {
                 "type": "object",
                 "default": { "path": "", "closeTerminalOnEndOfSession": true },
                 "description": "External console settings",
-		"required": ["path"],
+                "required": ["path"],
                 "properties": {
                   "path": {
                     "type": "string",
-		    "description": "Path to terminal to launch. If it exists in $PATH only the command name has to be provided",
+                    "description": "Path to terminal to launch. If it exists in $PATH only the command name has to be provided",
                     "default": ""
                   },
                   "closeTerminalOnEndOfSession": {
