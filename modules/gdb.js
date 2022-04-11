@@ -8,7 +8,7 @@ const path = require("path");
 const { InitializedEvent, StoppedEvent, BreakpointEvent, TerminatedEvent, ThreadEvent } = require("@vscode/debugadapter");
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
-const { getFunctionName, spawn, spawnExternalConsole, ArrayMap, ExclusiveArray } = require("./utils");
+const { getFunctionName, spawn, spawnExternalConsole, ArrayMap, ExclusiveArray, showErrorPopup } = require("./utils");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -254,7 +254,7 @@ class GDB extends GDBMixin(GDBBase) {
           }
         });
       } catch (err) {
-        vscode.window.showErrorMessage("Spawning external console failed");
+        showErrorPopup("Spawning an external console failed.");
         this.kill();
         this.sendEvent(new TerminatedEvent(false));
       }

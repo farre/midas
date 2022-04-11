@@ -6,9 +6,21 @@ const { getFreeRandomPort } = require("../netutils");
 const { tracePicked, getTraces, parseProgram } = require("../rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
-const { spawnExternalRrConsole } = require("../utils");
+const { spawnExternalRrConsole, showErrorPopup } = require("../utils");
+const krnl = require("../kernelsettings");
 
-const initializer = (config) => {
+const initializerPopupChoices = {
+  perf_event_paranoid: [
+    {
+      title: "Read more...",
+      action: async () => {
+        await vscode.env.openExternal(vscode.Uri.parse("https://www.dedoimedo.com/computers/rr-gdb-tool.html"));
+      },
+    },
+  ],
+};
+
+const initializer = async (config) => {
   if (!config.hasOwnProperty("trace")) {
     config.trace = "off";
   }
@@ -20,6 +32,16 @@ const initializer = (config) => {
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
+  }
+  const perf_event_paranoid = krnl.readPerfEventParanoid();
+  if (perf_event_paranoid > 0) {
+    let choice = await showErrorPopup(
+      "perf_event_paranoid not set to 0.",
+      "rr requires it to be set to 0",
+      initializerPopupChoices.perf_event_paranoid
+    );
+    if (choice) await choice.action();
+    throw new Error("Canceled");
   }
 };
 
@@ -34,7 +56,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         let port = await getFreeRandomPort();
         config.serverAddress = `127.0.0.1:${port}`;
       } catch (err) {
-        vscode.window.showErrorMessage("No port available for rr to listen on");
+        showErrorPopup("No port available for rr to listen on");
         return null;
       }
     }
@@ -45,7 +67,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           config.replay.parameters = replay_parameters;
           return config;
         } else {
-          vscode.window.showErrorMessage("You did not pick a trace.");
+          showErrorPopup("You did not pick a trace.");
           return null;
         }
       });
@@ -63,13 +85,13 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
             try {
               config.program = parseProgram(replay_parameters.cmd);
             } catch (e) {
-              vscode.window.showErrorMessage("Could not parse binary");
+              showErrorPopup("Could not parse binary");
               return null;
             }
             config.replay = replay_parameters;
             return config;
           } else {
-            vscode.window.showErrorMessage("You did not pick a trace.");
+            showErrorPopup("You did not pick a trace.");
             return null;
           }
         });
@@ -80,9 +102,10 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
 
   async resolveDebugConfiguration(folder, config, token) {
     try {
-      super.defaultInitialize(config, initializer);
+      await super.defaultInitialize(config, initializer);
     } catch (err) {
       await vscode.window.showErrorMessage(err.message);
+      return null;
     }
     return await this.resolveReplayConfig(folder, config, token);
   }
@@ -115,7 +138,7 @@ class RRDebugAdapterFactory {
         let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), terminalInterface);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } catch (err) {
-        vscode.window.showErrorMessage("Failed to spawn external console");
+        showErrorPopup("Failed to spawn external console");
         return undefined;
       }
     } else {

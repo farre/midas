@@ -3,6 +3,7 @@ const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
+const { isNothing, resolveCommand } = require("../utils");
 
 const initializer = (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -15,16 +16,27 @@ const initializer = (config) => {
     config.allStopMode = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = "gdb";
+    config.gdbPath = resolveCommand("gdb");
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
   if (!config.hasOwnProperty("externalConsole")) {
     config.externalConsole = null;
+  } else {
+    if (isNothing(config.externalConsole.path)) {
+      throw new Error("Path field for externalConsole not provided in configuration");
+    }
+    if (config.externalConsole.path == "") {
+      try {
+        config.externalConsole.path = resolveCommand("x-terminal-emulator");
+      } catch (err) {
+        throw new Error(`[externalConsole.path error]: ${err.message}`);
+      }
+    }
   }
   if (!config.program) {
-    throw new Error("Cannot find a program to debug");
+    throw new Error("Inferior to debug was not set in configuration (program field in launch.json)");
   }
 };
 
@@ -36,7 +48,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
     try {
-      super.defaultInitialize(config, initializer);
+      await super.defaultInitialize(config, initializer);
     } catch (err) {
       await vscode.window.showErrorMessage(err.message);
       return null;
