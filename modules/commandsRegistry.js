@@ -1,5 +1,5 @@
 "use strict";
-
+const fs = require("fs");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -8,9 +8,10 @@ const { registerCommand } = require("vscode").commands;
 
 /**
  * Returns VS Code commands that are to be registered
+ * @param {vscode.ExtensionContext} context
  * @returns { Disposable[] }
  */
-function getVSCodeCommands() {
+function getVSCodeCommands(context) {
   let rrRecord = registerCommand("midas.rr-record", async () => {
     const spawnTerminalRunRecord = (pathToBinary) => {
       let t = vscode.window.createTerminal("rr record terminal");
@@ -57,7 +58,18 @@ function getVSCodeCommands() {
     vscode.debug.activeDebugSession.customRequest("hot-reload-scripts");
   });
 
-  return [rrRecord, continueAll, pauseAll, reverseFinish, hotReloadScripts];
+  let displayLogs = registerCommand("midas.show-logs", async () => {
+    const debug_log = `${context.extensionPath}/debug.log`;
+    if (fs.existsSync(debug_log)) {
+      vscode.window.showTextDocument(vscode.Uri.parse(debug_log), { viewColumn: 1 });
+      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/error.log`), { viewColumn: 2 });
+      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/performance_time.log`), { viewColumn: 3 });
+    } else {
+      vscode.window.showInformationMessage("No logs have yet been created");
+    }
+  });
+
+  return [rrRecord, continueAll, pauseAll, reverseFinish, hotReloadScripts, displayLogs];
 }
 
 module.exports = {
