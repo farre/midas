@@ -6,6 +6,13 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("./terminalInterface");
 
+const ContextKeys = {
+  AllStopModeSet: "midas.allStopModeSet",
+  Running: "midas.Running",
+  DebugType: "midas.debugType",
+  RRSession: "midas.rrSession",
+};
+
 function isNothing(e) {
   return e == undefined || e == null;
 }
@@ -301,4 +308,5 @@ module.exports = {
   kill_pid,
   showErrorPopup,
   resolveCommand,
+  ContextKeys,
 };

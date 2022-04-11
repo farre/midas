@@ -8,7 +8,15 @@ const path = require("path");
 const { InitializedEvent, StoppedEvent, BreakpointEvent, TerminatedEvent, ThreadEvent } = require("@vscode/debugadapter");
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
-const { getFunctionName, spawn, spawnExternalConsole, ArrayMap, ExclusiveArray, showErrorPopup } = require("./utils");
+const {
+  getFunctionName,
+  spawn,
+  spawnExternalConsole,
+  ArrayMap,
+  ExclusiveArray,
+  showErrorPopup,
+  ContextKeys,
+} = require("./utils");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -233,7 +241,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = true;
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
+    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);
     await this.init();
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
@@ -263,7 +271,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     this.allStopMode = allStopMode;
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", this.allStopMode);
+    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);
     await this.init();
     // await this.setup();
     if (!allStopMode) {
@@ -540,18 +548,20 @@ class GDB extends GDBMixin(GDBBase) {
       }
       if ((payload.state ?? "") == "running") {
         // rr is all stop, it's all or nothing
-        this.sendEvent(new ContinuedEvent(1, true));
+        this.sendContinueEvent(payload.data["thread-id"], true);
       }
     } else {
       if (payload.data.reason == "exited-normally") {
-        // rr has exited
         this.sendEvent(new TerminatedEvent());
+      } else if (payload.state == "running") {
+        this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
       }
     }
   }
 
   #onStopped(payload) {
     log(getFunctionName(), payload);
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
     let reason;
     try {
       reason = payload.reason.join(",");
@@ -859,7 +869,7 @@ class GDB extends GDBMixin(GDBBase) {
   // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
   registerAsAllStopMode() {
     this.allStopMode = true;
-    vscode.commands.executeCommand("setContext", "midas.allStopModeSet", true);
+    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, true);
   }
 
   /**
@@ -935,6 +945,11 @@ class GDB extends GDBMixin(GDBBase) {
     if (this.disposeOnExit) {
       this.#target.disposeTerminal();
     }
+  }
+
+  sendContinueEvent(threadId, allThreadsContinued) {
+    this.sendEvent(new ContinuedEvent(threadId, allThreadsContinued));
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
   }
 }
 

@@ -6,7 +6,7 @@ const { getFreeRandomPort } = require("../netutils");
 const { tracePicked, getTraces, parseProgram } = require("../rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
-const { spawnExternalRrConsole, showErrorPopup } = require("../utils");
+const { spawnExternalRrConsole, showErrorPopup, ContextKeys } = require("../utils");
 const krnl = require("../kernelsettings");
 
 const initializerPopupChoices = {
@@ -96,7 +96,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           }
         });
     }
-    vscode.commands.executeCommand("setContext", "midas.rrSession", true);
+    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     return config;
   }
 
@@ -130,7 +130,7 @@ class RRDebugAdapterFactory {
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
     addr = addr == "localhost" ? "127.0.0.1" : addr;
     const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-
+    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if (config.externalConsole) {
       const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
       try {

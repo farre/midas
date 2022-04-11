@@ -9,7 +9,7 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isNothing } = require("./utils");
+const { isNothing, ContextKeys } = require("./utils");
 const nixkernel = require("./kernelsettings");
 let server;
 
@@ -227,7 +227,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       allThreadsContinued: this.gdb.allStopMode,
     };
     await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, false);
-    vscode.commands.executeCommand("setContext", "midas.notRunning", false);
+
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
     this.sendResponse(response);
   }
 
@@ -245,7 +246,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async pauseRequest(response, args) {
     await this.gdb.pauseExecution(args.threadId);
-    vscode.commands.executeCommand("setContext", "midas.notRunning", true);
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
     this.sendResponse(response);
   }
 
@@ -516,9 +517,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           allThreadsContinued: this.gdb.allStopMode,
         };
         this.sendResponse(response);
+        this.gdb.sendContinueEvent(1, true);
         break;
       case "pauseAll":
         await this.gdb.pauseAll();
+        let evt = { body: { reason: "pause", allThreadsStopped: true } };
+        this.gdb.sendEvent(evt);
         break;
       case "reverse-finish":
         await this.gdb.finishExecution(undefined, true);
