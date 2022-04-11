@@ -10,7 +10,7 @@ const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { isNothing } = require("./utils");
-
+const nixkernel = require("./kernelsettings");
 let server;
 
 let REPL_MESSAGE_SHOWN = 0;
@@ -137,7 +137,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // wait until configuration has finished (and configurationDoneRequest has been called)
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
-    if(args.type == "midas-rr") {
+    if (args.type == "midas-rr") {
       this.gdb = new GDB(this, args, "launch");
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
@@ -151,13 +151,20 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
     await this.configIsDone.wait(1000);
-    let data = fs.readFileSync("/proc/sys/kernel/yama/ptrace_scope");
-    const setting = data.toString().trim();
-    if(setting == "1") {
+    let ptraceScope = 0;
+    try {
+      ptraceScope = nixkernel.readPtraceScope();
+    } catch (e) {
+      vscode.window.showErrorMessage(
+        "You are running an old Linux which does not have the Yama security module. Attempting to attach."
+      );
+    }
+    if (ptraceScope == 1) {
       const Message = {
         /** Unique identifier for the message. */
         id: 1,
-        format: "Ptrace privileges are restricted. Run 'sudo sysctl kernel.yama.ptrace_scope=0' to allow non-children to ptrace other processes.",
+        format:
+          "Ptrace privileges are restricted. Run 'sudo sysctl kernel.yama.ptrace_scope=0' to allow non-children to ptrace other processes.",
         showUser: true,
         /** An optional url where additional information about this message can be found. */
         url: "https://askubuntu.com/questions/41629/after-upgrade-gdb-wont-attach-to-process",
@@ -200,7 +207,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body = {
       dataId: dataId,
       accessTypes: ["read", "write", "readWrite"],
-      canPersist: false
+      canPersist: false,
     };
     this.sendResponse(response);
   }
@@ -208,8 +215,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async setDataBreakpointsRequest(response, args, request) {
     const res = await this.gdb.updateWatchpoints(args.breakpoints);
     response.body = {
-      breakpoints: res
-    }
+      breakpoints: res,
+    };
     this.sendResponse(response);
   }
 
@@ -249,17 +256,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async stackTraceRequest(response, {threadId, startFrame, levels}) {
-    response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`)
+  async stackTraceRequest(response, { threadId, startFrame, levels }) {
+    response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`);
     this.sendResponse(response);
   }
 
-  async variablesRequest(response, {variablesReference}) {
+  async variablesRequest(response, { variablesReference }) {
     response.body = await this.exec(`variable-request ${variablesReference}`);
     this.sendResponse(response);
   }
 
-  async scopesRequest(response, {frameId}) {
+  async scopesRequest(response, { frameId }) {
     response.body = await this.exec(`scopes-request ${frameId}`);
     this.sendResponse(response);
   }
@@ -278,7 +285,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // start a server that creates a new session for every connection request
     server = net
       .createServer((socket) => {
-        socket.on("end", () => { });
+        socket.on("end", () => {});
         const session = new MidasDebugSession();
         session.setRunAsServer(true);
         session.start(socket, socket);
@@ -427,13 +434,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     const { expression, frameId, context } = args;
     if (context == "watch") {
       // todo(simon): needs implementation in new backend
-      const {body, success, message} = await this.exec(`watch-variable ${expression} ${frameId}`);
+      const { body, success, message } = await this.exec(`watch-variable ${expression} ${frameId}`);
       response.body = body;
       response.success = success;
       response.message = message;
       this.sendResponse(response);
     } else if (context == "repl") {
-      if(!REPL_MESSAGE_SHOWN) {
+      if (!REPL_MESSAGE_SHOWN) {
         vscode.debug.activeDebugConsole.appendLine(
           "REPL is semi-unsupported currently: any side effects you cause are not guaranteed to be seen in the UI"
         );
@@ -441,11 +448,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       }
       try {
         let msg = await this.gdb.replInput(expression);
-        response.body = { result: msg }
+        response.body = { result: msg };
         response.message = msg;
         this.sendResponse(response);
       } catch (err) {
-        response.body = {result: `Error: ${err}` };
+        response.body = { result: `Error: ${err}` };
         response.message = `Error: ${err}`;
         response.success = false;
         this.sendResponse(response);
@@ -521,7 +528,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         try {
           await this.gdb.reload_scripts();
           vscode.window.showInformationMessage(`Successfully reloaded backend scripts`);
-        } catch(err) {
+        } catch (err) {
           vscode.window.showInformationMessage(`Failed to re-initialize midas`);
         }
         break;
@@ -585,13 +592,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // terminal where rr has been started in
   registerTerminal(terminal, onExitHandler = null) {
     this.#terminal = terminal;
-    if(onExitHandler) {
+    if (onExitHandler) {
       this.#terminal.registerExitAction(onExitHandler);
     }
   }
 
   addTerminalExitHandler(handler) {
-    if(isNothing(this.#terminal)) {
+    if (isNothing(this.#terminal)) {
       throw new Error("No terminal registered to register handler with");
     }
     this.#terminal.registerExitAction(handler);

@@ -153,10 +153,11 @@
                 "type": "object",
                 "default": { "path": "", "closeTerminalOnEndOfSession": true, "endSessionOnTerminalExit": true },
                 "description": "External console settings",
+		"required": ["path"],
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to console. Requirements that currently needs to be met, to be be able to use explained in docs.",
+                    "description": "Path to terminal to launch. If it exists in $PATH only the command name has to be provided",
                     "default": ""
                   },
                   "closeTerminalOnEndOfSession": {
@@ -332,10 +333,11 @@
                 "type": "object",
                 "default": { "path": "", "closeTerminalOnEndOfSession": true },
                 "description": "External console settings",
+		"required": ["path"],
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to console. Requirements that currently needs to be met, to be be able to use explained in docs.",
+		    "description": "Path to terminal to launch. If it exists in $PATH only the command name has to be provided",
                     "default": ""
                   },
                   "closeTerminalOnEndOfSession": {

@@ -185,14 +185,14 @@ function resolveCommand(cmd, fully = true) {
   const whereis = execSync(`whereis ${cmd}`);
   const parts = whereis.toString().split(" ");
   if (parts.length < 2) {
-    throw new Error(`Command ${cmd} could not be resolved`);
+    throw new Error(`${cmd} could not be resolved`);
   }
   for (const result of parts.slice(1)) {
     if (Path.basename(result) == cmd) {
       return result;
     }
   }
-  throw new Error(`Command ${cmd} could not properly be resolved. Try providing the fully qualified path`);
+  throw new Error(`${cmd} could not properly be resolved. Try providing a fully qualified path`);
 }
 
 // Due to the client/server architecture that has been introduced to
@@ -284,6 +284,11 @@ async function spawnExternalRrConsole(config, rrArgs) {
   ]);
 }
 
+function showErrorPopup(message, detail = null, items = null) {
+  const options = { detail, modal: true };
+  return vscode.window.showErrorMessage(message, options, ...items);
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -294,4 +299,6 @@ module.exports = {
   spawnExternalRrConsole,
   isNothing,
   kill_pid,
+  showErrorPopup,
+  resolveCommand,
 };
