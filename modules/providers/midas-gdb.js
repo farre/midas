@@ -3,7 +3,7 @@ const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
 const { MidasRunMode } = require("../buildMode");
-const { isNothing, resolveCommand } = require("../utils");
+const { isNothing, resolveCommand, ContextKeys } = require("../utils");
 
 const initializer = (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -65,7 +65,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
         config.pid = pid;
       }
     }
-    vscode.commands.executeCommand("setContext", "midas.rrSession", false);
+    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
     return config;
   }
 
@@ -84,6 +84,7 @@ class DebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config));
+    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     return new vscode.DebugAdapterInlineImplementation(dbg_session);
   }
 }

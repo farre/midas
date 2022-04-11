@@ -47,21 +47,21 @@
         "title": "Continue all threads",
         "shortTitle": "Continue All",
         "icon": "$(debug-continue)",
-        "enablement": "midas.allStopModeSet == false && debugType == midas"
+        "enablement": "midas.allStopModeSet == false && midas.debugType == midas-gdb && midas.Running == false"
       },
       {
         "command": "midas.session-pause-all",
         "title": "Pause all threads",
         "shortTitle": "Pause all",
         "icon": "$(debug-pause)",
-        "enablement": "midas.allStopModeSet == false && debugType == midas"
+        "enablement": "midas.allStopModeSet == false && midas.debugType == midas-gdb && midas.Running == true"
       },
       {
         "command": "midas.reverse-finish",
         "title": "Reverse finish",
         "shortTitle": "Reverse finish",
         "icon": "$(debug-step-out)",
-        "enablement": "midas.rrSession == true && debugType == midas"
+        "enablement": "midas.rrSession == true && midas.debugType == midas-rr && midas.Running == false"
       },
       {
         "command": "midas.hot-reload-scripts",
@@ -79,17 +79,17 @@
         {
           "command": "midas.session-continue-all",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && debugType == midas-gdb"
+          "when": "midas.allStopModeSet == false && midas.debugType == midas-gdb"
         },
         {
           "command": "midas.session-pause-all",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && debugType == midas-gdb"
+          "when": "midas.allStopModeSet == false && midas.debugType == midas-gdb"
         },
         {
           "command": "midas.reverse-finish",
           "group": "midas",
-          "when": "midas.rrSession && debugType == midas-rr"
+          "when": "midas.rrSession == true && midas.debugType == midas-rr"
         }
       ]
     },
