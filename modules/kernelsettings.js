@@ -2,6 +2,10 @@ const fs = require("fs");
 
 // *nix utility functions for reading system/kernel variables
 
+/**
+ * Read ptrace setting
+ * @returns {number}
+ */
 function readPtraceScope() {
   let data = fs.readFileSync("/proc/sys/kernel/yama/ptrace_scope");
   const setting = data.toString().trim();
@@ -12,6 +16,10 @@ function readPtraceScope() {
   return n;
 }
 
+/**
+ * Read kernel.perf_event_paranoid setting
+ * @returns {number}
+ */
 function readPerfEventParanoid() {
   let data = fs.readFileSync("/proc/sys/kernel/perf_event_paranoid");
   const setting = data.toString().trim();

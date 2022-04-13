@@ -291,7 +291,15 @@ async function spawnExternalRrConsole(config, rrArgs) {
   ]);
 }
 
-function showErrorPopup(message, detail = null, items = null) {
+/**
+ * @typedef {{title: string, action: () => Promise<any> }} Choice
+ *
+ * @param { string } message
+ * @param { string } detail
+ * @param { Choice[] } items
+ * @returns { Promise<Choice> }
+ */
+async function showErrorPopup(message, detail = null, items = null) {
   const options = { detail, modal: true };
   return vscode.window.showErrorMessage(message, options, ...items);
 }

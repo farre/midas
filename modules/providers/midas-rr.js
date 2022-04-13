@@ -34,10 +34,10 @@ const initializer = async (config) => {
     config.setupCommands = [];
   }
   const perf_event_paranoid = krnl.readPerfEventParanoid();
-  if (perf_event_paranoid > 0) {
+  if (perf_event_paranoid > 1) {
     let choice = await showErrorPopup(
-      "perf_event_paranoid not set to 0.",
-      "rr requires it to be set to 0",
+      "perf_event_paranoid not set to <= 1.",
+      "rr needs it to be set to 1 to be performant.",
       initializerPopupChoices.perf_event_paranoid
     );
     if (choice) await choice.action();
