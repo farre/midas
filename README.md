@@ -3,11 +3,13 @@
 Midas is a debug adapter that utilizes the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications and as such uses GDB's great Python integration to be faster than some debug adapters, where possible.
 
 ## Requirements
+
 Midas is developed exclusively for GDB with Python integration in mind. If you are running a GDB which does not support it, or hasn't been built with Python functionality, Midas will not work, at all.
 
 And as it's developed with rr in mind, Linux is also a requirement.
 
 To check whether or not GDB has been built with Python, from a terminal write
+
 ```bash
 gdb --config
 ```
@@ -17,8 +19,8 @@ This will give you a list of GDB features built in. In this list, something like
     --with-python=/usr (relocatable)
     --with-python-libdir=/usr/lib (relocatable)
 
-
 Midas has been tested with the following GDB versions
+
 - GDB 9.2, GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
 - rr 5.5.0: seeing as how this uses the GDB remote serial protocol, earlier versions should probably be fine
 
@@ -28,24 +30,28 @@ We distinguish between a "normal" debug session and a "replayable debug session"
 in `launch.json` config:
 
 ### Normal debug session:
+
 ```json
 {
-    "type": "midas-gdb",
-    "request": "launch",
-    "name": "Launch Debug",
-    "program": "/path/to/binary",
-    "cwd": "${workspaceFolder}",
-    "stopOnEntry": true,
-    "trace": "Off",
-    "allStopMode": true,
+  "type": "midas-gdb",
+  "request": "launch",
+  "name": "Launch Debug",
+  "program": "/path/to/binary",
+  "cwd": "${workspaceFolder}",
+  "stopOnEntry": true,
+  "trace": "Off",
+  "allStopMode": true
 }
 ```
+
 Required values are
+
 - type
 - request: launch
 - program: path/to/binary
 
 Default values for non-required (or non-set) properties:
+
 - trace: "Off"
 - stopOnEntry: false
 - allStopMode: true
@@ -54,6 +60,7 @@ Default values for non-required (or non-set) properties:
 All stop mode, means that all stop / continue actions halt or start threads in unison.
 
 Trace has the following settings:
+
 - "Off", no logging
 - "GDB events" - gdb events are logged to the developer console
 - "Python logs" - logs performance and debug messages to performance_time.log, error.log and debug.log.
@@ -66,9 +73,9 @@ on the debug session type it takes different values. For a normal debug session 
 
 ```json
     "externalConsole": {
-        "path": "x-terminal-emulator", 
-        "closeTerminalOnEndOfSession": true, 
-        "endSessionOnTerminalExit": true 
+        "path": "x-terminal-emulator",
+        "closeTerminalOnEndOfSession": true,
+        "endSessionOnTerminalExit": true
     }
 ```
 
@@ -76,8 +83,8 @@ rr:
 
 ```json
     "externalConsole": {
-        "path": "x-terminal-emulator", 
-        "closeTerminalOnEndOfSession": true, 
+        "path": "x-terminal-emulator",
+        "closeTerminalOnEndOfSession": true,
     }
 ```
 
@@ -90,38 +97,40 @@ a shell with this command, external console should work on your Linux distro as 
 `x-terminal-emulator -e sh -c "tty > /tmp/someFileMidasDecidesAtRunTime && echo $$ >> /tmp/someFileMidasDecidesAtRunTime && sleep 100000000000000"`
 
 ## Setup commands
+
 Another field that can be added is the `setupCommands` which takes an array of strings that are GDB commands to be executed before
 loading the binary or file containing symbols (the `-iex "someCommand here"`). Below is an example of such
 
 ```json
 {
-    "type": "midas-gdb",
-    "request": "launch",
-    "name": "Launch Debug",
-    "program": "${workspaceFolder}/path/binary",
-    "cwd": "${workspaceFolder}",
-    "stopOnEntry": true,
-    "trace": "Off",
-    "allStopMode": true,
-    "setupCommands": ["set print object on", "set auto-load safe-path /"]
+  "type": "midas-gdb",
+  "request": "launch",
+  "name": "Launch Debug",
+  "program": "${workspaceFolder}/path/binary",
+  "cwd": "${workspaceFolder}",
+  "stopOnEntry": true,
+  "trace": "Off",
+  "allStopMode": true,
+  "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```
 
 ## Replayable debug session (rr)
 
 Configuration example of a rr debug session:
+
 ```json
 {
-    "type": "midas-rr",
-    "request": "launch",
-    "name": "Launch replay debug session",
-    "program": "${workspaceFolder}/path/binary",
-    "cwd": "${workspaceFolder}",
-    "stopOnEntry": true,
-    "trace": "Off",
-    "gdbPath": "gdb",
-    "rrPath": "rr",
-    "serverAddress": "localhost:50505"
+  "type": "midas-rr",
+  "request": "launch",
+  "name": "Launch replay debug session",
+  "program": "${workspaceFolder}/path/binary",
+  "cwd": "${workspaceFolder}",
+  "stopOnEntry": true,
+  "trace": "Off",
+  "gdbPath": "gdb",
+  "rrPath": "rr",
+  "serverAddress": "localhost:50505"
 }
 ```
 
@@ -135,7 +144,8 @@ However, you shouldn't have to fill out a placeholder for yourself, VSCode shoul
 ![Default Launch config](docs/launchconfig.gif)
 
 ## Usage
-You can use GDB/rr from the debug console in VSCode as normal. No prefix commands with -exec etc, just type whatever commands you want. Notice however, that some commands might alter GDB state which might *not* be seen by Midas, so if you ever come across a command that breaks Midas or make Midas behave strange, please be so kind and report it so that edge cases can be handled.
+
+You can use GDB/rr from the debug console in VSCode as normal. No prefix commands with -exec etc, just type whatever commands you want. Notice however, that some commands might alter GDB state which might _not_ be seen by Midas, so if you ever come across a command that breaks Midas or make Midas behave strange, please be so kind and report it so that edge cases can be handled.
 
 Setting watchpoints; right click the variable in the variable window and pick the menu option for what watch point you want to set. The watchpoints are always set by address (location). The reasoning behind this, is that the re-evaluation of watch points when new scopes are entered will slow them down. Doing this defeats the purpose of fast hardware watchpoints.
 
@@ -145,7 +155,9 @@ To package extension, run the alias
 `yarn package` or `vsce package --yarn` (vsce needs to be installed; `npm install -g vsce`)
 
 ## Changelog
+
 Can be [found here](docs/CHANGELOG.md)
 
 ## Known bugs
+
 Can be [found here](docs/BUGS.MD)
