@@ -14,6 +14,7 @@ test/cppworkspace/attach/.vscode
 .vscode/settings.json
 __pycache__
 
+**/build/**
 
 update.log
 time.log
@@ -23,3 +24,4 @@ error.log
 exception-logger.log
 .vscode/launch.json
 .vscode/launch.json
+test/cppworkspace/rr/.vscode/

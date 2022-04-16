@@ -3,9 +3,43 @@
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
-const { Source, ContinuedEvent } = require("@vscode/debugadapter");
+const { Source, ContinuedEvent, ExitedEvent } = require("@vscode/debugadapter");
 const path = require("path");
 const { InitializedEvent, StoppedEvent, BreakpointEvent, TerminatedEvent, ThreadEvent } = require("@vscode/debugadapter");
+
+// POSIX signals and their descriptions
+const SIGNALS = {
+  SIGHUP: { code: 1, description: "Hangup" },
+  SIGINT: { code: 2, description: "Terminal interrupt" },
+  SIGQUIT: { code: 3, description: "Terminal quit" },
+  SIGILL: { code: 4, description: "Illegal instruction" },
+  SIGTRAP: { code: 5, description: "Trace trap" },
+  SIGIOT: { code: 6, description: "IOT Trap" },
+  SIGBUS: { code: 7, description: "BUS error" },
+  SIGFPE: { code: 8, description: "Floating point exception" },
+  SIGKILL: { code: 9, description: "Kill" },
+  SIGUSR1: { code: 10, description: "User defined signal 1" },
+  SIGSEGV: { code: 11, description: "Invalid memory reference" },
+  SIGUSR2: { code: 12, description: "User defined signal 2 (POSIX)" },
+  SIGPIPE: { code: 13, description: "Broken pipe" },
+  SIGALRM: { code: 14, description: "Alarm clock" },
+  SIGTERM: { code: 15, description: "Terminated" },
+  SIGSTKFLT: { code: 16, description: "Stack fault" },
+  SIGCHLD: { code: 17, description: "Child Signal" },
+  SIGCONTv: { code: 18, description: "Continue executing, if stopped" },
+  SIGSTOP: { code: 19, description: "Stopped process" },
+  SIGTSTP: { code: 20, description: "Terminal stop signal" },
+  SIGTTIN: { code: 21, description: "Background process trying to read, from TTY" },
+  SIGTTOU: { code: 22, description: "Background process trying to write, to TTY" },
+  SIGURG: { code: 23, description: "Urgent condition on socket" },
+  SIGXCPU: { code: 24, description: "CPU limit exceeded" },
+  SIGXFSZ: { code: 25, description: "File size limit exceeded" },
+  SIGVTALRM: { code: 26, description: "Virtual alarm clock" },
+  SIGPROF: { code: 27, description: "Profiling alarm clock" },
+  SIGWINCH: { code: 28, description: "Window size change" },
+  SIGIO: { code: 29, description: "I/O now possible" },
+  SIGPWR: { code: 30, description: "Power failure restart" },
+};
 
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const {
@@ -532,18 +566,66 @@ class GDB extends GDBMixin(GDBBase) {
     log(getFunctionName(), payload);
   }
 
+  #onSignal(payload) {
+    switch (payload.data["signal-name"]) {
+      case "SIGSEGV":
+        let threadId = +payload.data["thread-id"];
+        let evt = new StoppedEvent("exception", threadId);
+        let body = {
+          reason: "exception",
+          description: SIGNALS[payload.data["signal-name"]].description,
+          text: "Segmentation Fault",
+          threadId: threadId,
+          allThreadsStopped: payload.data["stopped-threads"] == "all",
+        };
+        evt.body = body;
+        this.#target.sendEvent(evt);
+        break;
+      case "SIGKILL":
+        if (payload.data.frame.func == "syscall_traced") {
+          let evt = new ExitedEvent(SIGNALS[payload.data["signal-name"]].code);
+          this.#target.sendEvent(evt);
+        } else {
+          let threadId = +payload.data["thread-id"];
+          let evt = new StoppedEvent("exception", threadId);
+          let body = {
+            reason: "exception",
+            description: SIGNALS[payload.data["signal-name"]].description,
+            text: SIGNALS[payload.data["signal-name"]].description,
+            threadId: threadId,
+            allThreadsStopped: payload.data["stopped-threads"] == "all",
+          };
+          evt.body = body;
+          this.#target.sendEvent(evt);
+        }
+        break;
+      case "SIGINT":
+        break;
+      case "0":
+        if (this.#rrSession) {
+          // replayable binary has executed to it's finish; we're now in rr-land
+          let evt = new StoppedEvent("entry", 1);
+          let body = {
+            reason: "entry",
+            description: "rr trampoline code",
+            threadId: 1,
+            allThreadsStopped: true,
+          };
+          evt.body = body;
+          this.#target.sendEvent(evt);
+        }
+        break;
+    }
+  }
+
   #onExec(payload) {
     log(getFunctionName(), payload);
     if (this.#rrSession) {
-      if ((payload.data["signal-name"] ?? "") == "SIGKILL" && (payload.data.frame.func ?? "") == "syscall_traced") {
-        // replayable binary has executed to it's finish; we're now in rr-land
-        let evt = new StoppedEvent("pause", 1);
-        this.#target.sendEvent(evt);
-        return;
-      }
-      if (payload.data.reason == "exited-normally") {
+      if (payload.data.reason == "signal-received") {
+        this.#onSignal(payload);
+      } else if (payload.data.reason == "exited-normally") {
         // rr has exited
-        this.sendEvent(new StoppedEvent("replay ended"));
+        this.sendEvent(new TerminatedEvent());
         return;
       }
       if ((payload.state ?? "") == "running") {
@@ -582,7 +664,8 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "signal-received": {
-        this.#onSignalReceived(payload.thread, payload);
+        // unfortunately MI / GDB sends a bunch of different messages on MI. Seems pretty inefficient to me, but what do I know. We handle the
+        // signal from an onExec emitted event; which will dispatch to this.#onSignal instead. That event contains more information.
         break;
       }
       case "end-stepping-range": {
