@@ -637,6 +637,8 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendEvent(new TerminatedEvent());
       } else if (payload.state == "running") {
         this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
+      } else if (payload.data.reason == "signal-received") {
+        this.#onSignal(payload);
       }
     }
   }

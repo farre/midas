@@ -11,19 +11,23 @@ import gdb
 import midas_utils
 import config
 
+
 def vs_display(name: str, value: str, evaluate_name: str, variable_reference: int):
-    return { "name": name, "value": value, "evaluateName": evaluate_name, "variablesReference": variable_reference }
+    return {"name": name, "value": value, "evaluateName": evaluate_name, "variablesReference": variable_reference}
+
 
 class ReferencedValue:
     """
     Base class for the Values to be displayed in the VSCode UI
     """
+
     def __init__(self, name, value):
         self.name = name
         self.value = value
         self.variableRef = -1
         self.children = []
         self.resolved = False
+        self.watched = False
 
     def get_type(self):
         return self.value.referenced_value().type
@@ -32,6 +36,9 @@ class ReferencedValue:
         return self.value.referenced_value()
 
     def resolve_children(self, value, owningStackFrame):
+        # if we're on the watch list, we will continue to exist
+        # and thus be resolved already. just grab the contents
+        # of our children and return that.
         if self.resolved:
             result = []
             for child in self.children:
@@ -46,7 +53,10 @@ class ReferencedValue:
                     v = Variable.from_value(name, value)
                     vref = v.get_variable_reference()
                     if vref != 0:
-                        config.variableReferences.add_mapping(vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                        if self.is_watched():
+                            owningStackFrame.watchVariableReferences[vref] = v
+                        config.variableReferences.add_mapping(
+                            vref, owningStackFrame.threadId, owningStackFrame.localsReference)
                         owningStackFrame.variableReferences[vref] = v
                     result.append(v.to_vs())
                     self.children.append(v)
@@ -54,9 +64,11 @@ class ReferencedValue:
             else:
                 res = pp.to_string()
                 if hasattr(res, "value"):
-                    result.append({"name": "value", "value": "{}".format(res.value()), "evaluateName": None, "variablesReference": 0 })
+                    result.append({"name": "value", "value": "{}".format(
+                        res.value()), "evaluateName": None, "variablesReference": 0})
                 else:
-                    result.append({"name": "value", "value": "{}".format(res), "evaluateName": None, "variablesReference": 0 })
+                    result.append({"name": "value", "value": "{}".format(
+                        res), "evaluateName": None, "variablesReference": 0})
                 return result
         fields = value.type.fields()
         for field in fields:
@@ -64,26 +76,42 @@ class ReferencedValue:
                 v = Variable.from_value(field.name, value[field])
                 vref = v.get_variable_reference()
                 if vref != 0:
-                    config.variableReferences.add_mapping(vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                    if self.is_watched():
+                        owningStackFrame.watchVariableReferences[vref] = v
+                    config.variableReferences.add_mapping(
+                        vref, owningStackFrame.threadId, owningStackFrame.localsReference)
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
             elif field.is_base_class:
                 v = BaseClass.from_value(field.name, value, field.type)
                 vref = v.get_variable_reference()
-                config.variableReferences.add_mapping(vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                if self.is_watched():
+                    owningStackFrame.watchVariableReferences[vref] = v
+                config.variableReferences.add_mapping(
+                    vref, owningStackFrame.threadId, owningStackFrame.localsReference)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
             elif not hasattr(field, "bitpos"):
                 v = StaticVariable(field.name, value, field)
                 vref = v.get_variable_reference()
-                config.variableReferences.add_mapping(vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                if self.is_watched():
+                    owningStackFrame.watchVariableReferences[vref] = v
+                config.variableReferences.add_mapping(
+                    vref, owningStackFrame.threadId, owningStackFrame.localsReference)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
         self.resolved = True
         return result
+
+    def set_watched(self):
+        self.watched = True
+
+    def is_watched(self):
+        return self.watched
+
 
 class Variable(ReferencedValue):
     def __init__(self, name, gdbValue):
@@ -125,7 +153,7 @@ class Variable(ReferencedValue):
         try:
             return super().resolve_children(it, owningStackFrame)
         except gdb.MemoryError:
-            return [ { "name": "value", "value": "Invalid address: {}".format(self.get_value()), "evaluateName": None, "variablesReference": 0 } ]
+            return [{"name": "value", "value": "Invalid address: {}".format(self.get_value()), "evaluateName": None, "variablesReference": 0}]
 
     def to_vs(self):
         v = self.get_value()
@@ -150,10 +178,12 @@ class Variable(ReferencedValue):
                 evaluate_name=None,
                 variable_reference=variableReference)
 
+
 class BaseClass(ReferencedValue):
     """
     Represents variable scopes in the UI that correspond to a base class
     """
+
     def __init__(self, name, rootValue):
         super(BaseClass, self).__init__(name, rootValue)
         self.variableRef = config.next_variable_reference()
@@ -175,6 +205,7 @@ class BaseClass(ReferencedValue):
     def get_children(self, owningStackFrame):
         return super().resolve_children(self.get_value(), owningStackFrame=owningStackFrame)
 
+
 class StaticVariable(ReferencedValue):
     """
     Type that signals that a member variable is a static member. These variables are not laid out inside
@@ -192,10 +223,10 @@ class StaticVariable(ReferencedValue):
     @config.timeInvocation
     def to_vs(self):
         return vs_display(
-            name = "(static) %s" % self.name,
-            value = self.display,
-            evaluate_name = None,
-            variable_reference = self.get_variable_reference())
+            name="(static) %s" % self.name,
+            value=self.display,
+            evaluate_name=None,
+            variable_reference=self.get_variable_reference())
 
     def get_variable_reference(self):
         return self.variableRef

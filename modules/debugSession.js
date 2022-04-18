@@ -262,7 +262,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async variablesRequest(response, { variablesReference }) {
+  async variablesRequest(response, { variablesReference }, request) {
     response.body = await this.exec(`variable-request ${variablesReference}`);
     this.sendResponse(response);
   }
