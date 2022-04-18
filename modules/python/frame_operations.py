@@ -1,9 +1,11 @@
 import gdb
 
+
 def frame_iterator(frame):
     while frame is not None:
         yield(frame)
         frame = frame.older()
+
 
 def take_n_frames(frame, num):
     f_iterator = frame
@@ -15,6 +17,7 @@ def take_n_frames(frame, num):
             yield f
         count -= 1
 
+
 def find_first_equal_frame(stackFrameList, frameList):
     for x, sf in enumerate(stackFrameList):
         fa = sf.frame
@@ -22,6 +25,7 @@ def find_first_equal_frame(stackFrameList, frameList):
             if fa == fb:
                 return (x, y)
     return None
+
 
 def find_first_identical_frames(stackFrameList, frame, stopCount):
     frames = [f for f in take_n_frames(frame, stopCount)]
@@ -34,6 +38,7 @@ def find_first_identical_frames(stackFrameList, frame, stopCount):
                 return (x, newFrames)
     return None
 
+
 def iterate_frame(frame, levels):
     try:
         while levels > 0:
@@ -43,8 +48,18 @@ def iterate_frame(frame, levels):
     except:
         return None
 
+
 def iterate_frame_blocks(frame) -> gdb.Block:
     block = frame.block()
     while not block.is_static and not block.superblock.is_global:
         yield block
         block = block.superblock
+
+
+def find_top_function_block(frame) -> gdb.Block:
+    block = frame.block()
+    last = block
+    while not block.is_static and not block.superblock.is_global:
+        last = block
+        block = block.superblock
+    return last

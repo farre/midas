@@ -63,7 +63,7 @@ int main(int argc, const char **argv)
   const auto somelocal = 42;
   constexpr int array[42] = {};
   auto iptr = new int{42};
-
+  t.s.j++;
 
   // shadowing test
   int i = 10;

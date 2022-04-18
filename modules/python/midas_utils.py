@@ -3,6 +3,7 @@ import json
 import sys
 import logging
 
+
 def type_is_primitive(valueType):
     try:
         for f in valueType.fields():
@@ -12,6 +13,7 @@ def type_is_primitive(valueType):
                 return False
     except TypeError:
         return True
+
 
 def get_members_recursively(field, memberList, statics):
     if field.bitsize > 0:
@@ -28,6 +30,7 @@ def get_members_recursively(field, memberList, statics):
                 memberList.append(field.name)
     else:
         statics.append(field.name)
+
 
 def getFunctionBlock(frame) -> gdb.Block:
     block = frame.block()
@@ -57,11 +60,14 @@ def parse_command_args(arg_string, *argv):
         index += 1
     return result
 
+
 def prepare_command_response(cmdName, contents):
     return '<gdbjs:cmd:{0} {1} {0}:cmd:gdbjs>'.format(cmdName, contents)
 
+
 def prepare_event_response(name, payload):
     return '<gdbjs:event:{0} {1} {0}:event:gdbjs>'.format(name, payload)
+
 
 def send_response(name, result, prepareFnPtr):
     """Writes result of an operation to client stream."""
@@ -74,11 +80,14 @@ def send_response(name, result, prepareFnPtr):
     sys.stdout.write(packet)
     sys.stdout.flush()
 
+
 def value_is_reference(type):
     code = type.code
     return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
 # When parsing closely related blocks, this is faster than gdb.parse_and_eval on average.
+
+
 def get_closest(frame, name):
     block = frame.block()
     while (not block.is_static) and (not block.superblock.is_global):
@@ -94,6 +103,8 @@ def get_closest(frame, name):
 # Since ContentsOf command always takes a full "expression path", now it doesn't matter if the sub-paths of the expression
 # contain non-member names; because if there's a pretty printer that rename the members (like in std::tuple, it's [1], [2], ... [N])
 # these will be found and traversed properly, anyway
+
+
 def resolve_gdb_value(value, components):
     it = value
     while len(components) > 0:

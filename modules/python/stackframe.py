@@ -5,7 +5,7 @@ import json
 
 from os import path
 import config
-from frame_operations import iterate_frame_blocks
+from frame_operations import find_top_function_block, iterate_frame_blocks
 from variable import Variable, BaseClass, StaticVariable
 
 
@@ -117,7 +117,8 @@ class StackFrame:
         self.localsReference = config.next_variable_reference()
         self.args = []
         self.argsReference = config.next_variable_reference()
-
+        self.watchVariableReferences: dict[int,
+                                           Union[Variable, BaseClass, StaticVariable]] = {}
         self.variableReferences: dict[int,
                                       Union[Variable, BaseClass, StaticVariable]] = {}
         self.registerReference = config.next_variable_reference()
@@ -146,94 +147,37 @@ class StackFrame:
     @config.timeInvocation
     def initialize(self):
         global REGISTER_DESCRIPTOR_SETS
-        """Initialize this stack frame based on the current block it's in. This does not mean
-        it is fully initialized as new sub blocks may come into existence."""
         if self.init:
             return
-
-        b = self.frame.block()
-        last = b
-        while not b.is_static and not b.superblock.is_global:
-            last = b
-            self.blocks.insert(0, last)
-            b = b.superblock
-
-        index = 0
-        invalidBlockIndices = []
-        for block in self.blocks:
-            if block.is_valid:
-                blockvalues = []
-                for symbol in block:
-                    if symbol.is_variable and not symbol.is_argument:
-                        v = Variable.from_symbol(symbol, self.frame)
-                        vr = v.get_variable_reference()
-                        if vr != 0:
-                            config.variableReferences.add_mapping(
-                                vr, self.threadId, self.localsReference)
-                            self.variableReferences[vr] = v
-                        blockvalues.append(v)
-                    elif symbol.is_argument:
-                        v = Variable.from_symbol(symbol, self.frame)
-                        vr = v.get_variable_reference()
-                        if vr != 0:
-                            config.variableReferences.add_mapping(
-                                vr, self.threadId, self.localsReference)
-                            self.variableReferences[vr] = v
-                        self.args.append(v)
-                self.block_values.append(blockvalues)
-                index += 1
-            else:
-                invalidBlockIndices.append(index)
-                index += 1
-        if len(invalidBlockIndices) != 0:
-            for idx in invalidBlockIndices:
-                self.blocks.pop(idx)
-                self.block_values.pop(idx)
 
         if REGISTER_DESCRIPTOR_SETS is None:
             REGISTER_DESCRIPTOR_SETS = RegisterDescriptors(self.frame)
         self.init = True
 
     @config.timeInvocation
-    def update_blocks(self):
-        self.initialize()
-        # means we're still in the same block as last time we checked
-        if self.frame.block() == self.blocks[-1].start:
-            return
-
-        newblocks = []
-        length = len(self.blocks)
-        for currentBlock in iterate_frame_blocks(self.frame):
-            for index, block in enumerate(reversed(self.blocks)):
-                if block.start == currentBlock.start:
-                    self.blocks = self.blocks[:(length - index)]
-                    self.block_values = self.block_values[:(length - index)]
-                    for newblock in newblocks:
-                        blockvalues = []
-                        for symbol in newblock:
-                            if symbol.is_variable and not symbol.is_argument:
-                                v = Variable.from_symbol(symbol, self.frame)
-                                blockvalues.append(v)
-                                vr = v.get_variable_reference()
-                                if vr != 0:
-                                    config.variableReferences.add_mapping(
-                                        vr, self.threadId, self.localsReference)
-                                    self.variableReferences[vr] = v
-                        self.block_values.append(blockvalues)
-                        self.blocks.append(newblock)
-                    return
-            newblocks.insert(0, currentBlock)
-
-    @config.timeInvocation
     def get_locals(self):
-        self.update_blocks()
-        res = {}
+        # self.update_blocks()
+        self.initialize()
+        self.block_values = []
+        self.variableReferences = {}
+        names = set()
+        for b in iterate_frame_blocks(self.frame):
+            blockvalues = []
+            for symbol in b:
+                if symbol.is_variable and not symbol.is_argument and symbol.name not in names:
+                    v = Variable.from_symbol(symbol, self.frame)
+                    blockvalues.append(v)
+                    vr = v.get_variable_reference()
+                    if vr != 0:
+                        config.variableReferences.add_mapping(
+                            vr, self.threadId, self.localsReference)
+                        self.variableReferences[vr] = v
+                    names.add(symbol.name)
+            self.block_values.append(blockvalues)
+        result = []
         for block_values in self.block_values:
             for v in block_values:
-                res[v.name] = v
-        result = []
-        for v in res.values():
-            result.append(v.to_vs())
+                result.append(v.to_vs())
         return result
 
     @config.timeInvocation
@@ -244,16 +188,27 @@ class StackFrame:
 
     @config.timeInvocation
     def get_args(self):
-        self.initialize()
         result = []
-        for arg in self.args:
-            result.append(arg.to_vs())
+        b = find_top_function_block(self.frame)
+        for symbol in b:
+            if symbol.is_argument:
+                v = Variable.from_symbol(symbol, self.frame)
+                vr = v.get_variable_reference()
+                if vr != 0:
+                    config.variableReferences.add_mapping(
+                        vr, self.threadId, self.localsReference)
+                    self.variableReferences[vr] = v
+                result.append(v.to_vs())
         return result
 
     @config.timeInvocation
     def get_variable_members(self, variableReference):
         var = self.variableReferences.get(variableReference)
-        return var.get_children(self)
+        if var is not None:
+            return var.get_children(self)
+        else:
+            config.update_logger().debug("Getting watched variable contents")
+            return self.watchVariableReferences[variableReference].get_children(self)
 
     def get(self, variableReference):
         if variableReference == self.localsReference:
@@ -286,7 +241,10 @@ class StackFrame:
             if self.variableReferences.get(variableReference) is not None:
                 return True
             else:
-                return False
+                return self.watchVariableReferences.get(variableReference) is not None
+
+    def is_watching(self, variableReference):
+        return self.watchVariableReferences.get(variableReference) is not None
 
     def frame_id(self):
         return self.localsReference
@@ -295,11 +253,12 @@ class StackFrame:
         """ Adds variable to watch if it doesn't exist and returns created/existing `Variable`"""
         if self.watch_variables.get(expr) is None:
             v = Variable.from_value(expr, variable)
+            v.set_watched()
             self.watch_variables[expr] = v
             vr = v.get_variable_reference()
             if vr != 0:
                 config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
-                self.variableReferences[vr] = v
+                self.watchVariableReferences[vr] = v
                 config.variableReferences.add_mapping(
                     vr, self.threadId, self.frame_id())
             return v
