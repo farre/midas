@@ -277,18 +277,22 @@ class StackFrame:
 
     def add_watched_variable(self, expr, variable):
         """ Adds variable to watch if it doesn't exist and returns created/existing `Variable`"""
-        if self.watch_variables.get(expr) is None:
-            v = Variable.from_value(expr, variable)
-            v.set_watched()
-            self.watch_variables[expr] = v
-            vr = v.get_variable_reference()
-            if vr != 0:
-                config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
-                self.watchVariableReferences[vr] = v
-                config.variableReferences.add_mapping(vr, self)
-            return v
-        else:
-            return self.watch_variables[expr]
+        vr = None
+        tmp = self.watch_variables.get(expr)
+        if tmp is not None:
+            vr = tmp.get_variable_reference()
+        v = Variable.from_value(expr, variable)
+        # assume the previous VRID, no need to keep incrementing; since we know the variable by expr anyway
+        # this comes with the added benefit of the Python reference at self.watchVariableReferences[vr] going to 0 => de alloc
+        v.variableRef = -1 if vr is None else vr
+        v.set_watched()
+        self.watch_variables[expr] = v
+        vr = v.get_variable_reference()
+        if vr != 0:
+            config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
+            self.watchVariableReferences[vr] = v
+            config.variableReferences.add_mapping(vr, self)
+        return v
 
     def reference_key(self):
         return config.ReferenceKey(self.threadId, self.frame_id())

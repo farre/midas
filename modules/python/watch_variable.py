@@ -30,6 +30,11 @@ def find_variable(frame, name):
     it = midas_utils.get_global(frame, name)
     return it
 
+# todo(simon): make watch-variable request take a `STOP` parameter;
+#  this is so that we can say from VSCode that we want to watch for a variable up to scope `SCOPE`
+#  this is for performance reasons; if we're watching a variable that we know is not a global, then the user should
+#  be able to say that, that way we won't scan the entire scope every time which can be pretty costly.
+
 
 class WatchVariable(gdb.Command):
     """Not to be confused with watch point."""
