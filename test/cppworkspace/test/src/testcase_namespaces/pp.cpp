@@ -22,8 +22,15 @@ namespace prettyprinting {
         int i, j;
     };
 
+    struct Ref {
+        int& intRef;
+    };
+
     void main() {
         std::tuple<int, Hidden> tup{42, Hidden{1,2}};
+        auto&[id, hidden] = tup;
+        Ref intRef{id};
+        id++;
         bank_account b{1, "john doe", 1.05f};
         b.print_values();
         employee_t janedoe{2, "jane doe", new bank_account{2, "jane doe", 1.08f}, "manager"};

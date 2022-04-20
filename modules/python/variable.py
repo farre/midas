@@ -16,6 +16,12 @@ def vs_display(name: str, value: str, evaluate_name: str, variable_reference: in
     return {"name": name, "value": value, "evaluateName": evaluate_name, "variablesReference": variable_reference}
 
 
+def is_variable_referenceable(value_type):
+    """Checks the type `value_type` if it's a structured type or a pointer type (which itself can be an array for instance)
+       These types are represented in the VSCode UI as scopes that can be folded."""
+    return not midas_utils.type_is_primitive(value_type) or midas_utils.value_is_reference(value_type)
+
+
 class ReferencedValue:
     """
     Base class for the Values to be displayed in the VSCode UI
@@ -26,25 +32,20 @@ class ReferencedValue:
         self.value = value
         self.variableRef = -1
         self.children = []
-        self.resolved = False
         self.watched = False
 
     def get_type(self):
-        return self.value.referenced_value().type
+        return self.value.type
 
     def get_value(self):
-        return self.value.referenced_value()
+        code = self.value.type.code
+        # if we're a reference to primitive type, like int&: we want to return the actual int here
+        # however, if we are a int* we don't - as it might be a range of values behind it.
+        if (code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF) and self.variableRef == 0:
+            return self.value.referenced_value()
+        return self.value
 
     def resolve_children(self, value, owningStackFrame):
-        # if we're on the watch list, we will continue to exist
-        # and thus be resolved already. just grab the contents
-        # of our children and return that.
-        if self.resolved:
-            result = []
-            for child in self.children:
-                result.append(child.to_vs())
-            return result
-
         result = []
         pp = gdb.default_visualizer(value)
         if pp is not None:
@@ -59,7 +60,6 @@ class ReferencedValue:
                             vref, owningStackFrame)
                         owningStackFrame.variableReferences[vref] = v
                     result.append(v.to_vs())
-                    self.children.append(v)
                 return result
             else:
                 res = pp.to_string()
@@ -82,7 +82,6 @@ class ReferencedValue:
                         vref, owningStackFrame)
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
-                self.children.append(v)
             elif field.is_base_class:
                 v = BaseClass.from_value(field.name, value, field.type)
                 vref = v.get_variable_reference()
@@ -91,7 +90,6 @@ class ReferencedValue:
                 config.variableReferences.add_mapping(vref, owningStackFrame)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
-                self.children.append(v)
             elif not hasattr(field, "bitpos"):
                 v = StaticVariable(field.name, value, field)
                 vref = v.get_variable_reference()
@@ -100,8 +98,6 @@ class ReferencedValue:
                 config.variableReferences.add_mapping(vref, owningStackFrame)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
-                self.children.append(v)
-        self.resolved = True
         return result
 
     def set_watched(self):
@@ -116,28 +112,21 @@ class Variable(ReferencedValue):
         super(Variable, self).__init__(name, gdbValue)
 
     def from_value(name, value):
-        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
-        # when trying to dereference that RVALUE reference
-        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
-            return Variable(name, value)
-        else:
-            return Variable(name, value.reference_value())
+        return Variable(name, value)
 
     def from_symbol(symbol, frame):
         value = symbol.value(frame)
-        # Special case. GDB destroys itself if it tries to take a reference to an RVALUE reference
-        # when trying to dereference that RVALUE reference
-        if value.type.code == gdb.TYPE_CODE_RVALUE_REF:
-            return Variable(symbol.name, value)
-        else:
-            return Variable(symbol.name, value.reference_value())
+        return Variable(symbol.name, value)
 
     def get_variable_reference(self):
         if self.variableRef == -1:
-            v = self.value
-            if midas_utils.value_is_reference(v.type):
-                v = v.referenced_value()
-            if not midas_utils.type_is_primitive(v.type):
+            code = self.value.type.code
+            remove_ref_t = None
+            if code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF:
+                remove_ref_t = self.value.type.target()
+            else:
+                remove_ref_t = self.value.type
+            if not midas_utils.type_is_primitive(remove_ref_t) or code == gdb.TYPE_CODE_PTR:
                 vr = config.next_variable_reference()
                 self.variableRef = vr
             else:
@@ -163,6 +152,7 @@ class Variable(ReferencedValue):
                 variable_reference=0)
 
         variableReference = self.get_variable_reference()
+        # type is primitive
         if variableReference == 0:
             return vs_display(
                 name=self.name,
@@ -170,6 +160,7 @@ class Variable(ReferencedValue):
                 evaluate_name=None,
                 variable_reference=variableReference)
         else:
+            # type is structured (or an array, etc)
             return vs_display(
                 name=self.name,
                 value="{}".format(v.type),
@@ -187,7 +178,7 @@ class BaseClass(ReferencedValue):
         self.variableRef = config.next_variable_reference()
 
     def from_value(name, value, type):
-        v = value.cast(type).reference_value()
+        v = value.cast(type)
         return BaseClass(name, v)
 
     def to_vs(self):
@@ -211,14 +202,14 @@ class StaticVariable(ReferencedValue):
     incurs an astronomical cost. Thus, we handle these special cases by deferring fetching to an explicit action
     by the user (i.e. clicking the fold out icon in the Variables list).
     """
-    @config.timeInvocation
+    @ config.timeInvocation
     def __init__(self, name, rootvalue, field):
         super(StaticVariable, self).__init__(name, rootvalue)
         self.variableRef = config.next_variable_reference()
         self.display = rootvalue.type[field.name].type.name
         self.field = field
 
-    @config.timeInvocation
+    @ config.timeInvocation
     def to_vs(self):
         return vs_display(
             name="(static) %s" % self.name,
@@ -229,7 +220,7 @@ class StaticVariable(ReferencedValue):
     def get_variable_reference(self):
         return self.variableRef
 
-    @config.timeInvocation
+    @ config.timeInvocation
     def get_children(self, owningStackFrame):
         value = self.value[self.name]
         if midas_utils.type_is_primitive(value.type):
