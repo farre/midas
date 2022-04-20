@@ -35,8 +35,8 @@ class VariableReferenceMap:
     def __init__(self):
         self.lookup = {}
 
-    def add_mapping(self, variableReference, threadId, stackFrameId):
-        self.lookup[variableReference] = ReferenceKey(threadId, stackFrameId)
+    def add_mapping(self, variableReference, midasStackFrame):
+        self.lookup[variableReference] = midasStackFrame.reference_key()
 
     def get_context(self, variableReference) -> ReferenceKey:
         return self.lookup.get(variableReference)

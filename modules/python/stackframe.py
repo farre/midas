@@ -105,6 +105,10 @@ class RegisterDescriptors:
 REGISTER_DESCRIPTOR_SETS: RegisterDescriptors = None
 
 
+def scope(name, variableReference, presentationHint, expensive=False):
+    return {"name": name, "variablesReference": variableReference, "expensive": expensive, "presentationHint": presentationHint}
+
+
 class StackFrame:
     def __init__(self, frame, threadId):
         """Creates a stack frame. Used for querying about local variables, arguments etc.
@@ -123,26 +127,26 @@ class StackFrame:
                                       Union[Variable, BaseClass, StaticVariable]] = {}
         self.registerReference = config.next_variable_reference()
 
+        self.statics = []
+        self.staticVariableReferences = {}
+        self.staticsReference = config.next_variable_reference()
+        self.static_initialized = False
         self.block_values = []
         self.init = False
+        self.watch_variables: dict[str, Variable] = {}
 
         self.scopes = [
-            {"name": "Locals", "variablesReference": self.localsReference,
-                "expensive": False, "presentationHint": "locals"},
-            {"name": "Args", "variablesReference": self.argsReference,
-                "expensive": False, "presentationHint": "arguments"},
-            {"name": "Register", "variablesReference": self.registerReference, "expensive": False, "presentationHint": "register"}]
+            scope("Locals", self.localsReference, "locals"),
+            scope("Args", self.argsReference, "arguments"),
+            scope("Register", self.registerReference, "register"),
+            scope("Statics", self.staticsReference, "static",
+                  expensive=True)  # _might_ be expensive
+        ]
 
-        config.variableReferences.add_mapping(
-            self.localsReference, self.threadId, self.localsReference)
-        config.variableReferences.add_mapping(
-            self.argsReference, self.threadId, self.localsReference)
-        config.variableReferences.add_mapping(
-            self.registerReference, self.threadId, self.localsReference)
-
-        self.watch_variables: dict[str, Variable] = {}
-        config.variableReferences.add_mapping(
-            self.localsReference, threadId, self.localsReference)
+        config.variableReferences.add_mapping(self.localsReference, self)
+        config.variableReferences.add_mapping(self.argsReference, self)
+        config.variableReferences.add_mapping(self.registerReference, self)
+        config.variableReferences.add_mapping(self.staticsReference, self)
 
     @config.timeInvocation
     def initialize(self):
@@ -156,10 +160,11 @@ class StackFrame:
 
     @config.timeInvocation
     def get_locals(self):
-        # self.update_blocks()
         self.initialize()
         self.block_values = []
         self.variableReferences = {}
+        # we want the innermost block-symbol with name X to be displayed
+        # therefore we sort out the outermost. C++/C/etc can't reference them by name, any how.
         names = set()
         for b in iterate_frame_blocks(self.frame):
             blockvalues = []
@@ -169,8 +174,7 @@ class StackFrame:
                     blockvalues.append(v)
                     vr = v.get_variable_reference()
                     if vr != 0:
-                        config.variableReferences.add_mapping(
-                            vr, self.threadId, self.localsReference)
+                        config.variableReferences.add_mapping(vr, self)
                         self.variableReferences[vr] = v
                     names.add(symbol.name)
             self.block_values.append(blockvalues)
@@ -186,6 +190,24 @@ class StackFrame:
         self.initialize()
         return REGISTER_DESCRIPTOR_SETS.read_general_registers(self.frame)
 
+    def static_initialize(self):
+        if not self.static_initialized:
+            b = find_top_function_block(self.frame).static_block
+            for symbol in b:
+                if symbol.is_variable:
+                    v = Variable.from_symbol(symbol, self.frame)
+                    self.statics.append(v)
+                    vr = v.get_variable_reference()
+                    if vr != 0:
+                        config.variableReferences.add_mapping(vr, self)
+                        self.staticVariableReferences[vr] = v
+        self.static_initialized = True
+
+    @config.timeInvocation
+    def get_statics(self):
+        self.static_initialize()
+        return [v.to_vs() for v in self.statics]
+
     @config.timeInvocation
     def get_args(self):
         result = []
@@ -195,8 +217,7 @@ class StackFrame:
                 v = Variable.from_symbol(symbol, self.frame)
                 vr = v.get_variable_reference()
                 if vr != 0:
-                    config.variableReferences.add_mapping(
-                        vr, self.threadId, self.localsReference)
+                    config.variableReferences.add_mapping(vr, self)
                     self.variableReferences[vr] = v
                 result.append(v.to_vs())
         return result
@@ -206,9 +227,10 @@ class StackFrame:
         var = self.variableReferences.get(variableReference)
         if var is not None:
             return var.get_children(self)
-        else:
-            config.update_logger().debug("Getting watched variable contents")
-            return self.watchVariableReferences[variableReference].get_children(self)
+        var = self.staticVariableReferences.get(variableReference)
+        if var is not None:
+            return var.get_children(self)
+        return self.watchVariableReferences[variableReference].get_children(self)
 
     def get(self, variableReference):
         if variableReference == self.localsReference:
@@ -217,6 +239,8 @@ class StackFrame:
             return self.get_args()
         elif variableReference == self.registerReference:
             return self.get_registers()
+        elif variableReference == self.staticsReference:
+            return self.get_statics()
         else:
             return self.get_variable_members(variableReference=variableReference)
 
@@ -233,15 +257,17 @@ class StackFrame:
     def get_scopes(self):
         return self.scopes
 
+    @config.timeInvocation
     def manages_variable_reference(self, variableReference):
-        isScope = self.argsReference == variableReference or self.localsReference == variableReference or self.registerReference == variableReference
+        isScope = self.argsReference == variableReference or self.localsReference == variableReference or self.registerReference == variableReference or self.staticsReference == variableReference
         if isScope:
             return True
+        if self.variableReferences.get(variableReference) is not None:
+            return True
+        elif self.staticVariableReferences.get(variableReference) is not None:
+            return True
         else:
-            if self.variableReferences.get(variableReference) is not None:
-                return True
-            else:
-                return self.watchVariableReferences.get(variableReference) is not None
+            return self.watchVariableReferences.get(variableReference) is not None
 
     def is_watching(self, variableReference):
         return self.watchVariableReferences.get(variableReference) is not None
@@ -259,8 +285,10 @@ class StackFrame:
             if vr != 0:
                 config.update_logger().debug("added watch variable {}; tracked by {}".format(expr, vr))
                 self.watchVariableReferences[vr] = v
-                config.variableReferences.add_mapping(
-                    vr, self.threadId, self.frame_id())
+                config.variableReferences.add_mapping(vr, self)
             return v
         else:
             return self.watch_variables[expr]
+
+    def reference_key(self):
+        return config.ReferenceKey(self.threadId, self.frame_id())
