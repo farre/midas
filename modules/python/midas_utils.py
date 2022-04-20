@@ -97,6 +97,23 @@ def get_closest(frame, name):
         block = block.superblock
     return None
 
+
+def get_global(frame, name):
+    b = frame.block().global_block
+    for symbol in b:
+        if symbol.name == name:
+            return symbol.value(frame)
+    return None
+
+
+def get_static(frame, name):
+    b = frame.block().static_block
+    for symbol in b:
+        if symbol.name == name:
+            return symbol.value(frame)
+    return None
+
+
 # Function that is able to utilize pretty printers, so that we can resolve
 # a value (which often does _not_ have the same expression path as regular structured types).
 # For instance used for std::tuple, which has a difficult member "layout", with ambiguous names.

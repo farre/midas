@@ -56,7 +56,7 @@ class ReferencedValue:
                         if self.is_watched():
                             owningStackFrame.watchVariableReferences[vref] = v
                         config.variableReferences.add_mapping(
-                            vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                            vref, owningStackFrame)
                         owningStackFrame.variableReferences[vref] = v
                     result.append(v.to_vs())
                     self.children.append(v)
@@ -79,7 +79,7 @@ class ReferencedValue:
                     if self.is_watched():
                         owningStackFrame.watchVariableReferences[vref] = v
                     config.variableReferences.add_mapping(
-                        vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                        vref, owningStackFrame)
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
@@ -88,8 +88,7 @@ class ReferencedValue:
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
-                config.variableReferences.add_mapping(
-                    vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                config.variableReferences.add_mapping(vref, owningStackFrame)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
@@ -98,8 +97,7 @@ class ReferencedValue:
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
-                config.variableReferences.add_mapping(
-                    vref, owningStackFrame.threadId, owningStackFrame.localsReference)
+                config.variableReferences.add_mapping(vref, owningStackFrame)
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
                 self.children.append(v)
