@@ -169,7 +169,7 @@ class StackFrame:
         for b in iterate_frame_blocks(self.frame):
             blockvalues = []
             for symbol in b:
-                if symbol.is_variable and not symbol.is_argument and symbol.name not in names:
+                if symbol.is_variable and not symbol.is_argument and symbol.name not in names and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
                     v = Variable.from_symbol(symbol, self.frame)
                     blockvalues.append(v)
                     vr = v.get_variable_reference()
@@ -194,7 +194,7 @@ class StackFrame:
         if not self.static_initialized:
             b = find_top_function_block(self.frame).static_block
             for symbol in b:
-                if symbol.is_variable:
+                if symbol.is_variable and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
                     v = Variable.from_symbol(symbol, self.frame)
                     self.statics.append(v)
                     vr = v.get_variable_reference()
@@ -213,7 +213,7 @@ class StackFrame:
         result = []
         b = find_top_function_block(self.frame)
         for symbol in b:
-            if symbol.is_argument:
+            if symbol.is_argument and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
                 v = Variable.from_symbol(symbol, self.frame)
                 vr = v.get_variable_reference()
                 if vr != 0:
