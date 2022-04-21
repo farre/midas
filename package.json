@@ -145,6 +145,10 @@
                 "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
                 "default": "gdb"
               },
+              "gdbOptions": {
+                "type": "array",
+                "description": "GDB Arguments."
+              },
               "cwd": {
                 "type": "string",
                 "description": "Current working directory of GDB",
@@ -158,7 +162,7 @@
                 "type": "object",
                 "default": { "path": "", "closeTerminalOnEndOfSession": true, "endSessionOnTerminalExit": true },
                 "description": "External console settings",
-    "required": ["path"],
+                "required": ["path"],
                 "properties": {
                   "path": {
                     "type": "string",
@@ -215,7 +219,11 @@
                 "type": "string",
                 "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
                 "default": "gdb"
-              }
+              },
+              "gdbOptions": {
+                "type": "array",
+                "description": "GDB Arguments."
+              },
             }
           }
         },
@@ -310,6 +318,10 @@
                 "type": "string",
                 "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
                 "default": "gdb"
+              },
+	            "gdbOptions": {
+                "type": "array",
+                "description": "GDB Arguments."
               },
               "cwd": {
                 "type": "string",
