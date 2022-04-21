@@ -53,6 +53,7 @@ class CurrentExecutionContext:
 
 
 class ExecutionContext:
+
     def __init__(self, thread):
         self.thread = thread
         # Hallelujah (ironic) for type info. I miss Rust.
@@ -89,15 +90,13 @@ class ExecutionContext:
                 for sf in self.stack:
                     result.append(sf.get_vs_frame())
                 return result
-            res = frame_operations.find_first_identical_frames(
-                self.stack, f, 10)
+            res = frame_operations.find_first_identical_frames(self.stack, f, 10)
             if res is not None:
                 (x, newFrames) = res
                 self.stack = self.stack[x:]
                 tmp = self.stack
                 threadId = self.thread_id()
-                self.stack = [stackframe.StackFrame(
-                    f, threadId) for f in newFrames]
+                self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
                 self.stack.extend(tmp)
             else:
                 self.clear_frames()
@@ -150,9 +149,9 @@ class ExecutionContext:
 
 
 class InvalidateExecutionContext(gdb.Command):
+
     def __init__(self, executionContexts):
-        super(InvalidateExecutionContext, self).__init__(
-            "gdbjs-thread-died", gdb.COMMAND_USER)
+        super(InvalidateExecutionContext, self).__init__("gdbjs-thread-died", gdb.COMMAND_USER)
         self.name = "thread-died"
         self.executionContexts = executionContexts
 
@@ -163,7 +162,5 @@ class InvalidateExecutionContext(gdb.Command):
             del self.executionContexts[threadId]
         except Exception as e:
             err_logger = config.error_logger()
-            config.log_exception(
-                err_logger, "Removing execution context failed: {}".format(e), e)
-        midas_utils.send_response(
-            self.name, {"ok": True}, midas_utils.prepare_command_response)
+            config.log_exception(err_logger, "Removing execution context failed: {}".format(e), e)
+        midas_utils.send_response(self.name, {"ok": True}, midas_utils.prepare_command_response)

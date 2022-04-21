@@ -57,38 +57,43 @@ class ReferencedValue:
                     if vref != 0:
                         if self.is_watched():
                             owningStackFrame.watchVariableReferences[vref] = v
-                        config.variableReferences.add_mapping(
-                            vref, owningStackFrame)
+                        config.variableReferences.add_mapping(vref, owningStackFrame)
                         owningStackFrame.variableReferences[vref] = v
                     result.append(v.to_vs())
                 return result
             else:
                 res = pp.to_string()
                 if hasattr(res, "value"):
-                    result.append({"name": "value", "value": "{}".format(
-                        res.value()), "evaluateName": None, "variablesReference": 0})
+                    result.append({
+                        "name": "value",
+                        "value": "{}".format(res.value()),
+                        "evaluateName": None,
+                        "variablesReference": 0
+                    })
                 else:
-                    result.append({"name": "value", "value": "{}".format(
-                        res), "evaluateName": None, "variablesReference": 0})
+                    result.append({
+                        "name": "value",
+                        "value": "{}".format(res),
+                        "evaluateName": None,
+                        "variablesReference": 0
+                    })
                 return result
         fields = value.type.fields()
         for field in fields:
-            if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-                v = Variable.from_value(field.name, value[field], "{}.{}".format(
-                    self.evaluateName, field.name))
+            if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith(
+                    "_vptr") and not field.is_base_class:
+                v = Variable.from_value(field.name, value[field], "{}.{}".format(self.evaluateName, field.name))
                 vref = v.get_variable_reference()
                 if vref != 0:
                     if self.is_watched():
                         owningStackFrame.watchVariableReferences[vref] = v
-                    config.variableReferences.add_mapping(
-                        vref, owningStackFrame)
+                    config.variableReferences.add_mapping(vref, owningStackFrame)
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
             elif field.is_base_class:
                 # baseclass "field" has the same evaluate name path as the most derived type
                 # since it technically isn't a variable member
-                v = BaseClass.from_value(
-                    field.name, value, field.type, self.evaluateName)
+                v = BaseClass.from_value(field.name, value, field.type, self.evaluateName)
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
@@ -96,8 +101,7 @@ class ReferencedValue:
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
             elif not hasattr(field, "bitpos"):
-                v = StaticVariable(field.name, value, field, "{}.{}".format(
-                    self.evaluateName, field.name))
+                v = StaticVariable(field.name, value, field, "{}.{}".format(self.evaluateName, field.name))
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
@@ -114,6 +118,7 @@ class ReferencedValue:
 
 
 class Variable(ReferencedValue):
+
     def __init__(self, name, gdbValue, evaluateName=None):
         super(Variable, self).__init__(name, gdbValue, evaluateName)
 
@@ -146,32 +151,31 @@ class Variable(ReferencedValue):
         try:
             return super().resolve_children(it, owningStackFrame)
         except gdb.MemoryError:
-            return [{"name": "value", "value": "Invalid address: {}".format(self.get_value()), "evaluateName": None, "variablesReference": 0}]
+            return [{
+                "name": "value",
+                "value": "Invalid address: {}".format(self.get_value()),
+                "evaluateName": None,
+                "variablesReference": 0
+            }]
 
     def to_vs(self):
         v = self.get_value()
         if v.is_optimized_out:
-            return vs_display(
-                name=self.name,
-                value="<optimized out>",
-                evaluate_name=None,
-                variable_reference=0)
+            return vs_display(name=self.name, value="<optimized out>", evaluate_name=None, variable_reference=0)
 
         variableReference = self.get_variable_reference()
         # type is primitive
         if variableReference == 0:
-            return vs_display(
-                name=self.name,
-                value="{}".format(v),
-                evaluate_name=self.evaluateName,
-                variable_reference=variableReference)
+            return vs_display(name=self.name,
+                              value="{}".format(v),
+                              evaluate_name=self.evaluateName,
+                              variable_reference=variableReference)
         else:
             # type is structured (or an array, etc)
-            return vs_display(
-                name=self.name,
-                value="{}".format(v.type),
-                evaluate_name=self.evaluateName,
-                variable_reference=variableReference)
+            return vs_display(name=self.name,
+                              value="{}".format(v.type),
+                              evaluate_name=self.evaluateName,
+                              variable_reference=variableReference)
 
 
 class BaseClass(ReferencedValue):
@@ -188,11 +192,10 @@ class BaseClass(ReferencedValue):
         return BaseClass(name, v, evaluateName)
 
     def to_vs(self):
-        return vs_display(
-            name="(base)",
-            value="%s" % self.name,
-            evaluate_name=None,
-            variable_reference=self.get_variable_reference())
+        return vs_display(name="(base)",
+                          value="%s" % self.name,
+                          evaluate_name=None,
+                          variable_reference=self.get_variable_reference())
 
     def get_variable_reference(self):
         return self.variableRef
@@ -208,28 +211,33 @@ class StaticVariable(ReferencedValue):
     incurs an astronomical cost. Thus, we handle these special cases by deferring fetching to an explicit action
     by the user (i.e. clicking the fold out icon in the Variables list).
     """
-    @ config.timeInvocation
+
+    @config.timeInvocation
     def __init__(self, name, rootvalue, field, evaluateName=None):
         super(StaticVariable, self).__init__(name, rootvalue, evaluateName)
         self.variableRef = config.next_variable_reference()
         self.display = rootvalue.type[field.name].type.name
         self.field = field
 
-    @ config.timeInvocation
+    @config.timeInvocation
     def to_vs(self):
-        return vs_display(
-            name="(static) %s" % self.name,
-            value=self.display,
-            evaluate_name="{}.{}".format(self.evaluateName, self.name),
-            variable_reference=self.get_variable_reference())
+        return vs_display(name="(static) %s" % self.name,
+                          value=self.display,
+                          evaluate_name="{}.{}".format(self.evaluateName, self.name),
+                          variable_reference=self.get_variable_reference())
 
     def get_variable_reference(self):
         return self.variableRef
 
-    @ config.timeInvocation
+    @config.timeInvocation
     def get_children(self, owningStackFrame):
         value = self.value[self.name]
         if midas_utils.type_is_primitive(value.type):
-            return [vs_display(name="value", value="{}".format(value), evaluate_name=self.evaluateName, variable_reference=0)]
+            return [
+                vs_display(name="value",
+                           value="{}".format(value),
+                           evaluate_name=self.evaluateName,
+                           variable_reference=0)
+            ]
         else:
             return super().resolve_children(value, owningStackFrame=owningStackFrame)

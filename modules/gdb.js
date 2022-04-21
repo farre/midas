@@ -5,7 +5,13 @@ require("regenerator-runtime");
 const vscode = require("vscode");
 const { Source, ContinuedEvent, ExitedEvent } = require("@vscode/debugadapter");
 const path = require("path");
-const { InitializedEvent, StoppedEvent, BreakpointEvent, TerminatedEvent, ThreadEvent } = require("@vscode/debugadapter");
+const {
+  InitializedEvent,
+  StoppedEvent,
+  BreakpointEvent,
+  TerminatedEvent,
+  ThreadEvent,
+} = require("@vscode/debugadapter");
 
 // POSIX signals and their descriptions
 const SIGNALS = {
@@ -577,7 +583,9 @@ class GDB extends GDBMixin(GDBBase) {
       }
       case "watchpoint-trigger":
       case "read-watchpoint-trigger": {
-        this.sendEvent(newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
+        this.sendEvent(
+          newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id)
+        );
         break;
       }
       default:

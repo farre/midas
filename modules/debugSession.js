@@ -133,7 +133,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async launchRequest(response, args, request) {
-    DebugAdapter.logger.setup(args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop, false);
+    DebugAdapter.logger.setup(
+      args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop,
+      false
+    );
     // wait until configuration has finished (and configurationDoneRequest has been called)
     await this.configIsDone.wait(1000);
     this.sendResponse(response);

@@ -26,12 +26,14 @@ currentExecutionContext = None
 
 
 class ReferenceKey:
+
     def __init__(self, threadId, stackFrameId):
         self.threadId = threadId
         self.frameId = stackFrameId
 
 
 class VariableReferenceMap:
+
     def __init__(self):
         self.lookup = {}
 
@@ -49,6 +51,7 @@ def timeInvocation(f):
     if not isDevelopmentBuild:
         return f
     """Measure performance (time) of command or function"""
+
     @functools.wraps(f)
     def timer_decorator(*args, **kwargs):
         invokeBegin = time.perf_counter_ns()
@@ -57,9 +60,9 @@ def timeInvocation(f):
         logger = logging.getLogger("time-logger")
         # we don't need nano-second measuring, but the accuracy of the timer is nice.
         elapsed_time = int((invokeEnd - invokeBegin) / 1000)
-        logger.info("{:<30} executed in {:>10,} microseconds".format(
-            f.__qualname__, elapsed_time))
+        logger.info("{:<30} executed in {:>10,} microseconds".format(f.__qualname__, elapsed_time))
         return result
+
     return timer_decorator
 
 

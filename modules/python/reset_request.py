@@ -3,7 +3,9 @@ import execution_context
 import midas_utils
 import config
 
+
 class ResetStateRequest(gdb.Command):
+
     def __init__(self, executionContexts, variableReferenceCounter, variableReferences):
         super(ResetStateRequest, self).__init__("gdbjs-reset-request", gdb.COMMAND_USER)
         self.name = "reset-request"
