@@ -4,6 +4,7 @@
 	"recommendations": [
 		"dbaeumer.vscode-eslint",
 		"esbenp.prettier-vscode",
-		"NathanRidley.autotrim"
+		"NathanRidley.autotrim",
+		"ms-python.python"
 	]
 }
