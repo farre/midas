@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iterator>
 #include <vector>
 #include <string>
 #include <number.hpp>
@@ -54,6 +55,8 @@ void testRValueReferences(std::string&& item) {
 
 int main(int argc, const char **argv)
 {
+  std::vector<std::string> captured_args;
+  std::copy(argv, argv+argc, std::back_inserter(captured_args));
   std::string helloworld{"Hello world, I manage myself and I'm also made sure to be allocated on the heap"};
   std::string_view v{helloworld};
 

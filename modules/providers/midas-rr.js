@@ -5,9 +5,9 @@ const fs = require("fs");
 const { getFreeRandomPort } = require("../netutils");
 const { tracePicked, getTraces, parseProgram } = require("../rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { MidasRunMode } = require("../buildMode");
 const { spawnExternalRrConsole, showErrorPopup, ContextKeys } = require("../utils");
 const krnl = require("../kernelsettings");
+const { RRSpawnConfig } = require("../spawn");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -135,17 +135,17 @@ class RRDebugAdapterFactory {
       const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
       try {
         let terminalInterface = await spawnExternalRrConsole({ terminal: config.externalConsole.path }, rrArgs);
-        let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), terminalInterface);
+        let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } catch (err) {
         showErrorPopup("Failed to spawn external console");
         return undefined;
       }
     } else {
-      let term = vscode.window.createTerminal("rr terminal");
-      term.sendText(cmd_str);
-      term.show(true);
-      let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config), term);
+      let terminalInterface = vscode.window.createTerminal("rr terminal");
+      terminalInterface.sendText(cmd_str);
+      terminalInterface.show(true);
+      let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }

@@ -45,13 +45,15 @@ function getFunctionName() {
   }
 }
 
+// todo(simon): Make this function take a handle to the (possible) external terminal process
+//  so that it can be killed in the returned object's kill method. This will make that code clearer and easier to reason about.
 /**
  * Custom spawn-function that intercepts stdio so that we can control
  * encoding, and also have the ability to process commands typically sent over the command line
  * stdin/stdout.
  * @param {string} gdbPath
  */
-function spawn(gdbPath, args) {
+function spawn(gdbPath, args, externalConsoleProcess /* todo */ = null) {
   let p = _spawn(gdbPath, args);
 
   return {

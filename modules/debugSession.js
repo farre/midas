@@ -29,10 +29,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   #buildSettings;
 
   // eslint-disable-next-line no-unused-vars
-  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, buildSettings, terminal) {
+  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, spawnConfig, terminal) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
-    this.#buildSettings = buildSettings;
+    this.spawnConfig = spawnConfig;
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
@@ -47,7 +47,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
    * @returns { import("./buildMode").MidasRunMode }
    */
   get buildSettings() {
-    return this.#buildSettings;
+    return this.spawnConfig.traceSettings;
   }
 
   /**
@@ -138,11 +138,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
     if (args.type == "midas-rr") {
-      this.gdb = new GDB(this, args, "launch");
+      this.gdb = new GDB(this, this.spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
     } else {
-      this.gdb = new GDB(this, args, "launch");
+      this.gdb = new GDB(this, this.spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.start(args);
     }
@@ -174,7 +174,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       this.sendErrorResponse(response, Message);
       return;
     }
-    this.gdb = new GDB(this, args, "attach");
+    this.gdb = new GDB(this, this.spawnConfig);
     this.gdb.setupEventHandlers(false);
     await this.gdb.attach_start(args.program);
     this.sendResponse(response);
