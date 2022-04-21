@@ -63,7 +63,9 @@ function getVSCodeCommands(context) {
     if (fs.existsSync(debug_log)) {
       vscode.window.showTextDocument(vscode.Uri.parse(debug_log), { viewColumn: 1 });
       vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/error.log`), { viewColumn: 2 });
-      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/performance_time.log`), { viewColumn: 3 });
+      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/performance_time.log`), {
+        viewColumn: 3,
+      });
     } else {
       vscode.window.showInformationMessage("No logs have yet been created");
     }

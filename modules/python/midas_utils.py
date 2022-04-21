@@ -18,13 +18,11 @@ def type_is_primitive(valueType):
 def get_members_recursively(field, memberList, statics):
     if field.bitsize > 0:
         misc_logger = logging.getLogger("update-logger")
-        misc_logger.info("field {} is possibly a bitfield of size {}".format(
-            field.name, field.bitsize))
+        misc_logger.info("field {} is possibly a bitfield of size {}".format(field.name, field.bitsize))
     if hasattr(field, 'bitpos'):
         if field.is_base_class:
             for f in field.type.fields():
-                get_members_recursively(
-                    f, memberList=memberList, statics=statics)
+                get_members_recursively(f, memberList=memberList, statics=statics)
         else:
             if field.name is not None and not field.name.startswith("_vptr"):
                 memberList.append(field.name)
@@ -84,6 +82,7 @@ def send_response(name, result, prepareFnPtr):
 def value_is_reference(type):
     code = type.code
     return code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
+
 
 # When parsing closely related blocks, this is faster than gdb.parse_and_eval on average.
 

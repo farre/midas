@@ -3,7 +3,7 @@ import gdb
 
 def frame_iterator(frame):
     while frame is not None:
-        yield(frame)
+        yield (frame)
         frame = frame.older()
 
 

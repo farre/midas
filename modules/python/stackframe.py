@@ -14,8 +14,7 @@ def create_stackframe_response(frame, alreadyReffedId=None):
         res = vs_stackframe_from_fn(frame, frame.function(), alreadyReffedId)
         return res
     except:
-        res = vs_stackframe_from_no_symtab(
-            frame.name(), frame, alreadyReffedId)
+        res = vs_stackframe_from_no_symtab(frame.name(), frame, alreadyReffedId)
         return res
 
 
@@ -47,8 +46,7 @@ def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId=None):
     # DebugProtocol.Source
     src = None
     try:
-        src = {"name": path.basename(
-            sal.symtab.filename), "path": sal.symtab.fullname(), "sourceReference": 0}
+        src = {"name": path.basename(sal.symtab.filename), "path": sal.symtab.fullname(), "sourceReference": 0}
     except:
         pass
 
@@ -67,6 +65,7 @@ def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId=None):
 
 
 class RegisterDescriptors:
+
     def __init__(self, frame):
         self.general = []
         self.sse = []
@@ -87,29 +86,29 @@ class RegisterDescriptors:
         }
 
     def read_general_registers(self, frame):
-        return [
-            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.general
-        ]
+        return [RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.general]
 
     def read_sse_registers(self, frame):
-        return [
-            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.sse
-        ]
+        return [RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.sse]
 
     def read_mmx_registers(self, frame):
-        return [
-            RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.mmx
-        ]
+        return [RegisterDescriptors.register_vs_result(reg_desc, frame) for reg_desc in self.mmx]
 
 
 REGISTER_DESCRIPTOR_SETS: RegisterDescriptors = None
 
 
 def scope(name, variableReference, presentationHint, expensive=False):
-    return {"name": name, "variablesReference": variableReference, "expensive": expensive, "presentationHint": presentationHint}
+    return {
+        "name": name,
+        "variablesReference": variableReference,
+        "expensive": expensive,
+        "presentationHint": presentationHint
+    }
 
 
 class StackFrame:
+
     def __init__(self, frame, threadId):
         """Creates a stack frame. Used for querying about local variables, arguments etc.
         Mutates the global VariableReference map by registering it's 3 'top level' variable references."""
@@ -121,10 +120,8 @@ class StackFrame:
         self.localsReference = config.next_variable_reference()
         self.args = []
         self.argsReference = config.next_variable_reference()
-        self.watchVariableReferences: dict[int,
-                                           Union[Variable, BaseClass, StaticVariable]] = {}
-        self.variableReferences: dict[int,
-                                      Union[Variable, BaseClass, StaticVariable]] = {}
+        self.watchVariableReferences: dict[int, Union[Variable, BaseClass, StaticVariable]] = {}
+        self.variableReferences: dict[int, Union[Variable, BaseClass, StaticVariable]] = {}
         self.registerReference = config.next_variable_reference()
 
         self.statics = []
@@ -139,8 +136,7 @@ class StackFrame:
             scope("Locals", self.localsReference, "locals"),
             scope("Args", self.argsReference, "arguments"),
             scope("Register", self.registerReference, "register"),
-            scope("Statics", self.staticsReference, "static",
-                  expensive=True)  # _might_ be expensive
+            scope("Statics", self.staticsReference, "static", expensive=True)  # _might_ be expensive
         ]
 
         config.variableReferences.add_mapping(self.localsReference, self)

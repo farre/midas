@@ -7,7 +7,9 @@ from os import path
 import midas_utils
 import config
 
+
 class ScopesRequest(gdb.Command):
+
     def __init__(self, executionContexts):
         super(ScopesRequest, self).__init__("gdbjs-scopes-request", gdb.COMMAND_USER)
         self.name = "scopes-request"
@@ -25,7 +27,9 @@ class ScopesRequest(gdb.Command):
 
         for sf in ec.stack:
             if sf.frame_id() == frameId:
-                midas_utils.send_response(self.name, { "scopes": sf.get_scopes() }, midas_utils.prepare_command_response)
+                midas_utils.send_response(self.name, {"scopes": sf.get_scopes()},
+                                          midas_utils.prepare_command_response)
                 return
 
-        raise gdb.GdbError("No scopes found for frameId {} in execution context {}".format(frameId, refId.threadId))
+        raise gdb.GdbError("No scopes found for frameId {} in execution context {}".format(
+            frameId, refId.threadId))
