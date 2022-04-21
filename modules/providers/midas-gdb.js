@@ -2,8 +2,8 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { MidasRunMode } = require("../buildMode");
 const { isNothing, resolveCommand, ContextKeys } = require("../utils");
+const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
 const initializer = (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -83,9 +83,19 @@ class DebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    let dbg_session = new MidasDebugSession(true, false, fs, new MidasRunMode(config));
+    let dbg_session = new MidasDebugSession(true, false, fs, this.spawnConfig(config));
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     return new vscode.DebugAdapterInlineImplementation(dbg_session);
+  }
+
+  spawnConfig(config) {
+    if (config.request == "attach") {
+      return new AttachSpawnConfig(config);
+    } else if (config.request == "launch") {
+      return new LaunchSpawnConfig(config);
+    } else {
+      throw new Error("Unknown request type");
+    }
   }
 }
 

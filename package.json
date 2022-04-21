@@ -223,7 +223,7 @@
               "gdbOptions": {
                 "type": "array",
                 "description": "GDB Arguments."
-              },
+              }
             }
           }
         },

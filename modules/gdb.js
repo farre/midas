@@ -44,13 +44,14 @@ const SIGNALS = {
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const {
   getFunctionName,
-  spawn,
   spawnExternalConsole,
   ArrayMap,
   ExclusiveArray,
   showErrorPopup,
   ContextKeys,
+  isNothing,
 } = require("./utils");
+const { spawnGdb } = require("./spawn");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -85,85 +86,6 @@ let GDBBase = gdbjs.GDB;
 const ext = vscode.extensions.getExtension("farrese.midas");
 const dir = `${ext.extensionPath}/modules/python`;
 
-const DefaultRRSpawnArgs = [
-  "-l",
-  "10000",
-  "-iex",
-  "set tcp connect-timeout 180", // if rr is taking time to start up, we want to wait. We set it to 3 minutes.
-  "-iex",
-  "set mi-async on",
-  "-iex",
-  "set non-stop off",
-  "-ex",
-  "set sysroot /",
-];
-
-function spawn_settings(traceSettings) {
-  return [
-    ["-iex", "set pagination off"],
-    ["-iex", `source ${dir}/setup.py`],
-    traceSettings.getCommandParameters(),
-    ["-iex", `source ${dir}/midas.py`],
-  ];
-}
-
-/**
- * @param {string} gdbPath - path to GDB
- * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
- * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
- * @param {string} binary - binary to debug
- * @param {string} serverAddress - server address rr is listening on
- * @param {string} cwd - current working directory to set GDB to
- * @returns
- */
-function spawnRRGDB(gdbPath, traceSettings, setupCommands, binary, serverAddress, cwd) {
-  const MidasSetupArgs = spawn_settings(traceSettings);
-  const spawnParameters = setupCommands
-    .flatMap((c) => ["-iex", `${c}`])
-    .concat(MidasSetupArgs.flatMap((i) => i))
-    .concat([
-      ...DefaultRRSpawnArgs,
-      "-ex",
-      `target extended-remote ${serverAddress}`,
-      "-i=mi3",
-      binary,
-      "-ex",
-      `"set cwd ${cwd}"`,
-    ]);
-  return spawn(gdbPath, spawnParameters);
-}
-
-/**
- * @param {string} gdbPath - path to GDB
- * @param {import("./buildMode").MidasRunMode } traceSettings - trace settings
- * @param {string[]} setupCommands - GDB commands to execute before loading binary symbols
- * @param {string} binary - binary to debug
- * @param {...string} args - arguments to pass to debuggee
- * @returns
- */
-function spawnGDB(gdbPath, traceSettings, setupCommands, binary, cwd, ...args) {
-  const MidasSetupArgs = spawn_settings(traceSettings);
-  cwd = cwd ? cwd : vscode.workspace.workspaceFolders[0].uri.fsPath;
-  const spawnParameters = setupCommands
-    .flatMap((command) => ["-iex", `${command}`])
-    .concat(MidasSetupArgs.flatMap((i) => i))
-    .concat(["-ex", `set cwd ${cwd}`])
-    .concat(!args ? ["-i=mi3", binary] : ["-i=mi3", "--args", binary, ...args]);
-  let gdb = spawn(gdbPath, spawnParameters);
-  return gdb;
-}
-
-function attachGDB(gdbPath, traceSettings, setupCommands, binary, pid) {
-  const MidasSetupArgs = spawn_settings(traceSettings);
-  const spawnParameters = setupCommands
-    .flatMap((command) => ["-iex", `${command}`])
-    .concat(MidasSetupArgs.flatMap((i) => i))
-    .concat(["-iex", "set mi-async on"])
-    .concat(["-i=mi3", binary, "-p", pid]);
-  let gdb = spawn(gdbPath, spawnParameters);
-  return gdb;
-}
-
 let gdbProcess = null;
 /** @typedef {number} ThreadId */
 /** @typedef {number} VariablesReference */
@@ -191,47 +113,24 @@ class GDB extends GDBMixin(GDBBase) {
   userRequestedInterrupt = false;
   allStopMode;
 
-  constructor(target, args, request) {
+  /**
+   *
+   * @param {*} target
+   * @param {import("./spawn").SpawnConfig} config
+   */
+  constructor(target, config) {
     super(
       (() => {
-        if (args.type == "midas-rr") {
-          let gdb = spawnRRGDB(
-            args.gdbPath,
-            target.buildSettings,
-            args.setupCommands,
-            args.program,
-            args.serverAddress,
-            args.cwd
-          );
-          gdbProcess = gdb;
-          return gdb;
-        } else {
-          if (request == "launch") {
-            let gdb = spawnGDB(
-              args.gdbPath,
-              target.buildSettings,
-              args.setupCommands,
-              args.program,
-              args.cwd,
-              ...(args.args ?? [])
-            );
-            gdbProcess = gdb;
-            return gdb;
-          } else if (request == "attach") {
-            const gdb = attachGDB(args.gdbPath, target.buildSettings, args.setupCommands, args.program, args.pid);
-            gdbProcess = gdb;
-            return gdb;
-          } else {
-            throw new Error("Unknown debug request type");
-          }
-        }
+        const gdb = spawnGdb(config);
+        gdbProcess = gdb;
+        return gdb;
       })()
     );
     this.#target = target;
-    this.config = args;
-    if (this.config.externalConsole) {
-      this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
+    if (isNothing(this.config)) {
+      this.config = {};
     }
+    this.config.spawnParameters = config;
     if (this.config.type == "midas-rr") {
       if (!this.config.externalConsole) this.disposeOnExit = true;
     }
@@ -307,11 +206,8 @@ class GDB extends GDBMixin(GDBBase) {
     this.allStopMode = allStopMode;
     vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);
     await this.init();
-    // await this.setup();
     if (!allStopMode) {
       await this.enableAsync();
-    } else {
-      await this.execMI(`-gdb-set mi-async on`);
     }
 
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
