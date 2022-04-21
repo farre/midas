@@ -8,9 +8,11 @@ import logging
 import logging.handlers
 from os import path
 
+
 def resolveExtensionFile(fileName):
     extensionPath = os.path.dirname(os.path.realpath(__file__))
     return "{}/../../{}".format(extensionPath, fileName)
+
 
 misc_handler = logging.handlers.WatchedFileHandler(resolveExtensionFile("debug.log"), mode="w")
 misc_formatter = logging.Formatter(logging.BASIC_FORMAT)
@@ -66,8 +68,11 @@ watchVariableCommand = watch_variable.WatchVariable(executionContexts)
 
 # Request that is Midas only; it resets all backend state (for when for instance the user wants to restart a debug session).
 import reset_request
-resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.variableReferenceCounter, config.variableReferences)
+resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.variableReferenceCounter,
+                                                      config.variableReferences)
 
+import data_breakpoint_info_request
+dataBreakpointInfoRequest = data_breakpoint_info_request.DataBreakpointInfoRequest(executionContexts)
 
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:

@@ -269,6 +269,15 @@ class StackFrame:
         else:
             return self.watchVariableReferences.get(variableReference) is not None
 
+    @config.timeInvocation
+    def get_variable(self, variableReference):
+        if self.variableReferences.get(variableReference) is not None:
+            return self.variableReferences[variableReference]
+        elif self.staticVariableReferences.get(variableReference) is not None:
+            return self.staticVariableReferences[variableReference]
+        else:
+            return self.watchVariableReferences.get(variableReference)
+
     def is_watching(self, variableReference):
         return self.watchVariableReferences.get(variableReference) is not None
 

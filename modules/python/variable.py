@@ -27,12 +27,13 @@ class ReferencedValue:
     Base class for the Values to be displayed in the VSCode UI
     """
 
-    def __init__(self, name, value):
+    def __init__(self, name, value, evaluateName=None):
         self.name = name
         self.value = value
         self.variableRef = -1
         self.children = []
         self.watched = False
+        self.evaluateName = evaluateName
 
     def get_type(self):
         return self.value.type
@@ -73,7 +74,8 @@ class ReferencedValue:
         fields = value.type.fields()
         for field in fields:
             if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith("_vptr") and not field.is_base_class:
-                v = Variable.from_value(field.name, value[field])
+                v = Variable.from_value(field.name, value[field], "{}.{}".format(
+                    self.evaluateName, field.name))
                 vref = v.get_variable_reference()
                 if vref != 0:
                     if self.is_watched():
@@ -83,7 +85,10 @@ class ReferencedValue:
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
             elif field.is_base_class:
-                v = BaseClass.from_value(field.name, value, field.type)
+                # baseclass "field" has the same evaluate name path as the most derived type
+                # since it technically isn't a variable member
+                v = BaseClass.from_value(
+                    field.name, value, field.type, self.evaluateName)
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
@@ -91,7 +96,8 @@ class ReferencedValue:
                 owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
             elif not hasattr(field, "bitpos"):
-                v = StaticVariable(field.name, value, field)
+                v = StaticVariable(field.name, value, field, "{}.{}".format(
+                    self.evaluateName, field.name))
                 vref = v.get_variable_reference()
                 if self.is_watched():
                     owningStackFrame.watchVariableReferences[vref] = v
@@ -108,15 +114,15 @@ class ReferencedValue:
 
 
 class Variable(ReferencedValue):
-    def __init__(self, name, gdbValue):
-        super(Variable, self).__init__(name, gdbValue)
+    def __init__(self, name, gdbValue, evaluateName=None):
+        super(Variable, self).__init__(name, gdbValue, evaluateName)
 
-    def from_value(name, value):
-        return Variable(name, value)
+    def from_value(name, value, evaluateName=None):
+        return Variable(name, value, evaluateName)
 
     def from_symbol(symbol, frame):
         value = symbol.value(frame)
-        return Variable(symbol.name, value)
+        return Variable(symbol.name, value, symbol.name)
 
     def get_variable_reference(self):
         if self.variableRef == -1:
@@ -157,14 +163,14 @@ class Variable(ReferencedValue):
             return vs_display(
                 name=self.name,
                 value="{}".format(v),
-                evaluate_name=None,
+                evaluate_name=self.evaluateName,
                 variable_reference=variableReference)
         else:
             # type is structured (or an array, etc)
             return vs_display(
                 name=self.name,
                 value="{}".format(v.type),
-                evaluate_name=None,
+                evaluate_name=self.evaluateName,
                 variable_reference=variableReference)
 
 
@@ -173,13 +179,13 @@ class BaseClass(ReferencedValue):
     Represents variable scopes in the UI that correspond to a base class
     """
 
-    def __init__(self, name, rootValue):
-        super(BaseClass, self).__init__(name, rootValue)
+    def __init__(self, name, rootValue, evaluateName=None):
+        super(BaseClass, self).__init__(name, rootValue, evaluateName)
         self.variableRef = config.next_variable_reference()
 
-    def from_value(name, value, type):
+    def from_value(name, value, type, evaluateName=None):
         v = value.cast(type)
-        return BaseClass(name, v)
+        return BaseClass(name, v, evaluateName)
 
     def to_vs(self):
         return vs_display(
@@ -203,8 +209,8 @@ class StaticVariable(ReferencedValue):
     by the user (i.e. clicking the fold out icon in the Variables list).
     """
     @ config.timeInvocation
-    def __init__(self, name, rootvalue, field):
-        super(StaticVariable, self).__init__(name, rootvalue)
+    def __init__(self, name, rootvalue, field, evaluateName=None):
+        super(StaticVariable, self).__init__(name, rootvalue, evaluateName)
         self.variableRef = config.next_variable_reference()
         self.display = rootvalue.type[field.name].type.name
         self.field = field
@@ -214,7 +220,7 @@ class StaticVariable(ReferencedValue):
         return vs_display(
             name="(static) %s" % self.name,
             value=self.display,
-            evaluate_name=None,
+            evaluate_name="{}.{}".format(self.evaluateName, self.name),
             variable_reference=self.get_variable_reference())
 
     def get_variable_reference(self):
@@ -224,6 +230,6 @@ class StaticVariable(ReferencedValue):
     def get_children(self, owningStackFrame):
         value = self.value[self.name]
         if midas_utils.type_is_primitive(value.type):
-            return [vs_display(name="value", value="{}".format(value), evaluate_name=None, variable_reference=0)]
+            return [vs_display(name="value", value="{}".format(value), evaluate_name=self.evaluateName, variable_reference=0)]
         else:
             return super().resolve_children(value, owningStackFrame=owningStackFrame)

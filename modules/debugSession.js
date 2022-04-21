@@ -202,13 +202,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // eslint-disable-next-line no-unused-vars
-  dataBreakpointInfoRequest(response, args, request) {
-    let dataId = args.name;
-    response.body = {
-      dataId: dataId,
-      accessTypes: ["read", "write", "readWrite"],
-      canPersist: false,
-    };
+  async dataBreakpointInfoRequest(response, args, request) {
+    response.body = await this.exec(`data-breakpoint-info ${args.name} ${args.variablesReference}`);
     this.sendResponse(response);
   }
   // eslint-disable-next-line no-unused-vars
