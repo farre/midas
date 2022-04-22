@@ -9,7 +9,7 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isNothing, ContextKeys } = require("./utils");
+const { isNothing, ContextKeys, toHexString } = require("./utils");
 const nixkernel = require("./kernelsettings");
 let server;
 
@@ -275,8 +275,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           this.formattedVariablesMap.add(v.variablesReference);
         }
         if (!isNaN(v.value)) {
-          const hex = Number.parseInt(v.value, 10).toString(16).padStart(10, "0x00000000");
-          v.value = hex;
+          v.value = toHexString(v.value);
         }
       }
     }
@@ -458,8 +457,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
             this.formattedVariablesMap.add(Number.parseInt(body.variablesReference));
           }
           if (!isNaN(body.result)) {
-            const hex = Number.parseInt(body.result, 10).toString(16).padStart(10, "0x00000000");
-            body.result = hex;
+            body.result = toHexString(body.result);
           }
         }
         response.body = body;

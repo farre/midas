@@ -10,6 +10,6 @@ The reasoning behind this, is that the re-evaluation of watch points when new sc
 
 ## Hexadecimal format of watch variables
 
-If you want the watch variables to be formatted as hexadecimal, append `,x` to the expression. This will format the value and any of it's possible children as hexadecimal.
+If you want the watch variables to be formatted as hexadecimal, append `,x` to the expression. This will format the value and any of it's possible children as hexadecimal. Displaying hexadecimal floats will look strange for now. It's because Midas is using built in NodeJS functionality for this.
 
 ![Example of hex formatted tuple](./watch_variable_hex_format.png)

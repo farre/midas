@@ -306,6 +306,11 @@ async function showErrorPopup(message, detail = null, items = null) {
   return vscode.window.showErrorMessage(message, options, ...items);
 }
 
+function toHexString(numberString) {
+  const n = Number(+numberString);
+  return n.toString(16).padStart(10, "0x00000000");
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -319,4 +324,5 @@ module.exports = {
   showErrorPopup,
   resolveCommand,
   ContextKeys,
+  toHexString,
 };
