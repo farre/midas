@@ -24,6 +24,24 @@
 			]
 		},
 		{
+			"name": "GDB",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"/home/cx/dev/opensource/binutils-gdb"
+			]
+		},
+		{
+			"name": "Firefox",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"/home/cx/dev/opensource/mozilla-central"
+			]
+		},
+		{
 			"name": "Debug extension - test attach",
 			"type": "extensionHost",
 			"request": "launch",

@@ -5,10 +5,13 @@ All notable changes to the "midas" extension will be documented in this file. Ch
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
 ## [Unreleased]
+
 - Create specific handlers for all VSCode requests directly in Python
 
-
 ## [0.1.1] - 2022-04-05
+
+- Added USAGE.md where functionality that not necessarily is all that intuitive is described.
+- Added hex formatting of WATCH variables. Formatting a watch expression is done by adding ",x" at the end.
 - Changed README to reflect new changes.
 - Added "externalConsole" as a configuration option. Currently working, although not in most preferrable way.
 - Added "externalConsole" config for rr debug sessions

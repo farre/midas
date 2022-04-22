@@ -16,6 +16,8 @@ let server;
 let REPL_MESSAGE_SHOWN = 0;
 
 class MidasDebugSession extends DebugAdapter.DebugSession {
+  /** @type { Set<number> } */
+  formattedVariablesMap = new Set();
   /** @type { GDB } */
   gdb;
 
@@ -97,7 +99,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsRestartFrame = true;
 
     // leave uncommented. Because it does nothing. Perhaps implement it for them?
-    // response.body.supportsValueFormattingOptions = true;
+    response.body.supportsValueFormattingOptions = true;
 
     response.body.supportsRestartRequest = true;
 
@@ -262,7 +264,22 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async variablesRequest(response, { variablesReference }, request) {
     response.body = await this.exec(`variable-request ${variablesReference}`);
+    this.checkForHexFormatting(variablesReference, response.body.variables);
     this.sendResponse(response);
+  }
+
+  checkForHexFormatting(variablesReference, variables) {
+    if (this.formattedVariablesMap.has(variablesReference)) {
+      for (let v of variables) {
+        if (v.variablesReference > 0) {
+          this.formattedVariablesMap.add(v.variablesReference);
+        }
+        if (!isNaN(v.value)) {
+          const hex = Number.parseInt(v.value, 10).toString(16).padStart(10, "0x00000000");
+          v.value = hex;
+        }
+      }
+    }
   }
 
   async scopesRequest(response, { frameId }) {
@@ -432,12 +449,30 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async evaluateRequest(response, args, request) {
     const { expression, frameId, context } = args;
     if (context == "watch") {
-      // todo(simon): needs implementation in new backend
-      const { body, success, message } = await this.exec(`watch-variable ${expression} ${frameId}`);
-      response.body = body;
-      response.success = success;
-      response.message = message;
-      this.sendResponse(response);
+      if (expression.endsWith(",x")) {
+        let { body, success, message } = await this.exec(
+          `watch-variable ${expression.substring(0, expression.length - 2)} ${frameId}`
+        );
+        if (success) {
+          if (body.variablesReference > 0) {
+            this.formattedVariablesMap.add(Number.parseInt(body.variablesReference));
+          }
+          if (!isNaN(body.result)) {
+            const hex = Number.parseInt(body.result, 10).toString(16).padStart(10, "0x00000000");
+            body.result = hex;
+          }
+        }
+        response.body = body;
+        response.success = success;
+        response.message = message;
+        this.sendResponse(response);
+      } else {
+        const { body, success, message } = await this.exec(`watch-variable ${expression} ${frameId}`);
+        response.body = body;
+        response.success = success;
+        response.message = message;
+        this.sendResponse(response);
+      }
     } else if (context == "repl") {
       if (!REPL_MESSAGE_SHOWN) {
         vscode.debug.activeDebugConsole.appendLine(
@@ -491,8 +526,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  cancelRequest(...args) {
-    return this.virtualDispatch(...args);
+  cancelRequest(response, args, request) {
+    return this.virtualDispatch(response, args, request);
   }
 
   breakpointLocationsRequest(...args) {
