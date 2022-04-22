@@ -853,6 +853,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   kill() {
     gdbProcess.kill();
+    this.#target.disposeTerminal();
   }
 
   // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
