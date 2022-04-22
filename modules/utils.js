@@ -308,7 +308,7 @@ async function showErrorPopup(message, detail = null, items = null) {
 
 function toHexString(numberString) {
   const n = Number(+numberString);
-  return n.toString(16).padStart(10, "0x00000000");
+  return n.toString(16).padStart(18, "0x0000000000000000");
 }
 
 module.exports = {
