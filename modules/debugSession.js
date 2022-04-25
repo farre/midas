@@ -449,11 +449,20 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     const lbracket = expr.indexOf("[");
     const rbracket = expr.indexOf("]");
     if (lbracket == -1 || rbracket == -1) {
-      return { name: expr, subscript: { begin: 0, end: 0 } };
+      // no subscript operation
+      return { name: expr, subscript: { begin: -1, end: -1 } };
     }
-    const [begin, end] = expr.substring(lbracket + 1, rbracket).split(":");
-    if (!begin || !end) return null;
-    return { name: expr.substring(0, lbracket), subscript: { begin: +begin, end: +end } };
+    const [begin_, end_] = expr.substring(lbracket + 1, rbracket).split(":");
+    if (!end_) {
+      let begin = parseInt(begin_);
+      if (begin.toString() != begin_) throw new Error("");
+      return { name: expr.substring(0, lbracket), subscript: { begin, end: begin } };
+    } else {
+      let begin = parseInt(begin_);
+      let end = parseInt(end_);
+      if (isNaN(begin) || isNaN(end)) return null;
+      return { name: expr.substring(0, lbracket), subscript: { begin, end } };
+    }
   }
 
   parse_evaluate_request_parameters(expression) {
