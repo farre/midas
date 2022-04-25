@@ -64,8 +64,8 @@ int main(int argc, const char **argv)
   testRValueReferences(std::move(helloworld));
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
-  constexpr int array[42] = {};
-  constexpr S s_array[10] {};
+  constexpr int array[10] = {0,1,2,3,4,5,6,7,8,9};
+  constexpr S s_array[7] {{1,2}, {2,3}, {3,4}, {4,5}, {5,6}, {6,7}, {7,8}};
   auto iptr = new int{42};
   int* ptrs[10];
   for(auto idx = 0; idx < 10; idx++) {

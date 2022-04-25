@@ -444,15 +444,38 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   setExpressionRequest(...args) {
     return this.virtualDispatch(...args);
   }
+
+  parse_subscript(expr) {
+    const lbracket = expr.indexOf("[");
+    const rbracket = expr.indexOf("]");
+    if (lbracket == -1 || rbracket == -1) {
+      return { name: expr, subscript: { begin: 0, end: 0 } };
+    }
+    const [begin, end] = expr.substring(lbracket + 1, rbracket).split(":");
+    if (!begin || !end) return null;
+    return { name: expr.substring(0, lbracket), subscript: { begin: +begin, end: +end } };
+  }
+
+  parse_evaluate_request_parameters(expression) {
+    const result = this.parse_subscript(expression);
+    if (result == null) throw new Error("");
+    const { name, subscript } = result;
+    return {
+      name: name.endsWith(",x") ? name.substring(0, name.length - 2) : name,
+      formatting: expression.endsWith(",x") ? "hex" : "none",
+      subscript,
+    };
+  }
   // eslint-disable-next-line no-unused-vars
   async evaluateRequest(response, args, request) {
     const { expression, frameId, context } = args;
     if (context == "watch") {
-      if (expression.endsWith(",x")) {
-        let { body, success, message } = await this.exec(
-          `watch-variable ${expression.substring(0, expression.length - 2)} ${frameId}`
-        );
-        if (success) {
+      try {
+        // meeeeeh. This is what you get for not having real types.
+        const { name, formatting, subscript } = this.parse_evaluate_request_parameters(expression);
+        const cmd = `watch-variable ${name} ${frameId} ${subscript.begin} ${subscript.end}`;
+        let { body, success, message } = await this.exec(cmd);
+        if (formatting == "hex" && success) {
           if (body.variablesReference > 0) {
             this.formattedVariablesMap.add(Number.parseInt(body.variablesReference));
           }
@@ -464,11 +487,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         response.success = success;
         response.message = message;
         this.sendResponse(response);
-      } else {
-        const { body, success, message } = await this.exec(`watch-variable ${expression} ${frameId}`);
-        response.body = body;
-        response.success = success;
-        response.message = message;
+      } catch (ex) {
+        response.body = null;
+        response.success = false;
+        response.message = "watch expression wrong format";
         this.sendResponse(response);
       }
     } else if (context == "repl") {
