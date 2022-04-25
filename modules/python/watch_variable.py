@@ -76,9 +76,10 @@ class WatchVariable(gdb.Command):
                              success=False,
                              message="could not evaluate"), midas_utils.prepare_command_response)
             else:
-                if begin != 0 and end != 0:
+                if end != 0:
                     it = it[begin]
-                    it = it.cast(it.type.array((end - begin) - 1))
+                    bound = (end - begin) - 1
+                    it = it.cast(it.type.array(bound))
                     expr = "{}[{}:{}]".format(expr, begin, end)
                 sf = ec.get_stackframe(frameId)
 
