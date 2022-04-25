@@ -8,8 +8,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Create specific handlers for all VSCode requests directly in Python
 
-## [0.1.1] - 2022-04-05
+## [0.1.2] - 2022-04-25
 
+- Added subscript to watch-variables
 - Added USAGE.md where functionality that not necessarily is all that intuitive is described.
 - Added hex formatting of WATCH variables. Formatting a watch expression is done by adding ",x" at the end.
 - Changed README to reflect new changes.
