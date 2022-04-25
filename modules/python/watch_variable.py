@@ -76,9 +76,10 @@ class WatchVariable(gdb.Command):
                              success=False,
                              message="could not evaluate"), midas_utils.prepare_command_response)
             else:
-                if end != 0:
+                # (b && e) == -1 => no subscript operation
+                if begin != -1 and end != -1:
                     it = it[begin]
-                    bound = (end - begin) - 1
+                    bound = max((end - begin) - 1, 0)
                     it = it.cast(it.type.array(bound))
                     expr = "{}[{}:{}]".format(expr, begin, end)
                 sf = ec.get_stackframe(frameId)
