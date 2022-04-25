@@ -64,6 +64,10 @@ class WatchVariable(gdb.Command):
             frame = ec.set_known_context(frameId)
             components = expr.split(".")
             it = find_variable(frame, components[0])
+            for comp in components[1:]:
+                it = it[comp]
+                if it is None:
+                    break
             if it is None:
                 midas_utils.send_response(
                     self.name,
