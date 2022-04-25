@@ -28,6 +28,10 @@ class VariableRequest(gdb.Command):
                 res = sf.get(variableReference)
                 result = {"variables": res}
                 midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
+                # we don't need to switch frame before, since we hold a pointer to it already.
+                # but in order to VSCode to be able to not get lost on what frame is selected, we do it after
+                # we sent the processed data
+                sf.frame.select()
             else:
                 raise gdb.GdbError("Stack frame {} does not manage variable reference {}".format(
                     refId.frameId, variableReference))
