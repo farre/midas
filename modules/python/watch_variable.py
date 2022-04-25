@@ -78,8 +78,10 @@ class WatchVariable(gdb.Command):
             else:
                 if begin != 0 and end != 0:
                     it = it[begin]
-                    it = it.cast(it.type.array(end - begin))
+                    it = it.cast(it.type.array((end - begin) - 1))
+                    expr = "{}[{}:{}]".format(expr, begin, end)
                 sf = ec.get_stackframe(frameId)
+
                 v = sf.add_watched_variable(expr, it)
                 res = v.to_vs()
                 result = response(success=True,

@@ -104,7 +104,7 @@ class ReferencedValue:
 
         if ReferencedValue.is_array(value):
             (low_bound, hi_bound) = value.type.fields()[0].type.range()
-            for x in range(hi_bound):
+            for x in range(hi_bound + 1):
                 v = Variable.from_value("{}".format(x), value[x], "{}+{}".format(self.evaluateName, x))
                 vref = v.get_variable_reference()
                 if vref != 0:
