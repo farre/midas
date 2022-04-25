@@ -54,7 +54,7 @@ class WatchVariable(gdb.Command):
     @config.timeInvocation
     def invoke(self, args, from_tty):
         try:
-            [expr, frameId] = midas_utils.parse_command_args(args, str, int)
+            [expr, frameId, begin, end] = midas_utils.parse_command_args(args, str, int, int, int)
             refId = config.variableReferences.get_context(frameId)
             if refId is None:
                 raise gdb.GdbError("No variable reference mapping for frame id {} exists".format(frameId))
@@ -64,6 +64,7 @@ class WatchVariable(gdb.Command):
             frame = ec.set_known_context(frameId)
             components = expr.split(".")
             it = find_variable(frame, components[0])
+
             for comp in components[1:]:
                 it = it[comp]
                 if it is None:
@@ -75,6 +76,9 @@ class WatchVariable(gdb.Command):
                              success=False,
                              message="could not evaluate"), midas_utils.prepare_command_response)
             else:
+                if begin != 0 and end != 0:
+                    it = it[begin]
+                    it = it.cast(it.type.array(end - begin))
                 sf = ec.get_stackframe(frameId)
                 v = sf.add_watched_variable(expr, it)
                 res = v.to_vs()
