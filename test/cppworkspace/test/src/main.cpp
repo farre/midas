@@ -65,7 +65,12 @@ int main(int argc, const char **argv)
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
   const auto somelocal = 42;
   constexpr int array[42] = {};
+  constexpr S s_array[10] {};
   auto iptr = new int{42};
+  int* ptrs[10];
+  for(auto idx = 0; idx < 10; idx++) {
+    ptrs[idx] = new int{42+idx};
+  }
   t.s.j++;
 
   // shadowing test

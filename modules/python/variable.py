@@ -12,8 +12,20 @@ import midas_utils
 import config
 
 
-def vs_display(name: str, value: str, evaluate_name: str, variable_reference: int):
-    return {"name": name, "value": value, "evaluateName": evaluate_name, "variablesReference": variable_reference}
+def vs_display(name: str,
+               value: str,
+               evaluate_name: str,
+               variable_reference: int,
+               namedVariables=None,
+               indexedVariables=None):
+    return {
+        "name": name,
+        "value": value,
+        "evaluateName": evaluate_name,
+        "variablesReference": variable_reference,
+        "namedVariables": namedVariables,
+        "indexedVariables": indexedVariables
+    }
 
 
 def is_variable_referenceable(value_type):
@@ -31,7 +43,8 @@ class ReferencedValue:
         self.name = name
         self.value = value
         self.variableRef = -1
-        self.children = []
+        self.namedVariables = None
+        self.indexedVariables = None
         self.watched = False
         self.evaluateName = evaluateName
 
@@ -45,6 +58,16 @@ class ReferencedValue:
         if (code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF) and self.variableRef == 0:
             return self.value.referenced_value()
         return self.value
+
+    def is_array(value):
+        fields = value.type.fields()
+        if len(fields) == 1:
+            try:
+                (low_bound, hi_bound) = fields[0].type.range()
+                return True
+            except:
+                pass
+        return False
 
     def resolve_children(self, value, owningStackFrame):
         result = []
@@ -78,11 +101,11 @@ class ReferencedValue:
                         "variablesReference": 0
                     })
                 return result
-        fields = value.type.fields()
-        for field in fields:
-            if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith(
-                    "_vptr") and not field.is_base_class:
-                v = Variable.from_value(field.name, value[field], "{}.{}".format(self.evaluateName, field.name))
+
+        if ReferencedValue.is_array(value):
+            (low_bound, hi_bound) = value.type.fields()[0].type.range()
+            for x in range(hi_bound):
+                v = Variable.from_value("{}".format(x), value[x], "{}+{}".format(self.evaluateName, x))
                 vref = v.get_variable_reference()
                 if vref != 0:
                     if self.is_watched():
@@ -90,24 +113,38 @@ class ReferencedValue:
                     config.variableReferences.add_mapping(vref, owningStackFrame)
                     owningStackFrame.variableReferences[vref] = v
                 result.append(v.to_vs())
-            elif field.is_base_class:
-                # baseclass "field" has the same evaluate name path as the most derived type
-                # since it technically isn't a variable member
-                v = BaseClass.from_value(field.name, value, field.type, self.evaluateName)
-                vref = v.get_variable_reference()
-                if self.is_watched():
-                    owningStackFrame.watchVariableReferences[vref] = v
-                config.variableReferences.add_mapping(vref, owningStackFrame)
-                owningStackFrame.variableReferences[vref] = v
-                result.append(v.to_vs())
-            elif not hasattr(field, "bitpos"):
-                v = StaticVariable(field.name, value, field, "{}.{}".format(self.evaluateName, field.name))
-                vref = v.get_variable_reference()
-                if self.is_watched():
-                    owningStackFrame.watchVariableReferences[vref] = v
-                config.variableReferences.add_mapping(vref, owningStackFrame)
-                owningStackFrame.variableReferences[vref] = v
-                result.append(v.to_vs())
+        else:
+            fields = value.type.fields()
+            for field in fields:
+                if hasattr(field, 'bitpos') and field.name is not None and not field.name.startswith(
+                        "_vptr") and not field.is_base_class:
+                    v = Variable.from_value(field.name, value[field],
+                                            "{}.{}".format(self.evaluateName, field.name))
+                    vref = v.get_variable_reference()
+                    if vref != 0:
+                        if self.is_watched():
+                            owningStackFrame.watchVariableReferences[vref] = v
+                        config.variableReferences.add_mapping(vref, owningStackFrame)
+                        owningStackFrame.variableReferences[vref] = v
+                    result.append(v.to_vs())
+                elif field.is_base_class:
+                    # baseclass "field" has the same evaluate name path as the most derived type
+                    # since it technically isn't a variable member
+                    v = BaseClass.from_value(field.name, value, field.type, self.evaluateName)
+                    vref = v.get_variable_reference()
+                    if self.is_watched():
+                        owningStackFrame.watchVariableReferences[vref] = v
+                    config.variableReferences.add_mapping(vref, owningStackFrame)
+                    owningStackFrame.variableReferences[vref] = v
+                    result.append(v.to_vs())
+                elif not hasattr(field, "bitpos"):
+                    v = StaticVariable(field.name, value, field, "{}.{}".format(self.evaluateName, field.name))
+                    vref = v.get_variable_reference()
+                    if self.is_watched():
+                        owningStackFrame.watchVariableReferences[vref] = v
+                    config.variableReferences.add_mapping(vref, owningStackFrame)
+                    owningStackFrame.variableReferences[vref] = v
+                    result.append(v.to_vs())
         return result
 
     def set_watched(self):
@@ -150,10 +187,28 @@ class Variable(ReferencedValue):
             it = it.referenced_value()
         try:
             return super().resolve_children(it, owningStackFrame)
-        except gdb.MemoryError:
+        except gdb.MemoryError as memexc:
+            config.log_exception(config.error_logger(),
+                                 "Midas failed to resolve variable value: {}".format(memexc), memexc)
             return [{
                 "name": "value",
                 "value": "Invalid address: {}".format(self.get_value()),
+                "evaluateName": None,
+                "variablesReference": 0
+            }]
+            # means we are a primitive type; we have no fields. Handle const char*, etc
+        except TypeError as e:
+            return [{
+                "name": "value",
+                "value": "{}".format(self.get_value()),
+                "evaluateName": None,
+                "variablesReference": 0
+            }]
+        except Exception as e:
+            config.log_exception(config.error_logger(), "Midas failed to resolve variable value: {}".format(e), e)
+            return [{
+                "name": "value",
+                "value": "Resolve failure: {}".format(self.get_value()),
                 "evaluateName": None,
                 "variablesReference": 0
             }]
