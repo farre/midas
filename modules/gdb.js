@@ -137,8 +137,15 @@ class GDB extends GDBMixin(GDBBase) {
       this.config = {};
     }
     this.config.spawnParameters = config;
-    if (this.config.type == "midas-rr") {
-      if (!this.config.externalConsole) this.disposeOnExit = true;
+    if (config.type == "midas-rr") {
+      if (!this.config.externalConsole) {
+        this.disposeOnExit = true;
+      } else {
+        this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
+      }
+    }
+    if (this.config.externalConsole) {
+      this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
     }
   }
 
@@ -192,14 +199,17 @@ class GDB extends GDBMixin(GDBBase) {
   async start(args) {
     const { program, stopOnEntry, allStopMode, externalConsole } = args;
     if (externalConsole != null) {
-      const { path, endSessionOnTerminalExit } = externalConsole;
+      const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
       try {
-        this.#target.registerTerminal(await spawnExternalConsole({ terminal: path }), () => {
-          if (endSessionOnTerminalExit) {
-            this.kill();
-            this.sendEvent(new TerminatedEvent(false));
+        this.#target.registerTerminal(
+          await spawnExternalConsole({ terminal: path, closeOnExit: closeTerminalOnEndOfSession }),
+          () => {
+            if (endSessionOnTerminalExit) {
+              this.kill();
+              this.sendEvent(new TerminatedEvent(false));
+            }
           }
-        });
+        );
       } catch (err) {
         showErrorPopup("Spawning an external console failed.");
         this.kill();
@@ -853,7 +863,10 @@ class GDB extends GDBMixin(GDBBase) {
 
   kill() {
     gdbProcess.kill();
-    this.#target.disposeTerminal();
+    if (this.disposeOnExit) this.#target.disposeTerminal();
+    else {
+      this.#target.terminal.disposeChildren();
+    }
   }
 
   // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance

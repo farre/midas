@@ -65,6 +65,10 @@ class SpawnConfig {
       ].flatMap((e) => e),
     };
   }
+
+  get type() {
+    return "midas-gdb";
+  }
 }
 
 class LaunchSpawnConfig extends SpawnConfig {
@@ -82,6 +86,10 @@ class LaunchSpawnConfig extends SpawnConfig {
   typeSpecificParameters() {
     return ["--args", this.binary, ...this.inferiorArgs].flatMap((e) => e);
   }
+
+  get type() {
+    return "midas-gdb";
+  }
 }
 
 class AttachSpawnConfig extends SpawnConfig {
@@ -96,6 +104,10 @@ class AttachSpawnConfig extends SpawnConfig {
 
   typeSpecificParameters() {
     return ["-p", this.pid, this.binary];
+  }
+
+  get type() {
+    return "midas-gdb";
   }
 }
 
@@ -120,6 +132,10 @@ class RRSpawnConfig extends SpawnConfig {
       `target extended-remote ${this.serverAddress}`,
       this.binary,
     ];
+  }
+
+  get type() {
+    return "midas-rr";
   }
 }
 

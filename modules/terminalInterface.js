@@ -5,16 +5,18 @@ class TerminalInterface {
   #tty;
   #pid;
   #ppid;
+  #children;
   /**
    * @param { import("child_process").ChildProcessWithoutNullStreams } process
    * @param { { path: string } } tty
    * @param { number } pid
    */
-  constructor(process, tty = null, pid = null, ppid) {
+  constructor(process, tty = null, pid = null, ppid, children) {
     this.#process = process;
     this.#tty = tty;
     this.#pid = pid;
     this.#ppid = ppid;
+    this.#children = children;
   }
 
   get pid() {
@@ -31,6 +33,14 @@ class TerminalInterface {
       }
     }
     this.#process.kill("SIGTERM");
+  }
+
+  disposeChildren() {
+    try {
+      execSync(`kill ${this.#children}`);
+    } catch (err) {
+      console.log(`Process ${this.#ppid} is already dead`);
+    }
   }
 
   registerExitAction(action) {

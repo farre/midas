@@ -230,13 +230,15 @@ function randomTtyFile() {
  * @param { string[] } shellParameters - parameters to be passed to the shell to execute
  * @returns { Promise<TerminalInterface> }
  */
-function spawnConsole(command, ttyInfoPath, shellParameters = []) {
+function spawnConsole(command, ttyInfoPath, closeOnExit, shellParameters = []) {
   const terminal_command = command ?? "x-terminal-emulator";
   // the shell basically needs to indefintely wait. There's no infinite wait I can use here,
   // so just set it to wait for 31000+ years.
   shellParameters.push("sleep 1000000000000");
   const shellParametersString = shellParameters.join(" && ");
-  const shellCommand = `sh -c "${shellParametersString}"`;
+  const shellCommand = !closeOnExit
+    ? `sh -c "${shellParametersString}; sleep 1000000000"`
+    : `sh -c "${shellParametersString}"`;
 
   const resolved = resolveCommand(terminal_command);
   const terminal_name = Path.basename(resolved);
@@ -248,10 +250,12 @@ function spawnConsole(command, ttyInfoPath, shellParameters = []) {
     const interval = setInterval(() => {
       if (fs.existsSync(ttyInfoPath)) {
         clearInterval(interval);
-        const [tty_path, shpid, ppid] = fs.readFileSync(ttyInfoPath).toString("utf8").trim().split("\n");
+        const [tty_path, shell_pid, ppid] = fs.readFileSync(ttyInfoPath).toString("utf8").trim().split("\n");
+        // get the PID of the child process (rr) if there is one.
+        const children = fs.readFileSync(`/proc/${shell_pid}/task/${shell_pid}/children`).toString().trim();
         fs.unlinkSync(ttyInfoPath);
         const tty = { path: tty_path };
-        const termInterface = new TerminalInterface(process, tty, Number.parseInt(shpid), ppid);
+        const termInterface = new TerminalInterface(process, tty, Number.parseInt(shell_pid), ppid, children);
         resolve(termInterface);
       }
       tries++;
@@ -262,12 +266,12 @@ function spawnConsole(command, ttyInfoPath, shellParameters = []) {
 
 /**
  * Spawns external console
- * @param {{ terminal: string }} config
+ * @param {{ terminal: string, closeOnExit: boolean }} config
  * @returns { Promise<TerminalInterface>}
  */
 async function spawnExternalConsole(config) {
   const ttyInfoPath = randomTtyFile();
-  return spawnConsole(config.terminal, ttyInfoPath, [
+  return spawnConsole(config.terminal, ttyInfoPath, config.closeOnExit, [
     "clear",
     `tty > ${ttyInfoPath}`,
     `echo $$ >> ${ttyInfoPath}`,
@@ -276,7 +280,7 @@ async function spawnExternalConsole(config) {
 }
 /**
  * Spawn external console that also launches rr in it.
- * @param { { terminal: string } } config
+ * @param { { terminal: string, closeOnExit: boolean } } config
  * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs
  * @returns {Promise<TerminalInterface>}
  */
@@ -284,7 +288,7 @@ async function spawnExternalRrConsole(config, rrArgs) {
   const { path, addr, port, pid, traceWorkspace } = rrArgs;
   const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
   const ttyInfoPath = randomTtyFile();
-  return spawnConsole(config.terminal, ttyInfoPath, [
+  return spawnConsole(config.terminal, ttyInfoPath, config.closeOnExit, [
     "clear",
     `tty > ${ttyInfoPath}`,
     `echo $$ >> ${ttyInfoPath}`,

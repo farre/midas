@@ -134,7 +134,10 @@ class RRDebugAdapterFactory {
     if (config.externalConsole) {
       const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
       try {
-        let terminalInterface = await spawnExternalRrConsole({ terminal: config.externalConsole.path }, rrArgs);
+        let terminalInterface = await spawnExternalRrConsole(
+          { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },
+          rrArgs
+        );
         let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } catch (err) {
