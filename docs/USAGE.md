@@ -17,6 +17,6 @@ If you want the watch variables to be formatted as hexadecimal, append `,x` to t
 ## Watch variable subscript
 
 The best approach to analyze arrays (of type `T[]`) using Midas debug adapter is to add them to the watch variables list with the desired range. This is achieved by writing
-`foo[N:M]`. VSCode currently does not honor the "paging" of variables but even if it did, this is still the preferable approach, since paging in variables still would mean you would have to expand until you reach `N:M`.
+`foo[N:M]` (or `foo[N]` for single elements). VSCode currently does not honor the "paging" of variables but even if it did, this is still the preferable approach, since paging in variables still would mean you would have to expand until you reach `N:M`.
 
 ![Example of subscript watch variable](./watch_variable_subscript.png)
