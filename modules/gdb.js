@@ -47,6 +47,11 @@ const SIGNALS = {
   SIGPWR: { code: 30, description: "Power failure restart" },
 };
 
+function ui_prepare_signal_display(sig_desc, message) {
+  if (message) return `Signal caught [ ${sig_desc} ]: ${message}`;
+  else return `Signal caught [${sig_desc}]`;
+}
+
 const { GDBMixin, printOption, PrintOptions } = require("./gdb-mixin");
 const {
   getFunctionName,
@@ -485,7 +490,7 @@ class GDB extends GDBMixin(GDBBase) {
         let evt = new StoppedEvent("exception", threadId);
         let body = {
           reason: "exception",
-          description: SIGNALS[payload.data["signal-name"]].description,
+          description: ui_prepare_signal_display(SIGNALS[payload.data["signal-name"]].description),
           text: "Segmentation Fault",
           threadId: threadId,
           allThreadsStopped: payload.data["stopped-threads"] == "all",
@@ -495,7 +500,18 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       case "SIGKILL":
         if (payload.data.frame.func == "syscall_traced") {
-          let evt = new ExitedEvent(SIGNALS[payload.data["signal-name"]].code);
+          let evt = new StoppedEvent(
+            `${SIGNALS[payload.data["signal-name"]].description}: replay end`,
+            +payload.data["thread-id"]
+          );
+          const body = {
+            reason: "exception",
+            description: ui_prepare_signal_display(SIGNALS[payload.data["signal-name"]].description, "Replay ended"),
+            text: "rr replay ended",
+            threadId: +payload.data["thread-id"],
+            allThreadsStopped: true,
+          };
+          evt.body = body;
           this.#target.sendEvent(evt);
         } else {
           let threadId = +payload.data["thread-id"];
@@ -515,7 +531,7 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       case "0":
         if (this.#rrSession) {
-          // replayable binary has executed to it's finish; we're now in rr-land
+          // replayable binary has executed to it's start; we're now in rr-land
           let evt = new StoppedEvent("entry", 1);
           let body = {
             reason: "entry",
