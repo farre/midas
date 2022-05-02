@@ -65,8 +65,13 @@ void testRValueReferences(std::string&& item) {
 
 int main(int argc, const char **argv)
 {
+  std::vector<std::string> foos[3]{};
+
   std::vector<std::string> captured_args;
   std::copy(argv, argv+argc, std::back_inserter(captured_args));
+  std::copy(argv, argv+argc, std::back_inserter(foos[0]));
+  std::copy(argv, argv+argc, std::back_inserter(foos[1]));
+  std::copy(argv, argv+argc, std::back_inserter(foos[2]));
   std::string helloworld{"Hello world, I manage myself and I'm also made sure to be allocated on the heap"};
   std::string_view v{helloworld};
 

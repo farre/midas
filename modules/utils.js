@@ -68,8 +68,8 @@ function spawn(gdbPath, args, externalConsoleProcess /* todo */ = null) {
     },
     stdout: p.stdout,
     stderr: p.stderr,
-    kill() {
-      p.kill();
+    kill(signal) {
+      p.kill(signal);
     },
     pid() {
       return p.pid;

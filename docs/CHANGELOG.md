@@ -10,6 +10,7 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [0.1.2] - 2022-04-25
 
+- Added the repl command "cancel" - sends an interrupt to GDB in case it is doing something that takes too long.
 - Added subscript to watch-variables
 - Added USAGE.md where functionality that not necessarily is all that intuitive is described.
 - Added hex formatting of WATCH variables. Formatting a watch expression is done by adding ",x" at the end.

@@ -877,8 +877,8 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  kill() {
-    gdbProcess.kill();
+  kill(signal) {
+    gdbProcess.kill(signal);
     if (this.disposeOnExit) this.#target.disposeTerminal();
     else {
       this.#target.terminal.disposeChildren();
@@ -956,7 +956,11 @@ class GDB extends GDBMixin(GDBBase) {
       }
     } else {
       // assume CLI command, for now
-      return await this.execCLI(`${expression}`);
+      if (expression == "cancel") {
+        gdbProcess.kill("SIGINT");
+      } else {
+        return await this.execCLI(`${expression}`);
+      }
     }
   }
 

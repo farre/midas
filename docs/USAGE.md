@@ -20,3 +20,11 @@ The best approach to analyze arrays (of type `T[]`) using Midas debug adapter is
 `foo[N:M]` (or `foo[N]` for single elements). VSCode currently does not honor the "paging" of variables but even if it did, this is still the preferable approach, since paging in variables still would mean you would have to expand until you reach `N:M`.
 
 ![Example of subscript watch variable](./watch_variable_subscript.png)
+
+This feature comes with some limitations and can even cause GDB to hang due to how pretty printers work. This is described in [bugs](./BUGS.MD). If it does, use the `cancel` command described below.
+Pretty printers read values from the type, and thus, if the user enters a range of values where some doesn't exist, the Python Pretty printer might interpret arbitrary data as that type
+and can produce all kinds of strange behaviors, like for instance thinking a `std::vector` has billions of elements.
+
+## Debug Console - Midas Specific commands
+
+- cancel - Writing `cancel` in the console sends an interrupt to GDB causing it to cancel any operation it is doing (similar to the `ctrl+c` when using GDB on the command line). If GDB is stalled or doing something that is taking too long (like running a python command or something of that nature) this will cancel that operation.
