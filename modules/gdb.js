@@ -194,6 +194,7 @@ class GDB extends GDBMixin(GDBBase) {
     await this.init();
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
+    await this.execCLI("set breakpoint pending on");
   }
 
   /**
@@ -233,6 +234,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (this.#target.terminal) {
       await this.execCLI(`set inferior-tty ${this.#target.terminal.tty.path}`);
     }
+    await this.execCLI("set breakpoint pending on");
     await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
@@ -347,30 +349,23 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns { Promise<{ line: any; id: number; verified: boolean; enabled: boolean }[]> } res
    */
   async setBreakpointsInFile(file, bpRequest) {
-    const breakpointIds = this.#lineBreakpoints.safe_get(file).map((bkpt) => bkpt.number);
+    const breakpointIds = this.#lineBreakpoints.safe_get(file).map((bkpt) => bkpt.id);
     // clear previously set breakpoints
     if (breakpointIds.length > 0) {
       // we need this check. an "empty" param list to break-delete deletes all
       this.execMI(`-break-delete ${breakpointIds.join(" ")}`);
     }
-    let res = [];
     // set new breakpoints
     let bps = [];
     for (const { line, condition, hitCondition, threadId } of bpRequest) {
       let breakpoint = await this.setConditionalBreakpoint(file, line, condition, threadId);
-      if (hitCondition) await this.execMI(`-break-after ${breakpoint.number} ${hitCondition}`);
+      if (hitCondition) await this.execMI(`-break-after ${breakpoint.id} ${hitCondition}`);
       if (breakpoint) {
         bps.push(breakpoint);
-        res.push({
-          line: breakpoint.line,
-          id: +breakpoint.number,
-          verified: breakpoint.addr != "<PENDING>",
-          enabled: breakpoint.enabled == "y",
-        });
       }
     }
     this.#lineBreakpoints.set(file, bps);
-    return res;
+    return bps;
   }
 
   async updateWatchpoints(wpRequest) {
@@ -438,7 +433,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   // Async record handlers
-  #onNotify(payload) {
+  async #onNotify(payload) {
     switch (payload.state) {
       case "running": {
         this.#onNotifyRunning(payload.data);
@@ -483,7 +478,7 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "breakpoint-created": {
-        this.#onNotifyBreakpointCreated(payload.data);
+        await this.#onNotifyBreakpointCreated(payload.data);
         break;
       }
       case "breakpoint-modified": {
@@ -814,7 +809,8 @@ class GDB extends GDBMixin(GDBBase) {
    *            file: string,
    *            fullname: string,
    *            line: number
-   *            thread?: number}} bkpt
+   *            thread?: number,
+   *            locations?: object[]}} bkpt
    */
 
   /**
@@ -822,10 +818,53 @@ class GDB extends GDBMixin(GDBBase) {
    *
    * @param { { bkpt: bkpt } } payload
    */
-  #onNotifyBreakpointCreated(payload) {
-    let { number, addr, file, fullname, enabled, line } = payload.bkpt;
+  async #onNotifyBreakpointCreated(payload) {
+    let { number, addr, file, fullname, enabled, line, locations } = payload.bkpt;
     if (!file && !line) {
-      vscode.window.showInformationMessage("Setting function breakpoints from debug console, won't register in UI.");
+      if (locations) {
+        const loc_fullname = locations[0].fullname;
+        const loc_file = locations[0].file;
+        const loc_line = locations[0].line;
+        // we're in a template function or inlined function, thus we have the same source location (but different addresses in memory).
+        // Use the major/minor version that GDB does. To disable individual locations, is up to the user in the debug console.
+        if (locations.every((bp) => bp.file == loc_file && bp.line == loc_line)) {
+          const newBreakpoint = {
+            id: +number,
+            enabled: enabled == "y",
+            verified: true,
+            source: new Source(loc_file, loc_fullname),
+            line: +loc_line,
+          };
+          this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+          this.#lineBreakpoints.add_to(loc_file, newBreakpoint);
+        } else {
+          // We delete master breakpoints with multiple locations (*IF* they have different source code locations),
+          // due to how VSCode handles or understand breakpoints vs how GDB does.
+          await this.execMI(`-break-delete ${number}`);
+          for (const loc of locations) {
+            const cmd = `-break-insert *${loc.addr}`;
+            try {
+              const res = await this.execMI(cmd);
+              const { addr, enabled, file, fullname, line, number } = res.bkpt;
+              const verified = addr != "<PENDING>";
+              const address = verified ? addr : null;
+              const newBreakpoint = {
+                id: +number,
+                enabled: enabled == "y",
+                verified,
+                source: new Source(file, fullname),
+                line: +line,
+                instructionReference: address,
+                message: verified ? null : "Pending breakpoint",
+              };
+              this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+              this.#lineBreakpoints.add_to(file, newBreakpoint);
+            } catch (e) {
+              console.log(`Setting breakpoint at ${loc.addr} failed. Exception: ${e}`);
+            }
+          }
+        }
+      }
     } else {
       const newBreakpoint = {
         id: +number,
@@ -848,7 +887,7 @@ class GDB extends GDBMixin(GDBBase) {
     const { enabled, file, fullname, line } = payload.bkpt;
     const num = payload.bkpt.number;
     const bp = {
-      line: line,
+      line: +line,
       id: +num,
       verified: true,
       enabled: enabled == "y",
@@ -912,17 +951,30 @@ class GDB extends GDBMixin(GDBBase) {
   /**
    * Set a pending breakpoint, that might not resolve immediately.
    * @param {string} path - `path` to source code file
-   * @param {number} line - `line` in file to break on
+   * @param {number} requestedLine - `line` in file to break on
    * @param {number | undefined } threadId - thread this breakpoint belongs to; all threads if undefined
-   * @returns { Promise<GDBBreakpoint> } bp
+   * @returns { Promise<{id: number, enabled: boolean, verified: boolean, source: Source, line: number }> } bp
    */
-  async setPendingBreakpoint(path, line, threadId = undefined) {
+  async setPendingBreakpoint(path, requestedLine, threadId = undefined) {
     const tParam = threadId ? ` -p ${threadId}` : "";
-    const command = `-break-insert -f ${path}:${line}${tParam}`;
+    const command = `-break-insert -f ${path}:${requestedLine}${tParam}`;
     try {
       let res = await this.execMI(command, threadId);
-      let bp = res.bkpt;
-      return bp;
+      let { number, enabled, file, fullname, locations, line, addr } = res.bkpt;
+      if ((!file || !fullname) && locations) {
+        file = locations[0].file;
+        fullname = locations[0].fullname;
+      } else {
+        file = path;
+        fullname = path;
+      }
+      return {
+        id: +number,
+        enabled: enabled == "y",
+        verified: addr != "<PENDING>",
+        source: new Source(file, fullname),
+        line: line ?? requestedLine,
+      };
     } catch (err) {
       console.log(`failed to execute set breakpoint command: ${command}:\n\t: ${err}`);
       return null;
@@ -935,7 +987,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {number} line
    * @param {string} condition
    * @param {number} threadId
-   * @returns { Promise<GDBBreakpoint> }
+   * @returns { Promise<{id: number, enabled: boolean, verified: boolean, source: Source, line: number }> }
    */
   async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
     if ((condition ?? "") == "") {
@@ -949,9 +1001,21 @@ class GDB extends GDBMixin(GDBBase) {
     }
     const tParam = threadId ? `-p ${threadId}` : "";
     const cParam = `-c "${condition}"`;
-    const breakpoint = await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`).bkpt;
-    this.registerBreakpoint(breakpoint);
-    return breakpoint;
+    const breakpoint_result = (await this.execMI(`-break-insert -f ${cParam} ${tParam} ${path}:${line}`)).bkpt;
+    let { number, enabled, file, fullname, locations, addr } = breakpoint_result;
+    if (!file || (!fullname && locations)) {
+      file = locations[0].file;
+      fullname = locations[0].fullname;
+    }
+    let bp = {
+      id: +number,
+      enabled: enabled == "y",
+      verified: addr != "<PENDING>",
+      source: new Source(file, fullname),
+      line: +line,
+    };
+    this.registerBreakpoint(bp);
+    return bp;
   }
 
   async deleteVariableObject(name) {

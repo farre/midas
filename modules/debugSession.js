@@ -28,6 +28,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type {import("./terminalInterface").TerminalInterface} */
   #terminal;
 
+  fnBkptChain = Promise.resolve();
+
   #buildSettings;
 
   // eslint-disable-next-line no-unused-vars
@@ -233,15 +235,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   async setFunctionBreakPointsRequest(response, args) {
-    let res = [];
-    this.gdb.removeFnBreakpointsNotInList(args.breakpoints.map((bp) => bp.name));
-    for (let { name, condition, hitCondition } of args.breakpoints) {
-      res.push(await this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
-    }
-    response.body = {
-      breakpoints: res,
-    };
-    this.sendResponse(response);
+    this.fnBkptChain = this.fnBkptChain.then(async () => {
+      let res = [];
+      this.gdb.removeFnBreakpointsNotInList(args.breakpoints.map((bp) => bp.name));
+      for (let { name, condition, hitCondition } of args.breakpoints) {
+        res.push(await this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
+      }
+      response.body = {
+        breakpoints: res,
+      };
+      this.sendResponse(response);
+    });
   }
 
   // eslint-disable-next-line no-unused-vars
