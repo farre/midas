@@ -234,11 +234,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async setFunctionBreakPointsRequest(response, args) {
     let res = [];
+    this.gdb.removeFnBreakpointsNotInList(args.breakpoints.map((bp) => bp.name));
     for (let { name, condition, hitCondition } of args.breakpoints) {
-      res.push(this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
+      res.push(await this.gdb.setFunctionBreakpoint(name, condition, hitCondition));
     }
     response.body = {
-      breakpoints: await Promise.all(res).then((res) => res.map(() => new DebugAdapter.Breakpoint(true))),
+      breakpoints: res,
     };
     this.sendResponse(response);
   }

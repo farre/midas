@@ -103,8 +103,6 @@ let gdbProcess = null;
 /** @typedef { import("@vscode/debugadapter").DebugSession } DebugSession */
 class GDB extends GDBMixin(GDBBase) {
   #lineBreakpoints = new ArrayMap();
-  /** Maps function name (original location) -> Function breakpoint id
-   * @type { Map<string, number> } */
   #fnBreakpoints = new Map();
   #watchpoints = new ExclusiveArray();
   vscodeBreakpoints = new Map();
@@ -307,11 +305,31 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
+  async removeFnBreakpointsNotInList(names) {
+    let remove_names = [];
+    let remove_ids = [];
+    for (let { name, id } of this.#fnBreakpoints.values()) {
+      if (!names.includes(name)) {
+        remove_names.push(name);
+        remove_ids.push(id);
+      }
+    }
+    for (const name of remove_names) this.#fnBreakpoints.delete(name);
+    const del = remove_ids.join(" ");
+    if (del.length > 0) {
+      await this.execMI(`-break-delete ${del}`);
+    }
+  }
+
   // eslint-disable-next-line no-unused-vars
   async setFunctionBreakpoint(name, condition, hitCondition) {
-    const { bkpt } = await this.execMI(`-break-insert -f ${name}`);
-    this.#fnBreakpoints.set(name, bkpt.number);
-    return bkpt.number;
+    let bp = this.#fnBreakpoints.get(name);
+    if (!bp) {
+      const { bkpt } = await this.execMI(`-break-insert -f ${name}`);
+      bp = { name, id: bkpt.number, verified: bkpt.pending ? false : true };
+      this.#fnBreakpoints.set(name, bp);
+    }
+    return bp;
   }
 
   async clearBreakPointsInFile(path) {
