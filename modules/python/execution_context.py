@@ -85,26 +85,34 @@ class ExecutionContext:
     def get_frames(self, start, levels):
         f = self.set_context(start)
         result = []
-        if len(self.stack) > 0:
-            if self.stack[0].is_same_frame(f):
-                for sf in self.stack:
-                    result.append(sf.get_vs_frame())
-                return result
-            res = frame_operations.find_first_identical_frames(self.stack, f, 10)
-            if res is not None:
-                (x, newFrames) = res
-                self.stack = self.stack[x:]
-                tmp = self.stack
-                threadId = self.thread_id()
-                self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
-                self.stack.extend(tmp)
+        try:
+            if len(self.stack) > 0:
+                if self.stack[0].is_same_frame(f):
+                    for sf in self.stack:
+                        result.append(sf.get_vs_frame())
+                    return result
+                res = frame_operations.find_first_identical_frames(self.stack, f, 10)
+                if res is not None:
+                    (x, newFrames) = res
+                    self.stack = self.stack[x:]
+                    tmp = self.stack
+                    threadId = self.thread_id()
+                    self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
+                    self.stack.extend(tmp)
+                else:
+                    self.clear_frames()
+                    threadId = self.thread_id()
+                    for frame in frame_operations.take_n_frames(f, levels):
+                        sf = stackframe.StackFrame(frame, threadId)
+                        self.stack.append(sf)
             else:
-                self.clear_frames()
                 threadId = self.thread_id()
                 for frame in frame_operations.take_n_frames(f, levels):
                     sf = stackframe.StackFrame(frame, threadId)
                     self.stack.append(sf)
-        else:
+        except:
+            # stack frame chain was invalidated somewhere. try rebuilding it.
+            self.stack = []
             threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(f, levels):
                 sf = stackframe.StackFrame(frame, threadId)
