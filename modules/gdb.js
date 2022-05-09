@@ -884,15 +884,28 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
-    const { enabled, file, fullname, line } = payload.bkpt;
+    const { enabled, file, fullname, line, locations } = payload.bkpt;
     const num = payload.bkpt.number;
-    const bp = {
-      line: +line,
-      id: +num,
-      verified: true,
-      enabled: enabled == "y",
-      source: new Source(file, fullname),
-    };
+    let bp;
+    if (locations) {
+      const loc_fullname = locations[0].fullname;
+      const loc_file = locations[0].file;
+      const loc_line = locations[0].line;
+      bp = {
+        id: +num,
+        verified: true,
+        source: new Source(loc_file, loc_fullname),
+        line: +loc_line,
+      };
+    } else {
+      bp = {
+        line: +line,
+        id: +num,
+        verified: true,
+        source: new Source(file, fullname),
+      };
+    }
+
     this.#target.sendEvent(new BreakpointEvent("changed", bp));
     log(getFunctionName(), payload);
   }
