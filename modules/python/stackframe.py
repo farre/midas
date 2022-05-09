@@ -206,15 +206,17 @@ class StackFrame:
     @config.timeInvocation
     def get_args(self):
         result = []
-        b = find_top_function_block(self.frame)
-        for symbol in b:
-            if symbol.is_argument and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
-                v = Variable.from_symbol(symbol, self.frame)
-                vr = v.get_variable_reference()
-                if vr != 0:
-                    config.variableReferences.add_mapping(vr, self)
-                    self.variableReferences[vr] = v
-                result.append(v.to_vs())
+        names = set()
+        for b in iterate_frame_blocks(self.frame):
+            for symbol in b:
+                if symbol.is_argument and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT) and symbol.name not in names:
+                    v = Variable.from_symbol(symbol, self.frame)
+                    vr = v.get_variable_reference()
+                    if vr != 0:
+                        config.variableReferences.add_mapping(vr, self)
+                        self.variableReferences[vr] = v
+                    result.append(v.to_vs())
+                    names.add(symbol.name)
         return result
 
     @config.timeInvocation
