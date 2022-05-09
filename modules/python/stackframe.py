@@ -20,9 +20,8 @@ def create_stackframe_response(frame, alreadyReffedId=None):
 
 def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
     sal = frame.find_sal()
-    functionSymbolTab = functionSymbol.symtab
-    filename = path.basename(functionSymbolTab.filename)
-    fullname = functionSymbolTab.fullname()
+    filename = path.basename(sal.symtab.filename)
+    fullname = sal.symtab.fullname()
     line_number = sal.line
     # DebugProtocol.Source
     src = {"name": filename, "path": fullname, "sourceReference": 0}
