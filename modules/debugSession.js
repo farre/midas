@@ -228,6 +228,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body = {
       allThreadsContinued: this.gdb.allStopMode,
     };
+    this.gdb.interrupt_operations();
     await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, false);
 
     vscode.commands.executeCommand("setContext", ContextKeys.Running, true);

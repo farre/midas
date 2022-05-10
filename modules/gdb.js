@@ -1046,11 +1046,16 @@ class GDB extends GDBMixin(GDBBase) {
     } else {
       // assume CLI command, for now
       if (expression == "cancel") {
-        gdbProcess.kill("SIGINT");
+        this.interrupt_operations();
       } else {
         return await this.execCLI(`${expression}`);
       }
     }
+  }
+
+  // Sends Ctrl+C / Interrupt to GDB to abort whatever process it might be into right now.
+  interrupt_operations() {
+    gdbProcess.kill(`SIGINT`);
   }
 
   cleanup() {
