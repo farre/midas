@@ -8,7 +8,7 @@
     "midas",
     "debug"
   ],
-  "version": "0.1.2",
+  "version": "0.1.3",
   "engines": {
     "vscode": "^1.66.0"
   },
@@ -104,7 +104,9 @@
         ],
         "configurationAttributes": {
           "launch": {
-            "required": ["program"],
+            "required": [
+              "program"
+            ],
             "properties": {
               "program": {
                 "type": "string",
@@ -116,9 +118,16 @@
                 "default": true
               },
               "trace": {
-                "type": ["string"],
+                "type": [
+                  "string"
+                ],
                 "description": "Debug trace logging",
-                "enum": ["Off", "GDB Events", "Python logs", "Full"],
+                "enum": [
+                  "Off",
+                  "GDB Events",
+                  "Python logs",
+                  "Full"
+                ],
                 "default": "Off",
                 "enumDescriptions": [
                   "Turn all logging off",
@@ -160,9 +169,15 @@
               },
               "externalConsole": {
                 "type": "object",
-                "default": { "path": "", "closeTerminalOnEndOfSession": true, "endSessionOnTerminalExit": true },
+                "default": {
+                  "path": "",
+                  "closeTerminalOnEndOfSession": true,
+                  "endSessionOnTerminalExit": true
+                },
                 "description": "External console settings",
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "properties": {
                   "path": {
                     "type": "string",
@@ -184,7 +199,9 @@
             }
           },
           "attach": {
-            "required": ["pid"],
+            "required": [
+              "pid"
+            ],
             "properties": {
               "pid": {
                 "type": "string",
@@ -195,9 +212,16 @@
                 "description": "Binary to debug. Only required for 'gdb' mode. Used for symbolication when attaching to running process."
               },
               "trace": {
-                "type": ["string"],
+                "type": [
+                  "string"
+                ],
                 "description": "Debug trace logging",
-                "enum": ["Off", "GDB Events", "Python logs", "Full"],
+                "enum": [
+                  "Off",
+                  "GDB Events",
+                  "Python logs",
+                  "Full"
+                ],
                 "default": "Off",
                 "enumDescriptions": [
                   "Turn all logging off",
@@ -295,7 +319,9 @@
           "cuda-cpp"
         ],
         "configurationAttributes": {
-          "required": ["serverAddress"],
+          "required": [
+            "serverAddress"
+          ],
           "launch": {
             "properties": {
               "program": {
@@ -303,9 +329,16 @@
                 "description": "Binary to debug. Only required for 'gdb' mode."
               },
               "trace": {
-                "type": ["string"],
+                "type": [
+                  "string"
+                ],
                 "description": "Debug trace logging",
-                "enum": ["Off", "GDB Events", "Python logs", "Full"],
+                "enum": [
+                  "Off",
+                  "GDB Events",
+                  "Python logs",
+                  "Full"
+                ],
                 "default": "Off",
                 "enumDescriptions": [
                   "Turn all logging off",
@@ -319,7 +352,7 @@
                 "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
                 "default": "gdb"
               },
-	            "gdbOptions": {
+              "gdbOptions": {
                 "type": "array",
                 "description": "GDB Arguments."
               },
@@ -353,9 +386,14 @@
               },
               "externalConsole": {
                 "type": "object",
-                "default": { "path": "", "closeTerminalOnEndOfSession": true },
+                "default": {
+                  "path": "",
+                  "closeTerminalOnEndOfSession": true
+                },
                 "description": "External console settings",
-                "required": ["path"],
+                "required": [
+                  "path"
+                ],
                 "properties": {
                   "path": {
                     "type": "string",
