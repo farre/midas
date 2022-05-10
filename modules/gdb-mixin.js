@@ -131,7 +131,7 @@ function GDBMixin(GDBBase) {
 
     async setWatchPoint(location, wpType) {
       let result = await this.execCMD(`watchpoint ${wpType} ${location}`);
-      return result;
+      return { number: result.number, message: "Watch point", verified: true };
     }
 
     setReadWatchPoint(location) {

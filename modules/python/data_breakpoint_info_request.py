@@ -22,10 +22,17 @@ class DataBreakpointInfoRequest(gdb.Command):
         if ec is None:
             raise gdb.GdbError("No execution context is referencing {}".format(variableReference))
         sf = ec.get_stackframe(refId.frameId)
-        v = sf.get_variable(variableReference)
+        v = None
         dataId = None
-        if v is not None:
-            dataId = "{}.{}".format(v.evaluateName, name)
+        if refId.frameId == variableReference:
+            v = sf.get_variable_by_name(name)
+            dataId = name
+        else:
+            v = sf.get_variable(variableReference)
+            if v is not None:
+                evalName = v.evaluateName
+                v = v.get_member(name)
+                dataId = "{}.{}".format(evalName, name)
         body = {
             "dataId":
             dataId,

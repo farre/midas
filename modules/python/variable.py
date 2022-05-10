@@ -166,6 +166,13 @@ class Variable(ReferencedValue):
         value = symbol.value(frame)
         return Variable(symbol.name, value, symbol.name)
 
+    def get_member(self, member):
+        try:
+            v = self.value[member]
+            return v
+        except:
+            return None
+
     def get_variable_reference(self):
         if self.variableRef == -1:
             code = self.value.type.code

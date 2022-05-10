@@ -393,6 +393,7 @@ class GDB extends GDBMixin(GDBBase) {
       item.id = wp.number;
       item.message = item.dataId;
       item.verified = true;
+      item.description = item.dataId;
       this.#watchpoints.push(item);
     }
     const result = this.#watchpoints.data;
@@ -496,22 +497,24 @@ class GDB extends GDBMixin(GDBBase) {
     log(getFunctionName(), payload);
   }
 
+  #onSignalNotifyVsCode(signalPayload) {
+    let threadId = +signalPayload["thread-id"];
+    let evt = new StoppedEvent("exception", threadId);
+    let body = {
+      reason: "exception",
+      description: ui_prepare_signal_display(SIGNALS[signalPayload["signal-name"]].description),
+      text: SIGNALS[signalPayload["signal-name"]].description,
+      threadId: threadId,
+      allThreadsStopped: signalPayload["stopped-threads"] == "all",
+    };
+    evt.body = body;
+    this.#target.sendEvent(evt);
+  }
+
   #onSignal(payload) {
     switch (payload.data["signal-name"]) {
-      case "SIGSEGV":
-        let threadId = +payload.data["thread-id"];
-        let evt = new StoppedEvent("exception", threadId);
-        let body = {
-          reason: "exception",
-          description: ui_prepare_signal_display(SIGNALS[payload.data["signal-name"]].description),
-          text: "Segmentation Fault",
-          threadId: threadId,
-          allThreadsStopped: payload.data["stopped-threads"] == "all",
-        };
-        evt.body = body;
-        this.#target.sendEvent(evt);
-        break;
       case "SIGKILL":
+        // rr
         if (payload.data.frame.func == "syscall_traced") {
           let evt = new StoppedEvent(
             `${SIGNALS[payload.data["signal-name"]].description}: replay end`,
@@ -527,22 +530,10 @@ class GDB extends GDBMixin(GDBBase) {
           evt.body = body;
           this.#target.sendEvent(evt);
         } else {
-          let threadId = +payload.data["thread-id"];
-          let evt = new StoppedEvent("exception", threadId);
-          let body = {
-            reason: "exception",
-            description: SIGNALS[payload.data["signal-name"]].description,
-            text: SIGNALS[payload.data["signal-name"]].description,
-            threadId: threadId,
-            allThreadsStopped: payload.data["stopped-threads"] == "all",
-          };
-          evt.body = body;
-          this.#target.sendEvent(evt);
+          this.#onSignalNotifyVsCode(payload.data);
         }
         break;
-      case "SIGINT":
-        break;
-      case "0":
+      case "0": {
         if (this.#rrSession) {
           // replayable binary has executed to it's start; we're now in rr-land
           let evt = new StoppedEvent("entry", 1);
@@ -556,6 +547,10 @@ class GDB extends GDBMixin(GDBBase) {
           this.#target.sendEvent(evt);
         }
         break;
+      }
+      default: {
+        this.#onSignalNotifyVsCode(payload.data);
+      }
     }
   }
 
@@ -574,7 +569,7 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendContinueEvent(payload.data["thread-id"], true);
       }
     } else {
-      if (payload.data.reason == "exited-normally") {
+      if (payload.data.reason == "exited-normally" || payload.data.reason == "exited") {
         this.sendEvent(new TerminatedEvent());
       } else if (payload.state == "running") {
         this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
@@ -628,7 +623,6 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       default:
-        console.log(`stopped for other reason: ${payload.reason}`);
         this.sendEvent(new StoppedEvent("Unknown reason", payload.thread.id));
     }
   }

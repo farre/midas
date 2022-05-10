@@ -275,6 +275,15 @@ class StackFrame:
         else:
             return self.watchVariableReferences.get(variableReference)
 
+    @config.timeInvocation
+    def get_variable_by_name(self, name):
+        config.update_logger().debug("Attempting to find {}".format(name))
+        for bv in self.block_values:
+            for value in bv:
+                if value.name == name:
+                    return value
+        return None
+
     def is_watching(self, variableReference):
         return self.watchVariableReferences.get(variableReference) is not None
 
