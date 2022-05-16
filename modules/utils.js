@@ -6,6 +6,8 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("./terminalInterface");
 
+/** @typedef { { major: number, minor: number, patch: number } } SemVer */
+
 const REGEXES = {
   MajorMinorPatch: /(\d+)\.(\d+)\.(\d+)/,
   WhiteSpace: /\s/,
@@ -321,9 +323,30 @@ function toHexString(numberString) {
 }
 
 /**
+ * Compare sem ver's and throw an exception if version < required_version
+ * @param {SemVer} version - version to check against requirement
+ * @param {SemVer} required_version - requirement version
+ * @param {boolean} patch_required - if comparison should check patch version.
+ */
+function requiresMinimum(version, required_version, patch_required = false) {
+  const throw_fn = () => {
+    throw new Error(`${JSON.stringify(required_version)} is required. Version found was ${JSON.stringify(version)}`);
+  };
+  if (version.major < required_version.major) {
+    throw_fn();
+  } else if (version.major == required_version.major) {
+    if (version.minor < required_version.minor) {
+      throw_fn();
+    } else if (patch_required && version.minor == required_version.minor && version.patch < required_version.patch) {
+      throw_fn();
+    }
+  }
+}
+
+/**
  * Parse string and find sem ver info.
  * @param {string} string - string to parse possible sem ver from.
- * @returns { { major: number, minor: number, patch: number } }
+ * @returns { SemVer }
  */
 function parseSemVer(string) {
   let m = REGEXES.MajorMinorPatch.exec(string);
@@ -343,7 +366,7 @@ function parseSemVer(string) {
 /**
  * Executes `pathToBinary` and passes the parameter `--version` and parses this output for a SemVer.
  * @param {string} pathToBinary - path to binary which we execute with parameter `--version` to retrieve it's version.
- * @returns {Promise<{major: number, minor: number, patch: number}>}
+ * @returns {Promise<SemVer>}
  */
 function getVersion(pathToBinary) {
   return new Promise((resolve, reject) => {
