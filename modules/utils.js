@@ -9,7 +9,7 @@ const { TerminalInterface } = require("./terminalInterface");
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 const REGEXES = {
-  MajorMinorPatch: /(\d+)\.(\d+)\.(\d+)/,
+  MajorMinorPatch: /(\d+)\.(\d+)(\.(\d+))?/,
   WhiteSpace: /\s/,
 };
 
@@ -330,7 +330,10 @@ function toHexString(numberString) {
  */
 function requiresMinimum(version, required_version, patch_required = false) {
   const throw_fn = () => {
-    throw new Error(`${JSON.stringify(required_version)} is required. Version found was ${JSON.stringify(version)}`);
+    const { major, minor, patch } = required_version;
+    throw new Error(
+      `Version ${major}.${minor}.${patch} is required. You have ${version.major}.${version.minor}.${version.patch}`
+    );
   };
   if (version.major < required_version.major) {
     throw_fn();
@@ -357,7 +360,7 @@ function parseSemVer(string) {
     return {
       major: +major,
       minor: +minor,
-      patch: +patch,
+      patch: +(patch ?? 0),
     };
   }
   return null;
@@ -400,4 +403,6 @@ module.exports = {
   toHexString,
   REGEXES,
   parseSemVer,
+  getVersion,
+  requiresMinimum,
 };

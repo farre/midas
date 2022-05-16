@@ -1,5 +1,5 @@
-const { isNothing } = require("../utils");
-
+const vscode = require("vscode");
+const { isNothing, getVersion, requiresMinimum, showErrorPopup } = require("../utils");
 class ConfigurationProviderInitializer {
   /**
    * @param {any} config
@@ -11,6 +11,19 @@ class ConfigurationProviderInitializer {
       throw new Error("Cannot start debugging because no launch configuration has been provided");
     }
     await initializer(config);
+    let version;
+    try {
+      version = await getVersion(config.gdbPath);
+    } catch (e) {
+      await showErrorPopup("Midas might not work properly", e.message, [
+        {
+          title: "Could not determine GDB version",
+          action: async () => {},
+        },
+      ]);
+      return;
+    }
+    requiresMinimum(version, { major: 11, minor: 1, patch: 0 });
   }
 }
 
