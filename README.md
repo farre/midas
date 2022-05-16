@@ -21,8 +21,10 @@ This will give you a list of GDB features built in. In this list, something like
 
 Midas has been tested with the following GDB versions
 
-- GDB 9.2, GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
+- GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
 - rr 5.5.0: seeing as how this uses the GDB remote serial protocol, earlier versions should probably be fine
+
+Currently Midas will only work for GDB versions above 11.1 due to the nature of the Python implementation of earlier GDB versions. There might be some work put into getting earlier versions to work. We *stronly* suggest where possible to install a newer version, in particular above 12.0 since it introduces some multithreading stuff that makes the "parsing" of symbols much faster. Ubuntu and Fedora both have newer GDB versions in their public repositories.
 
 ## Launch configuration
 

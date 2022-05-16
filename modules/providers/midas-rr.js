@@ -104,7 +104,16 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      await vscode.window.showErrorMessage(err.message);
+      showErrorPopup("Incompatible GDB version", err.message, [
+        {
+          title: "Download GDB source",
+          action: async () => {
+            await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+          },
+        },
+      ]).then((choice) => {
+        if (choice) choice.action();
+      });
       return null;
     }
     return await this.resolveReplayConfig(folder, config, token);
