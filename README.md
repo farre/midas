@@ -135,7 +135,7 @@ Configuration example of a rr debug session:
 ```
 
 rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB. If this field is not set
-Midas will use `127.0.0.1:RandomFreePort`.
+Midas will use `127.0.0.1:RandomFreePort` which just scans for free ports in the range `50505 : uint16 MAX`.
 
 rrPath behaves just like the gdbPath field and defaults to trying to find `rr` in `$PATH`.
 
