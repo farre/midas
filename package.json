@@ -100,7 +100,8 @@
         "languages": [
           "c",
           "cpp",
-          "cuda-cpp"
+          "cuda-cpp",
+          "rust"
         ],
         "configurationAttributes": {
           "launch": {
@@ -316,7 +317,8 @@
         "languages": [
           "c",
           "cpp",
-          "cuda-cpp"
+          "cuda-cpp",
+          "rust"
         ],
         "configurationAttributes": {
           "required": [

@@ -305,7 +305,7 @@ async function spawnExternalRrConsole(config, rrArgs) {
  * @param { Choice[] } items
  * @returns { Promise<Choice> }
  */
-async function showErrorPopup(message, detail = null, items = null) {
+async function showErrorPopup(message, detail = null, items = []) {
   const options = { detail, modal: true };
   return vscode.window.showErrorMessage(message, options, ...items);
 }
