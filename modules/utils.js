@@ -9,7 +9,7 @@ const { TerminalInterface } = require("./terminalInterface");
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 const REGEXES = {
-  MajorMinorPatch: /(\d+)\.(\d+)(\.(\d+))?/,
+  MajorMinorPatch: /(\d+)\.(\d+)\.*((\d+))?/,
   WhiteSpace: /\s/,
 };
 

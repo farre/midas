@@ -38,6 +38,11 @@
     ],
     "commands": [
       {
+        "command": "midas.issue-report",
+        "title": "Create github issue log",
+        "shortTitle": "Prepare Github Issue logs"
+      },
+      {
         "command": "midas.rr-record",
         "title": "Record the execution of a binary",
         "shortTitle": "rr Record"
