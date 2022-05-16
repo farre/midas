@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const path = require("path");
 const subprocess = require("child_process");
+const { REGEXES } = require("./utils");
 
 /**
  * @returns { Thenable<string[]> }
@@ -18,16 +19,16 @@ function getTraces() {
     });
   });
 }
-const WHITESPACE_REGEX = /\s/;
+
 function* get_field(line) {
   let it = 0;
   let end = 0;
   let parts_generated = 0;
   while (it < line.length) {
     if (parts_generated < 3) {
-      while (WHITESPACE_REGEX.test(line.charAt(it))) it++;
+      while (REGEXES.WhiteSpace.test(line.charAt(it))) it++;
       end = it;
-      while (!WHITESPACE_REGEX.test(line.charAt(end))) end++;
+      while (!REGEXES.WhiteSpace.test(line.charAt(end))) end++;
       const res = line.substring(it, end).trim();
       it = end;
       parts_generated++;

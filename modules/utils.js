@@ -6,6 +6,11 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("./terminalInterface");
 
+const REGEXES = {
+  MajorMinorPatch: /(\d+)\.(\d+)\.(\d+)/,
+  WhiteSpace: /\s/,
+};
+
 const ContextKeys = {
   AllStopModeSet: "midas.allStopModeSet",
   Running: "midas.Running",
@@ -315,6 +320,47 @@ function toHexString(numberString) {
   return n.toString(16).padStart(18, "0x0000000000000000");
 }
 
+/**
+ * Parse string and find sem ver info.
+ * @param {string} string - string to parse possible sem ver from.
+ * @returns { { major: number, minor: number, patch: number } }
+ */
+function parseSemVer(string) {
+  let m = REGEXES.MajorMinorPatch.exec(string);
+  if (!isNothing(m)) {
+    // remove first group. i.e. 1.2.3 is not interesting, only 1 2 and 3 is
+    m.shift();
+    let [major, minor, patch] = m;
+    return {
+      major: +major,
+      minor: +minor,
+      patch: +patch,
+    };
+  }
+  return null;
+}
+
+/**
+ * Executes `pathToBinary` and passes the parameter `--version` and parses this output for a SemVer.
+ * @param {string} pathToBinary - path to binary which we execute with parameter `--version` to retrieve it's version.
+ * @returns {Promise<{major: number, minor: number, patch: number}>}
+ */
+function getVersion(pathToBinary) {
+  return new Promise((resolve, reject) => {
+    exec(`${pathToBinary} --version`, (err, stdout, stderr) => {
+      if (err) reject(stderr);
+      else {
+        const version = parseSemVer(stdout);
+        if (!isNothing(version)) {
+          resolve(version);
+        } else {
+          reject(`Could not parse semantic versioning from output: ${stdout}`);
+        }
+      }
+    });
+  });
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -329,4 +375,6 @@ module.exports = {
   resolveCommand,
   ContextKeys,
   toHexString,
+  REGEXES,
+  parseSemVer,
 };
