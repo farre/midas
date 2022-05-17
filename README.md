@@ -25,7 +25,7 @@ Midas has been tested with the following GDB versions
 - rr 5.5.0: seeing as how this uses the GDB remote serial protocol, earlier versions should probably be fine
 
 Currently Midas will only work for GDB versions above 9.1 due to the nature of the Python implementation of earlier GDB versions. There might be some work put into getting earlier versions to work. But it might not be possible
-depending on how far back Python support exists in GDB. 
+depending on how far back Python support exists in GDB.
 
 ## Launch configuration
 
@@ -150,7 +150,7 @@ However, you shouldn't have to fill out a placeholder for yourself, VSCode shoul
 
 Since VSCode is aimed to be as general as possible, some functionality might never be represented in the UI - as such it might appear unintuitive. [Describing such functionality is found here](docs/USAGE.md), like setting watch points, formatting displayed values etc.
 
-If Midas behaves strangely, there exists a midas command (`Create github issue log`) that aims to make reports easier to file. It creates a new virtual document with the error logs. Please use this when filing a issue. It gets the `rr` and `gdb` version from the `launch.json` configuration you've provided and also tries to figure out the Linux distro you uses. To access this midas command open the control panel (default shortcut for VSCode is `ctrl+shift+P`). and type `Create github issue". Example below.
+If Midas behaves strangely, there exists a midas command (`Create github issue log`) that aims to make reports easier to file. It creates a new virtual document with the error logs. Please use this when filing a issue. It gets the `rr` and `gdb` version from the `launch.json` configuration you've provided and also tries to figure out the Linux distro you are using. To access this midas command open the control panel (default shortcut for VSCode is `ctrl+shift+P`). and type `Create github issue". Example below.
 ![Issue logs](docs/how_to_create_logs.gif). Either save this file and add it to the issue or paste it into the issue itself.
 
 ## Development
