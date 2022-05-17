@@ -16,7 +16,8 @@
     "Debuggers"
   ],
   "activationEvents": [
-    "onDebug"
+    "onDebug",
+    "onCommand:midas.issue-report"
   ],
   "main": "./extension.js",
   "publisher": "farrese",
@@ -40,8 +41,7 @@
       {
         "command": "midas.issue-report",
         "title": "Create github issue log",
-        "shortTitle": "Prepare Github Issue logs",
-        "enablement": "midas.Running == true"
+        "shortTitle": "Prepare Github Issue logs"
       },
       {
         "command": "midas.rr-record",

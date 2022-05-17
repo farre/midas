@@ -5,7 +5,7 @@ const fs = require("fs");
  * @typedef { import("vscode").Disposable } Disposable
  */
 const vscode = require("vscode");
-const { getVersion } = require("./utils");
+const { getVersion, isNothing } = require("./utils");
 const { registerCommand } = require("vscode").commands;
 
 /**
@@ -57,29 +57,35 @@ function getVSCodeCommands(context) {
   });
 
   const issueGithubReport = registerCommand("midas.issue-report", async () => {
-    const cfg = vscode.debug.activeDebugSession.configuration;
-    const gdb_version = await getVersion(cfg.gdbPath);
-    let log_pretext = [];
-    try {
-      let output = execSync("uname -a");
-      log_pretext.push(output);
-    } catch {
-      log_pretext.push("Linux Distro: <enter distro & version>");
-    }
-    log_pretext.push(`User GDB Version: ${gdb_version.major}.${gdb_version.minor}.${gdb_version.patch}`);
-    if (cfg.type == "midas-rr") {
-      const rrpath = cfg.rrPath;
-      const rr_version = await getVersion(rrpath);
-      log_pretext.push(`User RR Version: ${rr_version.major}.${rr_version.minor}.${rr_version.patch}`);
-    }
-    log_pretext.push("Python Error Logs:");
-    const python_log = `${context.extensionPath}/error.log`;
-    const data = fs.readFileSync(python_log);
-    log_pretext.push("\n");
-    log_pretext.push(data.toString());
+    if (vscode.debug.activeDebugSession) {
+      const cfg = vscode.debug.activeDebugSession.configuration;
+      if (!isNothing(cfg) && (cfg.type == "midas-rr" || cfg.type == "midas-gdb")) {
+        const gdb_version = await getVersion(cfg.gdbPath);
+        let log_pretext = [];
+        try {
+          let output = execSync("uname -a");
+          log_pretext.push(output);
+        } catch {
+          log_pretext.push("Linux Distro: <enter distro & version>");
+        }
+        log_pretext.push(`User GDB Version: ${gdb_version.major}.${gdb_version.minor}.${gdb_version.patch}`);
+        if (cfg.type == "midas-rr") {
+          const rrpath = cfg.rrPath;
+          const rr_version = await getVersion(rrpath);
+          log_pretext.push(`User RR Version: ${rr_version.major}.${rr_version.minor}.${rr_version.patch}`);
+        }
+        log_pretext.push("Python Error Logs:");
+        const python_log = `${context.extensionPath}/error.log`;
+        const data = fs.readFileSync(python_log);
+        log_pretext.push("\n");
+        log_pretext.push(data.toString());
 
-    let doc = await vscode.workspace.openTextDocument({ language: "text", content: log_pretext.join("\n") });
-    vscode.window.showTextDocument(doc);
+        let doc = await vscode.workspace.openTextDocument({ language: "text", content: log_pretext.join("\n") });
+        vscode.window.showTextDocument(doc);
+        return;
+      }
+    }
+    vscode.window.showInformationMessage("You must have an active debug session running to create a Github issue log");
   });
 
   let hotReloadScripts = registerCommand("midas.hot-reload-scripts", () => {
