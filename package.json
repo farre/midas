@@ -40,7 +40,8 @@
       {
         "command": "midas.issue-report",
         "title": "Create github issue log",
-        "shortTitle": "Prepare Github Issue logs"
+        "shortTitle": "Prepare Github Issue logs",
+        "enablement": "midas.Running == true"
       },
       {
         "command": "midas.rr-record",
