@@ -23,7 +23,7 @@ class ConfigurationProviderInitializer {
       ]);
       return;
     }
-    requiresMinimum(version, { major: 11, minor: 1, patch: 0 });
+    requiresMinimum(version, { major: 9, minor: 1, patch: 0 });
   }
 }
 

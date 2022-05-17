@@ -30,10 +30,13 @@ class CurrentExecutionContext:
 
     def set_frame(self, level):
         if self.frameLevel != int(level):
-            gdb.execute("frame {}".format(level))
-            frame = gdb.selected_frame()
-            self.frameLevel = frame.level()
-            return frame
+            level_num = 0
+            f = gdb.newest_frame()
+            while f is not None and level_num != level:
+                f = f.older()
+                level_num += 1
+            self.frameLevel = level_num
+            return f
         else:
             return gdb.selected_frame()
 
@@ -41,12 +44,6 @@ class CurrentExecutionContext:
         t = self.set_thread(threadId=int(threadId))
         f = self.set_frame(level=int(frameLevel))
         return (t, f)
-
-    def change_context(self, thread, frame):
-        self.threadId = thread.number
-        self.frameLevel = frame.level()
-        thread.switch()
-        frame.select()
 
     def add_thread(self, thread):
         self.threads.append(thread)
@@ -64,11 +61,14 @@ class ExecutionContext:
     def set_context(self, frame_level):
         self.thread.switch()
         f = gdb.newest_frame()
+        idx = 0
         while f is not None:
-            if f.level() == frame_level:
+            if idx == frame_level:
                 f.select()
                 return f
             f = f.older()
+            idx += 1
+        return None
 
     @config.timeInvocation
     def set_known_context(self, frame_id):
