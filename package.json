@@ -16,6 +16,7 @@
     "Debuggers"
   ],
   "activationEvents": [
+    "*",
     "onDebug",
     "onCommand:midas.issue-report"
   ],
@@ -26,6 +27,17 @@
     "url": "https://github.com/farre/midas"
   },
   "contributes": {
+    "views": {
+      "debug": [
+        {
+          "type": "webview",
+          "id": "midas.checkpoints-ui",
+          "name": "Checkpoints",
+          "contextualTitle": "RR Checkpoints",
+          "when": "midas.rrSession == true"
+        }
+      ]
+    },
     "breakpoints": [
       {
         "language": "c"
@@ -78,9 +90,33 @@
         "command": "midas.show-logs",
         "title": "Midas: Open logs",
         "shortTitle": "Midas: Open logs"
+      },
+      {
+        "command": "midas.add-checkpoint",
+        "category": "Debug Checkpoints",
+        "title": "Create checkpoint"
+      },
+      {
+        "command": "midas.clear-checkpoints",
+        "category": "Debug Checkpoints",
+        "title": "Clear checkpoints",
+        "icon": "$(clear-all)"
       }
     ],
     "menus": {
+      "view/item/context": [
+        {
+          "command": "midas.clear-checkpoints",
+          "when": "view == midas.checkpoints-ui"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "midas.clear-checkpoints",
+          "group": "midas",
+          "when": "view == midas.checkpoints-ui"
+        }
+      ],
       "debug/toolBar": [
         {
           "command": "midas.session-continue-all",
@@ -469,8 +505,8 @@
     "@types/mocha": "^9.0.0",
     "@types/node": "14.x",
     "@types/vscode": "^1.66.0",
-    "@vscode/test-electron": "^1.6.2",
     "@vscode/debugadapter-testsupport": "^1.50.0",
+    "@vscode/test-electron": "^1.6.2",
     "eslint": "^8.1.0",
     "glob": "^7.1.7",
     "mocha": "^9.1.3",
@@ -491,10 +527,11 @@
     }
   ],
   "dependencies": {
+    "@vscode/codicons": "^0.0.30",
+    "@vscode/debugadapter": "^1.51.0",
+    "@vscode/debugprotocol": "^1.51.0",
     "await-notify": "^1.0.1",
     "gdb-js": "^1.3.0",
-    "regenerator-runtime": "^0.13.9",
-    "@vscode/debugadapter": "^1.51.0",
-    "@vscode/debugprotocol": "^1.51.0"
+    "regenerator-runtime": "^0.13.9"
   }
 }

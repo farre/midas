@@ -126,6 +126,10 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
 }
 
 class RRDebugAdapterFactory {
+  #checkpointsUI;
+  constructor(checkpointsUI) {
+    this.#checkpointsUI = checkpointsUI;
+  }
   /**
    * @param { vscode.DebugSession } session
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
@@ -147,7 +151,14 @@ class RRDebugAdapterFactory {
           { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },
           rrArgs
         );
-        let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface);
+        let dbg_session = new MidasDebugSession(
+          true,
+          false,
+          fs,
+          new RRSpawnConfig(config),
+          terminalInterface,
+          this.#checkpointsUI
+        );
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } catch (err) {
         showErrorPopup("Failed to spawn external console");
@@ -157,7 +168,14 @@ class RRDebugAdapterFactory {
       let terminalInterface = vscode.window.createTerminal("rr terminal");
       terminalInterface.sendText(cmd_str);
       terminalInterface.show(true);
-      let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface);
+      let dbg_session = new MidasDebugSession(
+        true,
+        false,
+        fs,
+        new RRSpawnConfig(config),
+        terminalInterface,
+        this.#checkpointsUI
+      );
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }
