@@ -33,9 +33,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   #buildSettings;
 
   #spawnConfig;
-
+  /** @type {import("./ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
+  #checkpointsUI;
   // eslint-disable-next-line no-unused-vars
-  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, spawnConfig, terminal) {
+  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, spawnConfig, terminal, checkpointsUI) {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.#spawnConfig = spawnConfig;
@@ -46,6 +47,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.on("error", (event) => {
       console.log(event.body);
     });
+    this.#checkpointsUI = checkpointsUI;
     this.#terminal = terminal;
   }
 
@@ -147,6 +149,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     await this.configIsDone.wait(1000);
     this.sendResponse(response);
     if (args.type == "midas-rr") {
+      vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
@@ -608,6 +611,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         break;
       case "spawnConfig":
         return this.#spawnConfig;
+      case "setRRCheckpointRequest":
+        let cp = await this.gdb.execCLI("checkpoint");
+        this.#checkpointsUI.addCheckpoint(parseCheckpoint(cp));
+        break;
       default:
         vscode.window.showInformationMessage(`Unknown request: ${command}`);
     }
@@ -699,6 +706,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   getSpawnConfig() {
     return this.#spawnConfig;
   }
+}
+
+let cpID = 0;
+
+/**
+ *
+ * @param {string} checkpointResultString
+ * @returns {{ id: number, when: number, file: string, path: string, line: number }}
+ */
+function parseCheckpoint(checkpointResultString) {
+  return { id: cpID++, when: 0, file: "baz.c", path: "/foo/bar", line: 1 };
 }
 
 module.exports = {

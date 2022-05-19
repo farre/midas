@@ -990,6 +990,11 @@
   resolved "https://registry.yarnpkg.com/@ungap/promise-all-settled/-/promise-all-settled-1.1.2.tgz#aa58042711d6e3275dd37dc597e5d31e8c290a44"
   integrity sha512-sL/cEvJWAnClXw0wHk85/2L0G6Sj8UB0Ctc1TEMbKSsmpRosqhwj9gWgFRZSrBr2f9tiXISwNhCPmlfqUqyb9Q==
 
+"@vscode/codicons@^0.0.30":
+  version "0.0.30"
+  resolved "https://registry.yarnpkg.com/@vscode/codicons/-/codicons-0.0.30.tgz#67c265c1f3ff7214da475333efa6d381710b0335"
+  integrity sha512-/quu8pLXEyrShoDjTImQwJ2H28y1XhANigyw7E7JvN9NNWc3XCkoIWpcb/tUhdf7XQpopLVVYbkMjXpdPPuMXg==
+
 "@vscode/debugadapter-testsupport@^1.50.0":
   version "1.51.0"
   resolved "https://registry.yarnpkg.com/@vscode/debugadapter-testsupport/-/debugadapter-testsupport-1.51.0.tgz#6311ef18bab254d6bbc2be583da9eec0b857d449"
