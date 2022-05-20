@@ -74,6 +74,13 @@ resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.
 import data_breakpoint_info_request
 dataBreakpointInfoRequest = data_breakpoint_info_request.DataBreakpointInfoRequest(executionContexts)
 
+import rr_commands
+
+setCheckpointRequestCommand = rr_commands.SetCheckpointRequest()
+infoCheckpointCommand = rr_commands.InfoCheckpoints()
+deleteCheckpointCommand = rr_commands.DeleteCheckpoint()
+whenCommand = rr_commands.RRWhen()
+
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
     misc_logger.debug("Development mode is set. Logging enabled.")
