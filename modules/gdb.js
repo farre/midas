@@ -178,6 +178,8 @@ class GDB extends GDBMixin(GDBBase) {
       });
     }
     this.#rrSession = true;
+    // re-define restart according to how rr does it.
+    this.execCLI(`source ${ext.extensionPath}/modules/.gdb_rrinit`);
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
       await this.execMI("-exec-run --start");
@@ -1044,6 +1046,12 @@ class GDB extends GDBMixin(GDBBase) {
         throw err;
       }
     } else {
+      if (this.#rrSession) {
+        let a = transformToRRCommands(expression);
+        if (expression != a) {
+          return await this.execCMD(a);
+        }
+      }
       // assume CLI command, for now
       if (expression == "cancel") {
         this.interrupt_operations();
@@ -1067,6 +1075,20 @@ class GDB extends GDBMixin(GDBBase) {
   sendContinueEvent(threadId, allThreadsContinued) {
     this.sendEvent(new ContinuedEvent(threadId, allThreadsContinued));
     vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
+  }
+}
+
+function transformToRRCommands(expr) {
+  // "True" is appended to signal to Midas that it comes from Debug Console input
+  switch (expr) {
+    case "checkpoint":
+      return "rr-checkpoint True";
+    case "info checkpoints":
+      return "rr-info-checkpoints True";
+    case "when":
+      return "rr-when True";
+    default:
+      return expr;
   }
 }
 
