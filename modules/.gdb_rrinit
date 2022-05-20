@@ -1,0 +1,4 @@
+# define restart according to how rr does it.
+define restart
+  run c$arg0
+end
