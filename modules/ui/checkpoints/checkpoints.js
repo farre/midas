@@ -53,8 +53,14 @@ class CheckpointsViewProvider {
 
   clearCheckpoints() {
     if (this.#view) {
+      vscode.debug.activeDebugSession.customRequest("clear-checkpoints");
+    }
+  }
+
+  updateCheckpoints(checkpoints) {
+    if (this.#view) {
       this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-      this.#view.webview.postMessage({ type: "clear-checkpoints" });
+      this.#view.webview.postMessage({ type: "update-checkpoints", payload: checkpoints });
     }
   }
 
@@ -103,17 +109,14 @@ class CheckpointsViewProvider {
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.type) {
         case "add-checkpoint":
-          vscode.debug.activeDebugSession.customRequest("setRRCheckpointRequest");
+          vscode.debug.activeDebugSession.customRequest("set-checkpoint");
           break;
         case "delete-checkpoint": {
-          if (this.removeCheckpoint(data.value)) {
-            console.log(`DELETE checkpoint: ${data.value}`);
-            this.#view.webview.postMessage({ type: "removed-checkpoint", payload: data.value });
-          }
+          vscode.debug.activeDebugSession.customRequest("delete-checkpoint", data.value);
           break;
         }
         case "run-to-checkpoint":
-          console.log(`RUN TO checkpoint: ${data.value}`);
+          vscode.debug.activeDebugSession.customRequest("restart-checkpoint", data.value);
           break;
       }
     });

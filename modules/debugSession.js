@@ -584,7 +584,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async customRequest(command, response, args) {
     switch (command) {
-      case "continueAll":
+      case "continueAll": {
         await this.gdb.continueAll();
         response.body = {
           allThreadsContinued: this.gdb.allStopMode,
@@ -592,16 +592,22 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         this.sendResponse(response);
         this.gdb.sendContinueEvent(1, true);
         break;
-      case "pauseAll":
+      }
+
+      case "pauseAll": {
         await this.gdb.pauseAll();
         let evt = { body: { reason: "pause", allThreadsStopped: true } };
         this.gdb.sendEvent(evt);
         break;
-      case "reverse-finish":
+      }
+
+      case "reverse-finish": {
         await this.gdb.finishExecution(undefined, true);
         this.sendResponse(response);
         break;
-      case "hot-reload-scripts":
+      }
+
+      case "hot-reload-scripts": {
         try {
           await this.gdb.reload_scripts();
           vscode.window.showInformationMessage(`Successfully reloaded backend scripts`);
@@ -609,12 +615,41 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           vscode.window.showInformationMessage(`Failed to re-initialize midas`);
         }
         break;
-      case "spawnConfig":
+      }
+
+      case "spawnConfig": {
         return this.#spawnConfig;
-      case "setRRCheckpointRequest":
-        let cp = await this.gdb.execCLI("checkpoint");
-        this.#checkpointsUI.addCheckpoint(parseCheckpoint(cp));
+      }
+
+      case "set-checkpoint": {
+        let res = await this.gdb.execCMD("rr-checkpoint");
+        if (res["checkpoint-set"]) {
+          const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
+          this.#checkpointsUI.updateCheckpoints(checkpoints);
+        }
         break;
+      }
+
+      case "restart-checkpoint": {
+        this.gdb.restartFromCheckpoint(args);
+        break;
+      }
+
+      case "delete-checkpoint": {
+        this.gdb.deleteCheckpoint(args);
+        const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
+        this.#checkpointsUI.updateCheckpoints(checkpoints);
+        break;
+      }
+
+      case "clear-checkpoints": {
+        const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
+        for (const cp of checkpoints) {
+          await this.gdb.deleteCheckpoint(cp.id);
+        }
+        this.#checkpointsUI.updateCheckpoints([]);
+        break;
+      }
       default:
         vscode.window.showInformationMessage(`Unknown request: ${command}`);
     }
