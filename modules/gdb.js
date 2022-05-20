@@ -1061,6 +1061,14 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
+  async restartFromCheckpoint(id) {
+    await this.execCLI(`restart ${id}`);
+  }
+
+  async deleteCheckpoint(id) {
+    await this.execCMD(`rr-delete-checkpoint ${id}`);
+  }
+
   // Sends Ctrl+C / Interrupt to GDB to abort whatever process it might be into right now.
   interrupt_operations() {
     gdbProcess.kill(`SIGINT`);

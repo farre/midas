@@ -1,5 +1,9 @@
 //@ts-check
 
+/**
+ * @typedef {{ id: number, when: number, where: {path: string, line: number} }} CheckpointInfo
+ */
+
 // This script will be run within the webview itself
 // It cannot access the main VS Code APIs directly.
 (function () {
@@ -16,20 +20,23 @@
   let whens = [1823, 123155, 232, 99999];
 
   /**
-   * @returns { { id: number, when: number, file: string, path: string, line: number } }
+   * @returns { CheckpointInfo }
    */
   function getNewCheckpoint() {
+    let file = files[Math.floor(Math.random() * files.length)];
+    let path = paths[Math.floor(Math.random() * paths.length)];
     return {
       id: ID++,
       when: whens[Math.floor(Math.random() * whens.length)],
-      file: files[Math.floor(Math.random() * files.length)],
-      path: paths[Math.floor(Math.random() * paths.length)],
-      line: lines[Math.floor(Math.random() * lines.length)],
+      where: {
+        path: `${path}/${file}`,
+        line: lines[Math.floor(Math.random() * lines.length)],
+      },
     };
   }
 
   /**
-   * @param {{ id: number, when: number, file: string, path: string, line: number }} cp
+   * @param {{ id: number, when: number, where: {path: string, line: number} }} cp
    */
   function create_row(container, cp) {
     let name = document.createElement("span");
@@ -39,7 +46,7 @@
     container.appendChild(name);
 
     let path = document.createElement("span");
-    path.textContent = `${cp.path}/${cp.file}`;
+    path.textContent = cp.where.path;
     path.className = "file-path";
     container.appendChild(path);
 
@@ -67,7 +74,7 @@
     container.appendChild(action_bar);
 
     let line = document.createElement("span");
-    line.textContent = cp.line;
+    line.textContent = +cp.where.line;
     line.className = "monaco-count-badge";
     container.appendChild(line);
     // div.appendChild(container);
@@ -76,7 +83,7 @@
 
   const oldState = { checkpoints: [] };
   console.log(JSON.stringify(oldState));
-  /** @type {Array<{ id: number, when: number, file: string, path: string, line: number }>} */
+  /** @type {Array<CheckpointInfo>} */
   let checkpoints = oldState.checkpoints;
 
   updateCheckpointsList(checkpoints);
@@ -104,11 +111,15 @@
         removeCheckpoint(message.payload);
         break;
       }
+      case "update-checkpoints": {
+        updateCheckpointsList(message.payload);
+        break;
+      }
     }
   });
 
   /**
-   * @param {Array<{ id: number, when: number, file: string, path: string, line: number }>} checkpoints
+   * @param {Array<CheckpointInfo>} checkpoints
    */
   function updateCheckpointsList(checkpoints) {
     const cp_list = document.querySelector(".monaco-list-rows");
