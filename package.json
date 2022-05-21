@@ -52,8 +52,8 @@
     "commands": [
       {
         "command": "midas.issue-report",
-        "title": "Create github issue log",
-        "shortTitle": "Prepare Github Issue logs"
+        "title": "Midas: Create github issue log",
+        "shortTitle": "Midas: Create github issue log"
       },
       {
         "command": "midas.rr-record",
@@ -99,8 +99,7 @@
       {
         "command": "midas.clear-checkpoints",
         "category": "Debug Checkpoints",
-        "title": "Clear checkpoints",
-        "icon": "$(clear-all)"
+        "title": "Clear checkpoints"
       }
     ],
     "menus": {
