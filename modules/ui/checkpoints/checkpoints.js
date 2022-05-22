@@ -1,24 +1,5 @@
 const vscode = require("vscode");
 
-let ID = 0;
-let files = ["gdb.c", "foo.c", "bar.c", "baz.c"];
-let paths = ["/usr", "/share/lib", "/mount/device", "/some/path/to"];
-let lines = [123, 1488, 32999, 5];
-let whens = [1823, 123155, 232, 99999];
-
-/**
- * @returns { { id: number, when: number, file: string, path: string, line: number } }
- */
-function getNewCheckpoint() {
-  return {
-    id: ID++,
-    when: whens[Math.floor(Math.random() * whens.length)],
-    file: files[Math.floor(Math.random() * files.length)],
-    path: paths[Math.floor(Math.random() * paths.length)],
-    line: lines[Math.floor(Math.random() * lines.length)],
-  };
-}
-
 class CheckpointsViewProvider {
   /** @type {vscode.WebviewView} */
   #view = null;
@@ -29,19 +10,6 @@ class CheckpointsViewProvider {
    */
   constructor(extension_ctx) {
     this.#extensionUri = extension_ctx.extensionUri;
-    extension_ctx.subscriptions.push(
-      vscode.commands.registerCommand("midas.add-checkpoint", () => {
-        if (vscode.debug.activeDebugSession) {
-          this.addCheckpoint(getNewCheckpoint());
-        }
-      })
-    );
-
-    extension_ctx.subscriptions.push(
-      vscode.commands.registerCommand("midas.clear-checkpoints", () => {
-        this.clearCheckpoints();
-      })
-    );
   }
 
   /**
@@ -70,10 +38,6 @@ class CheckpointsViewProvider {
       this.#view.webview.postMessage({ type: "add-checkpoint", payload: checkpoint });
     }
   }
-  removeCheckpoint(id) {
-    return true;
-  }
-
   /**
    * Gets resource `resource` from the Checkpoints UI module.
    * @param {string} resource
@@ -104,7 +68,7 @@ class CheckpointsViewProvider {
       localResourceRoots: [this.#extensionUri],
     };
 
-    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+    webviewView.webview.html = this.#createHTMLForWebView(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.type) {
@@ -126,7 +90,7 @@ class CheckpointsViewProvider {
    * @param {vscode.Webview} webview
    * @returns
    */
-  _getHtmlForWebview(webview) {
+  #createHTMLForWebView(webview) {
     // Get the local path to main script run in the webview, then convert it to a uri we can use in the webview.
     const scriptUri = webview.asWebviewUri(this.resourceUri("main.js"));
     // Do the same for the stylesheet.
@@ -150,33 +114,28 @@ class CheckpointsViewProvider {
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
-			<html lang="en">
-			<head>
-				<meta charset="UTF-8">
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}">
 
-				<!--
-					Use a content security policy to only allow loading images from https or from our extension directory,
-					and only allow scripts that have a specific nonce.
-				-->
-				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-				<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-				<link href="${styleResetUri}" rel="stylesheet">
-				<link href="${styleVSCodeUri}" rel="stylesheet">
-				<link href="${styleMainUri}" rel="stylesheet">
+        <link href="${styleResetUri}" rel="stylesheet">
+        <link href="${styleVSCodeUri}" rel="stylesheet">
+        <link href="${styleMainUri}" rel="stylesheet">
         <link href="${codiconsUri}" rel="stylesheet">
 
-			</head>
-			<body>
-      <div class="monaco-table">
-				<div class="monaco-list-rows" id="checkpoints-list"></div>
+      </head>
+      <body>
+      <div class="checkpoints-table">
+        <div class="checkpoints-list-rows" id="checkpoints-list"></div>
       </div>
       <button class="add-checkpoint-button">Add checkpoint</button>
 
-				<script nonce="${nonce}" src="${scriptUri}"></script>
-			</body>
-			</html>`;
+        <script nonce="${nonce}" src="${scriptUri}"></script>
+      </body>
+      </html>`;
   }
 }
 

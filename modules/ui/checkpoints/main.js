@@ -13,35 +13,13 @@
   };
   const vscode = acquireVsCodeApi();
 
-  let ID = 0;
-  let files = ["gdb.c", "foo.c", "bar.c", "baz.c"];
-  let paths = ["/usr", "/share/lib", "/mount/device", "/some/path/to"];
-  let lines = [123, 1488, 32999, 5];
-  let whens = [1823, 123155, 232, 99999];
-
-  /**
-   * @returns { CheckpointInfo }
-   */
-  function getNewCheckpoint() {
-    let file = files[Math.floor(Math.random() * files.length)];
-    let path = paths[Math.floor(Math.random() * paths.length)];
-    return {
-      id: ID++,
-      when: whens[Math.floor(Math.random() * whens.length)],
-      where: {
-        path: `${path}/${file}`,
-        line: lines[Math.floor(Math.random() * lines.length)],
-      },
-    };
-  }
-
   /**
    * @param {{ id: number, when: number, where: {path: string, line: number} }} cp
    */
   function create_row(container, cp) {
     let name = document.createElement("span");
     name.textContent = cp.when;
-    name.className = "monaco-list-when";
+    name.className = "checkpoints-list-when";
 
     container.appendChild(name);
 
@@ -75,7 +53,7 @@
 
     let line = document.createElement("span");
     line.textContent = +cp.where.line;
-    line.className = "monaco-count-badge";
+    line.className = "checkpoints-count-badge";
     container.appendChild(line);
     // div.appendChild(container);
     // return div;
@@ -90,7 +68,6 @@
 
   document.querySelector(".add-checkpoint-button").addEventListener("click", () => {
     vscode.postMessage({ type: "add-checkpoint" });
-    addCheckpoint(getNewCheckpoint());
   });
 
   // Handle messages sent from the extension to the webview
@@ -122,12 +99,12 @@
    * @param {Array<CheckpointInfo>} checkpoints
    */
   function updateCheckpointsList(checkpoints) {
-    const cp_list = document.querySelector(".monaco-list-rows");
+    const cp_list = document.querySelector(".checkpoints-list-rows");
     cp_list.textContent = "";
     let idx = 0;
     for (const cp of checkpoints) {
       const row = document.createElement("div");
-      row.className = "monaco-list-row";
+      row.className = "checkpoints-list-row";
       // row.role = "checkbox";
       //row.ariaChecked = true;
       row.dataIndex = idx;
