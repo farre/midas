@@ -33,8 +33,7 @@ def vs_stackframe_from_fn(frame, functionSymbol, alreadyReffedId):
         "line": line_number,
         "column": 0,
         "name": "{}".format(functionSymbol.name),
-        "address": frame.pc(),
-        "stackAddressStart": int(stackStart),
+        "instructionPointerReference": frame.pc()
     }
     return sf
 
@@ -57,8 +56,7 @@ def vs_stackframe_from_no_symtab(name, frame, alreadyReffedId=None):
         "line": line_number,
         "column": 0,
         "name": name,
-        "address": frame.pc(),
-        "stackAddressStart": int(stackStart),
+        "instructionPointerReference": frame.pc()
     }
     return sf
 
