@@ -92,11 +92,6 @@
         "shortTitle": "Midas: Open logs"
       },
       {
-        "command": "midas.add-checkpoint",
-        "category": "Debug Checkpoints",
-        "title": "Create checkpoint"
-      },
-      {
         "command": "midas.clear-checkpoints",
         "category": "Debug Checkpoints",
         "title": "Clear checkpoints"

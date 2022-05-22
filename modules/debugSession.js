@@ -35,6 +35,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   #spawnConfig;
   /** @type {import("./ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
   #checkpointsUI;
+  addressBreakpoints = [];
   // eslint-disable-next-line no-unused-vars
   constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, spawnConfig, terminal, checkpointsUI) {
     super();
@@ -75,8 +76,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
     // response.body.supportsEvaluateForHovers = true;
-
-    response.body.supportsReadMemoryRequest;
+    response.body.supportsMemoryReferences = true;
+    response.body.supportsReadMemoryRequest = true;
+    response.body.supportsWriteMemoryRequest = true;
     // make VS Code show a 'step back' button
     response.body.supportsStepBack = true;
     // make VS Code support data breakpoints
@@ -85,7 +87,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsCompletionsRequest = false;
     response.body.completionTriggerCharacters = [".", "["];
     // make VS Code send cancel request
-    response.body.supportsCancelRequest = true;
+    response.body.supportsCancelRequest = false;
 
     // this option actually would require LSP support; since we would have to
     // scan the source code and analyze it for possible ways to set a breakpoint.
@@ -270,6 +272,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async stackTraceRequest(response, { threadId, startFrame, levels }) {
     response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`);
+    response.body.stackFrames.forEach((e) => {
+      // this is.. unfortunate. But we just have to live with it.
+      e.instructionPointerReference = "0x" + e.instructionPointerReference.toString(16).padStart(16, "0");
+    });
     this.sendResponse(response);
   }
 
@@ -362,6 +368,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     super.terminateRequest(response, args, request);
     this.gdb.kill();
     this.gdb.cleanup();
+    this.exitGracefully();
   }
 
   async restartRequest(response, { arguments: args }) {
@@ -562,20 +569,122 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  disassembleRequest(...args) {
-    return this.virtualDispatch(...args);
-  }
-
-  cancelRequest(response, args, request) {
-    return this.virtualDispatch(response, args, request);
+  async cancelRequest(response, args, request) {
+    await this.gdb.interrupt_operations();
+    this.sendResponse(response);
   }
 
   breakpointLocationsRequest(...args) {
     return this.virtualDispatch(...args);
   }
 
-  setInstructionBreakpointsRequest(...args) {
-    return this.virtualDispatch(...args);
+  async setInstructionBreakpointsRequest(response, args, request) {
+    // we just handle this naively. Delete all bkpts set by explicit address location
+    if (this.addressBreakpoints.length != 0) {
+      let ids = this.addressBreakpoints.join(" ");
+      await this.gdb.execMI(`-break-delete ${ids}`);
+      this.addressBreakpoints = [];
+    }
+    let res = [];
+    for (const { instructionReference } of args.breakpoints) {
+      let { bkpt } = await this.gdb.execMI(`-break-insert *${instructionReference}`);
+      this.addressBreakpoints.push(+bkpt.number);
+      res.push({ line: bkpt.line, id: bkpt.number, verified: bkpt.addr != "<PENDING>", enabled: true });
+    }
+    response.body = {
+      breakpoints: res,
+    };
+    this.sendResponse(response);
+  }
+
+  async disassembleRequest(
+    response,
+    { instructionCount, instructionOffset, memoryReference, offset, resolveSymbols },
+    request
+  ) {
+    /**
+     * This takes the result from `-data-disassemble` and makes sure that the final result is in the format (and count) that VSCode requires.
+     * For instance, VSCode might ask for 400 instructions (200 "back" and 200 "forward"), if we only can fetch 137 back
+     * we need to fill it up so that the element count is 200, with the remainder being `null`s, however this obviously
+     * looks different if it's backwards or forwards, meaning, the nulls either are prepended or appended. Also, if
+     * we get too many, according to the documents, we need to clamp. It doesn't explicitly say so, but it says it
+     * needs to be *exactly* that amount, which only can be interpreted as "exactly that amount". As VSCode extension
+     * documentation is rather lacking, and often poorly worded, we'll leave this larger comment here for future analysis.
+     * @param {any} res - Result from `-data-disassemble` MI command
+     * @param {boolean} second_half -
+     * @param {number} clampOrFillToSize - The amount of elements VSCode expects this part to be.
+     * @returns {{ok: any[], invalids: null[] }}
+     */
+    const flattener = (res, second_half, clampOrFillToSize) => {
+      let src = new DebugAdapter.Source("Unknown", "");
+      let half_result = res.asm_insns.flatMap((e) => {
+        if (e.value) {
+          const { value } = e;
+          if (value.file != src.name || value.fullname != src.path) {
+            src = new DebugAdapter.Source(value.file, value.fullname);
+          }
+          return value.line_asm_insn.map((asm) => ({
+            address: asm.address,
+            instruction: asm.inst,
+            location: src,
+            line: value.line,
+            instructionBytes: asm.opcodes,
+          }));
+        } else {
+          return {
+            address: e.address,
+            instruction: e.inst,
+            instructionBytes: e.opcodes,
+          };
+        }
+      });
+      if (half_result.length > clampOrFillToSize) {
+        if (!second_half) {
+          half_result = half_result.slice(half_result.length - clampOrFillToSize);
+        } else {
+          half_result = half_result.slice(0, clampOrFillToSize);
+        }
+        return { ok: half_result, invalids: [] };
+      } else if (half_result.length < clampOrFillToSize) {
+        let invalids = clampOrFillToSize - half_result.length;
+        return { ok: half_result, invalids: new Array(invalids).fill(null) };
+      } else {
+        return { ok: half_result, invalids: [] };
+      }
+    };
+    if (offset == 0) {
+      let result = [];
+      if (instructionCount == Math.abs(instructionOffset)) {
+        // we end up here, when we're "scrolling up" in the disasm view, thus we want 50 instructions, and we don't want to split it in half.
+        const start = +memoryReference - 8 * instructionCount;
+        const end = memoryReference;
+        const res = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+        const { ok, invalids } = flattener(res, false, instructionCount);
+        result = invalids.concat(ok);
+      } else {
+        // initial disasm request
+        let mr = +memoryReference;
+        let start = mr - (8 * instructionCount) / 2;
+        let end = mr;
+        const first_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+        {
+          const { ok, invalids } = flattener(first_half, false, instructionCount / 2);
+          result = result.concat(invalids).concat(ok);
+          start = mr;
+          end = start + (8 * instructionCount) / 2;
+        }
+        {
+          const second_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+          const { ok, invalids } = flattener(second_half, true, instructionCount / 2);
+          result = result.concat(ok).concat(invalids);
+        }
+      }
+      response.body = {
+        instructions: result,
+      };
+      this.sendResponse(response);
+    } else {
+    }
   }
 
   /**
@@ -740,6 +849,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   getSpawnConfig() {
     return this.#spawnConfig;
+  }
+
+  exitGracefully() {
+    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
   }
 }
 
