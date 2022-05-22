@@ -72,8 +72,6 @@ button.secondary:hover {
 	background: var(--vscode-button-secondaryHoverBackground);
 }
 
-
-
 input:not([type='checkbox']),
 textarea {
 	display: block;
@@ -93,88 +91,50 @@ textarea::placeholder {
 
 
 /* Breakpoints UI Styles */
-.monaco-list-rows {
+.checkpoints-list-rows {
 	background: #f2f2f2;
 }
 
-.monaco-list-row.selected {
+.checkpoints-list-row.selected {
 	background-color: #c4d9b1;
 }
 
-.monaco-list-row.selected:hover {
+.checkpoints-list-row.selected:hover {
 	background-color: #c4d9b1;
 }
 
-.monaco-list-row.selected {
+.checkpoints-list-row.selected {
 	color: #6c6c6c;
 }
 
-.monaco-drag-image,
-.monaco-list-row.selected.focused {
+.checkpoints-list-row.selected.focused {
 	background-color: #c4d9b1;
 }
 
 
-.monaco-drag-image,
-.monaco-list-row.selected.focused {
+.checkpoints-list-row.selected.focused {
 	color: #6c6c6c;
 }
 
-.monaco-list-row.selected {
+.checkpoints-list-row.selected {
 	background-color: #d3dbcd;
 }
 
-.monaco-list-row.selected:hover {
+.checkpoints-list-row.selected:hover {
 	background-color: #d3dbcd;
 }
 
-.monaco-list-row:hover:not(.selected):not(.focused) {
+.checkpoints-list-row:hover:not(.selected):not(.focused) {
 	background-color: #e0e0e0;
 }
 
-.monaco-drag-image,
-.monaco-list.list_id_9:focus .monaco-list-row.focused {
-	outline: 1px solid #a6b39b;
-	outline-offset: -1px;
-}
 
-.monaco-workbench.context-menu-visible .monaco-list.list_id_9.last-focused .monaco-list-row.focused {
-	outline: 1px solid #a6b39b;
-	outline-offset: -1px;
-}
-
-.monaco-list-rows.drop-target,
-.monaco-list-row.drop-target {
+.checkpoints-list-rows.drop-target,
+.checkpoints-list-row.drop-target {
 	background-color: #d6ebff !important;
 	color: inherit !important;
 }
 
-.monaco-list-type-filter {
-	background-color: #efc1ad
-}
-
-.monaco-list-type-filter {
-	border: 1px solid rgba(0, 0, 0, 0);
-}
-
-.monaco-list-type-filter.no-matches {
-	border: 1px solid #be1100;
-}
-
-.monaco-list-type-filter {
-	box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.16);
-}
-
-.monaco-table:hover>.monaco-split-view2,
-.monaco-table:hover>.monaco-split-view2 .monaco-sash.vertical::before {
-	border-color: rgba(97, 97, 97, 0.13);
-}
-
-.monaco-table .monaco-list-row[data-parity=odd]:not(.focused):not(.selected):not(:hover) .monaco-table-tr,
-.monaco-table .monaco-list:not(:focus) .monaco-list-row[data-parity=odd].focused:not(.selected):not(:hover) .monaco-table-tr,
-.monaco-table .monaco-list:not(.focused) .monaco-list-row[data-parity=odd].focused:not(.selected):not(:hover) .monaco-table-tr {
-	background-color: rgba(97, 97, 97, 0.04);
-}
 
 .file-path {
 	color: var(--vscode-editor-foreground);
@@ -185,7 +145,7 @@ textarea::placeholder {
 	overflow: hidden;
 }
 
-.monaco-list-row {
+.checkpoints-list-row {
 	display: flex;
 	box-sizing: border-box;
 	overflow: hidden;
@@ -196,21 +156,17 @@ textarea::placeholder {
 	margin-bottom: 2px;
 }
 
-.monaco-list-row .row-button {
+.checkpoints-list-row .row-button {
 	visibility: hidden;
 }
 
-.monaco-list-row:hover .row-button {
+.checkpoints-list-row:hover .row-button {
 	visibility: visible;
 }
 
-.monaco-list-when {
+.checkpoints-list-when {
 	flex: 0 0 50px;
 	user-select: none;
-}
-
-.monaco-list-col {
-	flex: 1;
 }
 
 #icons {
@@ -236,7 +192,7 @@ textarea::placeholder {
 	display: flex;
 }
 
-.monaco-count-badge {
+.checkpoints-count-badge {
 	padding: 3px 6px;
 	border-radius: 11px;
 	font-size: 11px;
