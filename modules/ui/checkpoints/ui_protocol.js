@@ -5,7 +5,7 @@ const UI_MESSAGES = () => ({
   UpdateCheckpoints: "update-checkpoints",
 });
 
-const UI_REQUESTS = () => ({ DeleteCheckpoin: "delete-checkpoint", RunToCheckpoint: "run-to-checkpoint" });
+const UI_REQUESTS = () => ({ DeleteCheckpoint: "delete-checkpoint", RunToCheckpoint: "run-to-checkpoint" });
 
 module.exports.UI_MESSAGES = UI_MESSAGES;
 module.exports.UI_REQUESTS = UI_REQUESTS;
