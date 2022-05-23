@@ -759,10 +759,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       }
 
       case "clear-checkpoints": {
-        const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
-        for (const cp of checkpoints) {
-          await this.gdb.deleteCheckpoint(cp.id);
-        }
+        // in case we haven't started debug session, yet want to clear checkpoints list
+        try {
+          const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
+          for (const cp of checkpoints) {
+            await this.gdb.deleteCheckpoint(cp.id);
+          }
+        } catch (e) {}
         this.#checkpointsUI.updateCheckpoints([]);
         break;
       }
@@ -861,17 +864,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   exitGracefully() {
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
   }
-}
-
-let cpID = 0;
-
-/**
- *
- * @param {string} checkpointResultString
- * @returns {{ id: number, when: number, file: string, path: string, line: number }}
- */
-function parseCheckpoint(checkpointResultString) {
-  return { id: cpID++, when: 0, file: "baz.c", path: "/foo/bar", line: 1 };
 }
 
 module.exports = {

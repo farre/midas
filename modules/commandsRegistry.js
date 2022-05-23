@@ -48,10 +48,6 @@ function getVSCodeCommands(context) {
     vscode.debug.activeDebugSession.customRequest("continueAll");
   });
 
-  let setCheckpoint = registerCommand("midas.set-checkpoint", () => {
-    vscode.debug.activeDebugSession.customRequest("set-checkpoint");
-  });
-
   let pauseAll = registerCommand("midas.session-pause-all", () => {
     vscode.debug.activeDebugSession.customRequest("pauseAll");
   });
@@ -109,16 +105,7 @@ function getVSCodeCommands(context) {
     }
   });
 
-  return [
-    rrRecord,
-    continueAll,
-    pauseAll,
-    reverseFinish,
-    hotReloadScripts,
-    displayLogs,
-    issueGithubReport,
-    setCheckpoint,
-  ];
+  return [rrRecord, continueAll, pauseAll, reverseFinish, hotReloadScripts, displayLogs, issueGithubReport];
 }
 
 module.exports = {
