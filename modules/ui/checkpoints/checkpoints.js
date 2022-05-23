@@ -1,15 +1,25 @@
 const vscode = require("vscode");
-
+const { registerCommand } = require("vscode").commands;
+const { UI_REQUESTS, UI_MESSAGES } = require("./ui_protocol");
 class CheckpointsViewProvider {
   /** @type {vscode.WebviewView} */
   #view = null;
   #extensionUri;
 
   /**
-   * @param {vscode.ExtensionContext} extension_ctx
+   * @param {vscode.ExtensionContext} extensionContext
    */
-  constructor(extension_ctx) {
-    this.#extensionUri = extension_ctx.extensionUri;
+  constructor(extensionContext) {
+    this.#extensionUri = extensionContext.extensionUri;
+    let setCheckpoint = registerCommand("midas.set-checkpoint", () => {
+      vscode.debug.activeDebugSession.customRequest("set-checkpoint");
+    });
+
+    let clearCheckpoints = registerCommand("midas.clear-checkpoints", () => {
+      vscode.debug.activeDebugSession.customRequest("clear-checkpoints");
+    });
+
+    extensionContext.subscriptions.push(setCheckpoint, clearCheckpoints);
   }
 
   /**
@@ -19,23 +29,18 @@ class CheckpointsViewProvider {
     return "midas.checkpoints-ui";
   }
 
-  clearCheckpoints() {
+  updateCheckpoints(checkpoints, show = true) {
     if (this.#view) {
-      vscode.debug.activeDebugSession.customRequest("clear-checkpoints");
-    }
-  }
+      if (show) this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
 
-  updateCheckpoints(checkpoints) {
-    if (this.#view) {
-      this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-      this.#view.webview.postMessage({ type: "update-checkpoints", payload: checkpoints });
+      this.#view.webview.postMessage({ type: UI_MESSAGES().UpdateCheckpoints, payload: checkpoints });
     }
   }
 
   addCheckpoint(checkpoint) {
     if (this.#view) {
       this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-      this.#view.webview.postMessage({ type: "add-checkpoint", payload: checkpoint });
+      this.#view.webview.postMessage({ type: UI_MESSAGES().AddCheckpoint, payload: checkpoint });
     }
   }
   /**
@@ -64,7 +69,6 @@ class CheckpointsViewProvider {
     webviewView.webview.options = {
       // Allow scripts in the webview
       enableScripts: true,
-
       localResourceRoots: [this.#extensionUri],
     };
 
@@ -72,14 +76,11 @@ class CheckpointsViewProvider {
 
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.type) {
-        case "add-checkpoint":
-          vscode.debug.activeDebugSession.customRequest("set-checkpoint");
-          break;
-        case "delete-checkpoint": {
+        case UI_REQUESTS().DeleteCheckpoint: {
           vscode.debug.activeDebugSession.customRequest("delete-checkpoint", data.value);
           break;
         }
-        case "run-to-checkpoint":
+        case UI_REQUESTS().RunToCheckpoint:
           vscode.debug.activeDebugSession.customRequest("restart-checkpoint", data.value);
           break;
       }
@@ -97,27 +98,20 @@ class CheckpointsViewProvider {
     const styleResetUri = webview.asWebviewUri(this.resourceUri("reset.css"));
     const styleVSCodeUri = webview.asWebviewUri(this.resourceUri("vscode.css"));
     const styleMainUri = webview.asWebviewUri(this.resourceUri("main.css"));
-    console.log(
-      `codicon path: ${vscode.Uri.joinPath(
-        this.#extensionUri,
-        "node_modules",
-        "@vscode/codicons",
-        "dist",
-        "codicon.css"
-      ).fsPath.toString()}`
-    );
+    const MessageProtocol = webview.asWebviewUri(this.resourceUri("ui_protocol.js"));
     const codiconsUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.#extensionUri, "node_modules", "@vscode/codicons", "dist", "codicon.css")
     );
 
     // Use a nonce to only allow a specific script to be run.
     const nonce = getNonce();
-
+    const serialize = JSON.stringify({ UI_MESSAGES: UI_MESSAGES(), UI_REQUESTS: UI_REQUESTS() });
+    console.log(`Protocol serialized to: ${serialize}`);
     return `<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}";>
 
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -131,8 +125,11 @@ class CheckpointsViewProvider {
       <div class="checkpoints-table">
         <div class="checkpoints-list-rows" id="checkpoints-list"></div>
       </div>
-
+        <script nonce="${nonce} src="${MessageProtocol}></script>
         <script nonce="${nonce}" src="${scriptUri}"></script>
+        <script nonce="${nonce}">
+          setupUI('${serialize}');
+        </script>
       </body>
       </html>`;
   }

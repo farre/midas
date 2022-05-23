@@ -167,6 +167,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     await this.init();
+    this.#target.customRequest("clear-checkpoints");
     // await this.attachOnFork();
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");

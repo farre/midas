@@ -12,7 +12,11 @@ const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
  */
 function activateExtension(context, descriptorFactory) {
   const cp_provider = new CheckpointsViewProvider(context);
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider));
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
   context.subscriptions.push(...getVSCodeCommands(context));
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
