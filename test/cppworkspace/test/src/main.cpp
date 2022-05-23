@@ -6,6 +6,7 @@
 #include "testcase_namespaces/statics.hpp"
 #include "testcase_namespaces/structrequests.hpp"
 #include "testcase_namespaces/test_ptrs.hpp"
+#include "testcase_namespaces/test_freefloating_watch.hpp"
 #include <iostream>
 #include <iterator>
 #include <number.hpp>
@@ -143,4 +144,5 @@ int main(int argc, const char **argv) {
   longstack::main();
   statics::main();
   structsrequests::main();
+  freefloating_watch::main();
 }

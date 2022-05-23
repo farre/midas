@@ -93,8 +93,14 @@
       },
       {
         "command": "midas.clear-checkpoints",
-        "category": "Debug Checkpoints",
+        "category": "Midas Checkpoints",
         "title": "Clear checkpoints"
+      },
+      {
+        "command": "midas.set-checkpoint",
+        "category": "Midas Checkpoints",
+        "title": "Set Checkpoint",
+        "icon": "$(device-camera)"
       }
     ],
     "menus": {
@@ -124,6 +130,11 @@
         },
         {
           "command": "midas.reverse-finish",
+          "group": "midas",
+          "when": "midas.rrSession == true && midas.debugType == midas-rr"
+        },
+        {
+          "command": "midas.set-checkpoint",
           "group": "midas",
           "when": "midas.rrSession == true && midas.debugType == midas-rr"
         }

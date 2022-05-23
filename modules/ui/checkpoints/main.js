@@ -58,17 +58,12 @@
     // div.appendChild(container);
     // return div;
   }
-
-  const oldState = { checkpoints: [] };
+  const oldState = vscode.getState() || { checkpoints: [] };
   console.log(JSON.stringify(oldState));
   /** @type {Array<CheckpointInfo>} */
   let checkpoints = oldState.checkpoints;
 
   updateCheckpointsList(checkpoints);
-
-  document.querySelector(".add-checkpoint-button").addEventListener("click", () => {
-    vscode.postMessage({ type: "add-checkpoint" });
-  });
 
   // Handle messages sent from the extension to the webview
   window.addEventListener("message", (event) => {

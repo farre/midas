@@ -486,11 +486,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   parse_evaluate_request_parameters(expression) {
     const result = this.parse_subscript(expression);
     if (result == null) throw new Error("");
-    const { name, subscript } = result;
+    let { name, subscript } = result;
+    let scope = "current";
+    if (expression.charAt(0) == "*") {
+      scope = "first";
+      name = name.substring(1);
+    }
     return {
       name: name.endsWith(",x") ? name.substring(0, name.length - 2) : name,
       formatting: expression.endsWith(",x") ? "hex" : "none",
-      subscript,
+      subscript: subscript,
+      scope: scope,
     };
   }
   // eslint-disable-next-line no-unused-vars
@@ -499,8 +505,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     if (context == "watch") {
       try {
         // meeeeeh. This is what you get for not having real types.
-        const { name, formatting, subscript } = this.parse_evaluate_request_parameters(expression);
-        const cmd = `watch-variable ${name} ${frameId} ${subscript.begin} ${subscript.end}`;
+        const { name, formatting, subscript, scope } = this.parse_evaluate_request_parameters(expression);
+        const cmd = `watch-variable ${name} ${frameId} ${subscript.begin} ${subscript.end} ${scope}`;
         let { body, success, message } = await this.exec(cmd);
         if (formatting == "hex" && success) {
           if (body.variablesReference > 0) {
@@ -740,6 +746,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       }
 
       case "restart-checkpoint": {
+        // todo(simon): make this invalidate all state in the future
         this.gdb.restartFromCheckpoint(args);
         break;
       }

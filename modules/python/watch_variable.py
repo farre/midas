@@ -1,6 +1,7 @@
 import gdb
 import config
 import midas_utils
+from execution_context import ExecutionContext
 
 
 def response(success,
@@ -36,35 +37,67 @@ def find_variable(frame, name):
     it = midas_utils.get_global(frame, name)
     return it
 
-
-# todo(simon): make watch-variable request take a `STOP` parameter;
-#  this is so that we can say from VSCode that we want to watch for a variable up to scope `SCOPE`
-#  this is for performance reasons; if we're watching a variable that we know is not a global, then the user should
-#  be able to say that, that way we won't scan the entire scope every time which can be pretty costly.
-
-
 class WatchVariable(gdb.Command):
     """Not to be confused with watch point."""
 
     def __init__(self, executionContexts):
         super(WatchVariable, self).__init__("gdbjs-watch-variable", gdb.COMMAND_USER)
         self.name = "watch-variable"
-        self.executionContexts = executionContexts
+        self.executionContexts: ExecutionContext = executionContexts
 
     @config.timeInvocation
     def invoke(self, args, from_tty):
         try:
-            [expr, frameId, begin, end] = midas_utils.parse_command_args(args, str, int, int, int)
+            [expr, frameId, begin, end, scope] = midas_utils.parse_command_args(args, str, int, int, int, str)
             refId = config.variableReferences.get_context(frameId)
             if refId is None:
                 raise gdb.GdbError("No variable reference mapping for frame id {} exists".format(frameId))
             ec = self.executionContexts.get(refId.threadId)
             if ec is None:
                 raise gdb.GdbError("Execution context does not exist")
+            var = ec.free_floating_watchvariable(expr)
+            if var is not None:
+                res = var.to_vs()
+                result = response(success=True,
+                                    message=None,
+                                    result=res["value"],
+                                    type="{}".format(var.get_type()),
+                                    variableReference=var.get_variable_reference())
+                midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
+                return
+
             frame = ec.set_known_context(frameId)
             components = expr.split(".")
+            foundFrameId = None
             it = find_variable(frame, components[0])
-
+            if scope == "first" and it is None:
+                for sf in ec.stack:
+                    it = find_variable(sf.frame, components[0])
+                    if it is not None:
+                        for comp in components[1:]:
+                            it = it[comp]
+                            if it is None:
+                                break
+                        foundFrameId = sf.frame_id()
+                    if foundFrameId is not None:
+                        # when this stack frame goes out of scope, it removes `expr` free floating variable from ec
+                        if begin != -1 and end != -1:
+                            it = it[begin]
+                            bound = max((end - begin) - 1, 0)
+                            it = it.cast(it.type.array(bound))
+                            expr = "{}[{}:{}]".format(expr, begin, end)
+                        sf = ec.get_stackframe(foundFrameId)
+                        var = sf.add_watched_variable(expr, it)
+                        ec.set_free_floating(expr, var)
+                        sf.set_free_floating(expr)
+                        res = var.to_vs()
+                        result = response(success=True,
+                                    message=None,
+                                    result=res["value"],
+                                    type="{}".format(var.get_type()),
+                                    variableReference=var.get_variable_reference())
+                        midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
+                        return
             for comp in components[1:]:
                 it = it[comp]
                 if it is None:
@@ -73,10 +106,9 @@ class WatchVariable(gdb.Command):
                 midas_utils.send_response(
                     self.name,
                     response(result="no symbol with that name in context",
-                             success=False,
-                             message="could not evaluate"), midas_utils.prepare_command_response)
+                                success=False,
+                                message="could not evaluate"), midas_utils.prepare_command_response)
             else:
-                # (b && e) == -1 => no subscript operation
                 if begin != -1 and end != -1:
                     it = it[begin]
                     bound = max((end - begin) - 1, 0)
