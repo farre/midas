@@ -7,7 +7,7 @@ import frame_operations
 import stackframe
 import config
 import midas_utils
-
+from variable import Variable
 
 class CurrentExecutionContext:
     inferior = None
@@ -56,6 +56,14 @@ class ExecutionContext:
         # Hallelujah (ironic) for type info. I miss Rust.
         self.stack: list[stackframe.StackFrame] = []
         self.last_calculated_stack_depth = -1
+        self.free_floating_watch_variables = {}
+
+    def free_floating_watchvariable(self, expr) -> Variable:
+        return self.free_floating_watch_variables.get(expr)
+
+    @config.timeInvocation
+    def set_free_floating(self, expr, var):
+        self.free_floating_watch_variables[expr] = var
 
     @config.timeInvocation
     def set_context(self, frame_level):
@@ -97,32 +105,32 @@ class ExecutionContext:
                     self.stack = self.stack[x:]
                     tmp = self.stack
                     threadId = self.thread_id()
-                    self.stack = [stackframe.StackFrame(f, threadId) for f in newFrames]
+                    self.stack = [stackframe.StackFrame(f, threadId, self) for f in newFrames]
                     self.stack.extend(tmp)
                 else:
                     self.clear_frames()
                     threadId = self.thread_id()
                     for frame in frame_operations.take_n_frames(f, levels):
-                        sf = stackframe.StackFrame(frame, threadId)
+                        sf = stackframe.StackFrame(frame, threadId, self)
                         self.stack.append(sf)
             else:
                 threadId = self.thread_id()
                 for frame in frame_operations.take_n_frames(f, levels):
-                    sf = stackframe.StackFrame(frame, threadId)
+                    sf = stackframe.StackFrame(frame, threadId, self)
                     self.stack.append(sf)
         except:
             # stack frame chain was invalidated somewhere. try rebuilding it.
             self.stack = []
             threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(f, levels):
-                sf = stackframe.StackFrame(frame, threadId)
+                sf = stackframe.StackFrame(frame, threadId, self)
                 self.stack.append(sf)
 
         if len(self.stack) < start + levels:
             remainder = (start + levels) - len(self.stack)
             threadId = self.thread_id()
             for frame in frame_operations.take_n_frames(self.stack[-1].frame.older(), remainder):
-                sf = stackframe.StackFrame(frame, threadId)
+                sf = stackframe.StackFrame(frame, threadId, self)
                 self.stack.append(sf)
         for sf in self.stack:
             result.append(sf.get_vs_frame())

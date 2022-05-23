@@ -131,7 +131,6 @@ class CheckpointsViewProvider {
       <div class="checkpoints-table">
         <div class="checkpoints-list-rows" id="checkpoints-list"></div>
       </div>
-      <button class="add-checkpoint-button">Add checkpoint</button>
 
         <script nonce="${nonce}" src="${scriptUri}"></script>
       </body>

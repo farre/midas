@@ -106,7 +106,7 @@ def scope(name, variableReference, presentationHint, expensive=False):
 
 class StackFrame:
 
-    def __init__(self, frame, threadId):
+    def __init__(self, frame, threadId, ec):
         """Creates a stack frame. Used for querying about local variables, arguments etc.
         Mutates the global VariableReference map by registering it's 3 'top level' variable references."""
         self.frame = frame
@@ -128,6 +128,9 @@ class StackFrame:
         self.block_values = []
         self.init = False
         self.watch_variables: dict[str, Variable] = {}
+        self.freeFloating = []
+
+        self.ec = ec
 
         self.scopes = [
             scope("Locals", self.localsReference, "locals"),
@@ -140,6 +143,11 @@ class StackFrame:
         config.variableReferences.add_mapping(self.argsReference, self)
         config.variableReferences.add_mapping(self.registerReference, self)
         config.variableReferences.add_mapping(self.staticsReference, self)
+
+    # called when going out of scope, deleting any previously watched variables from that level.
+    def __del__(self):
+        for freefloat in self.freeFloating:
+            del self.ec.free_floating_watch_variables[freefloat]
 
     @config.timeInvocation
     def initialize(self):
@@ -309,3 +317,6 @@ class StackFrame:
 
     def reference_key(self):
         return config.ReferenceKey(self.threadId, self.frame_id())
+
+    def set_free_floating(self, expr):
+        self.freeFloating.append(expr)

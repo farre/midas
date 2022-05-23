@@ -8,6 +8,17 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Create specific handlers for all VSCode requests directly in Python
 
+## [0.4.0] - 2022-05-23
+- Hooked up Midas to work with VSCode Disassembly view
+- Added "Create issue log" command
+- Added checkpoints UI for setting and returning to a checkpoint
+- Added scope-locking for watch variables, *<variablename> binds a watch variable
+	to the first found variable with that name in the call stack. Subscript operators
+	and hex formatting works for these as well.
+
+## [0.2.0]
+- Added checkpoint UI
+
 ## [0.1.2] - 2022-04-25
 
 - Added the repl command "cancel" - sends an interrupt to GDB in case it is doing something that takes too long.
