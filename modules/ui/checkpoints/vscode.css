@@ -90,21 +90,16 @@ textarea::placeholder {
 }
 
 
-/* Breakpoints UI Styles */
-.checkpoints-list-rows {
-	background: #f2f2f2;
-}
-
 .checkpoints-list-row.selected {
-	background-color: #c4d9b1;
+	background-color: var(--vscode-selection-background);
 }
 
 .checkpoints-list-row.selected:hover {
-	background-color: #c4d9b1;
+	background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected {
-	color: #6c6c6c;
+	background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected.focused {
@@ -113,26 +108,19 @@ textarea::placeholder {
 
 
 .checkpoints-list-row.selected.focused {
-	color: #6c6c6c;
+	color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected {
-	background-color: #d3dbcd;
+	background-color: #d3dbcd;var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected:hover {
-	background-color: #d3dbcd;
+	background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row:hover:not(.selected):not(.focused) {
-	background-color: #e0e0e0;
-}
-
-
-.checkpoints-list-rows.drop-target,
-.checkpoints-list-row.drop-target {
-	background-color: #d6ebff !important;
-	color: inherit !important;
+	background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 
@@ -203,8 +191,8 @@ textarea::placeholder {
 	text-align: center;
 	display: inline-block;
 	box-sizing: border-box;
-	background-color: rgba(112, 86, 151, 0.4);
-	color: rgba(51, 51, 51, 0.6);
+	background-color: var(--vscode-badge-background);
+	color: var(--vscode-foreground-background);
 }
 
 .checkpoints-action-bar {
@@ -223,7 +211,7 @@ textarea::placeholder {
 	text-align: center;
 }
 
-.row-button:hover:not(.selected):not(.focused) {
+.row-button:hover {
 	background-color: var(--vscode-widget-shadow)
 }
 
