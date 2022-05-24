@@ -3,7 +3,7 @@
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
-const { Source, ContinuedEvent, ExitedEvent } = require("@vscode/debugadapter");
+const { Source, ContinuedEvent } = require("@vscode/debugadapter");
 const path = require("path");
 const {
   InitializedEvent,
@@ -63,6 +63,7 @@ const {
   isNothing,
 } = require("./utils");
 const { spawnGdb } = require("./spawn");
+const { CustomRequests } = require("./debugSessionCustomRequests");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
@@ -95,7 +96,6 @@ function newStoppedEvent(reason, description, allThreadsStopped, threadId = unde
 /** @constructor */
 let GDBBase = gdbjs.GDB;
 const ext = vscode.extensions.getExtension("farrese.midas");
-const dir = `${ext.extensionPath}/modules/python`;
 
 let gdbProcess = null;
 /** @typedef {number} ThreadId */
@@ -167,7 +167,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
     await this.init();
-    this.#target.customRequest("clear-checkpoints");
+    this.#target.customRequest(CustomRequests.ClearCheckpoints);
     // await this.attachOnFork();
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");
@@ -881,7 +881,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{ bkpt: bkpt }} payload
    */
   #onNotifyBreakpointModified(payload) {
-    const { enabled, file, fullname, line, locations } = payload.bkpt;
+    const { file, fullname, line, locations } = payload.bkpt;
     const num = payload.bkpt.number;
     let bp;
     if (locations) {

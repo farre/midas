@@ -1,10 +1,11 @@
 "use strict";
-const { exec, execSync } = require("child_process");
+const { execSync } = require("child_process");
 const fs = require("fs");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
 const vscode = require("vscode");
+const { CustomRequests } = require("./debugSessionCustomRequests");
 const { getVersion, isNothing } = require("./utils");
 const { registerCommand } = require("vscode").commands;
 
@@ -45,15 +46,15 @@ function getVSCodeCommands(context) {
   });
 
   let continueAll = registerCommand("midas.session-continue-all", () => {
-    vscode.debug.activeDebugSession.customRequest("continueAll");
+    vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll);
   });
 
   let pauseAll = registerCommand("midas.session-pause-all", () => {
-    vscode.debug.activeDebugSession.customRequest("pauseAll");
+    vscode.debug.activeDebugSession.customRequest(CustomRequests.PauseAll);
   });
 
   let reverseFinish = registerCommand("midas.reverse-finish", () => {
-    vscode.debug.activeDebugSession.customRequest("reverse-finish");
+    vscode.debug.activeDebugSession.customRequest(CustomRequests.ReverseFinish);
   });
 
   const issueGithubReport = registerCommand("midas.issue-report", async () => {
@@ -89,7 +90,7 @@ function getVSCodeCommands(context) {
   });
 
   let hotReloadScripts = registerCommand("midas.hot-reload-scripts", () => {
-    vscode.debug.activeDebugSession.customRequest("hot-reload-scripts");
+    vscode.debug.activeDebugSession.customRequest(CustomRequests.ReloadMidasScripts);
   });
 
   let displayLogs = registerCommand("midas.show-logs", async () => {

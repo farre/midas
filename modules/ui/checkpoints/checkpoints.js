@@ -1,4 +1,6 @@
+/* eslint-disable max-len */
 const vscode = require("vscode");
+const { CustomRequests } = require("../../debugSessionCustomRequests");
 const { registerCommand } = require("vscode").commands;
 const { UI_REQUESTS, UI_MESSAGES } = require("./ui_protocol");
 class CheckpointsViewProvider {
@@ -12,11 +14,11 @@ class CheckpointsViewProvider {
   constructor(extensionContext) {
     this.#extensionUri = extensionContext.extensionUri;
     let setCheckpoint = registerCommand("midas.set-checkpoint", () => {
-      vscode.debug.activeDebugSession.customRequest("set-checkpoint");
+      vscode.debug.activeDebugSession.customRequest(CustomRequests.SetCheckpoint);
     });
 
     let clearCheckpoints = registerCommand("midas.clear-checkpoints", () => {
-      vscode.debug.activeDebugSession.customRequest("clear-checkpoints");
+      vscode.debug.activeDebugSession.customRequest(CustomRequests.ClearCheckpoints);
     });
 
     extensionContext.subscriptions.push(setCheckpoint, clearCheckpoints);
@@ -33,14 +35,14 @@ class CheckpointsViewProvider {
     if (this.#view) {
       if (show) this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
 
-      this.#view.webview.postMessage({ type: UI_MESSAGES().UpdateCheckpoints, payload: checkpoints });
+      this.#view.webview.postMessage({ type: UI_MESSAGES.UpdateCheckpoints, payload: checkpoints });
     }
   }
 
   addCheckpoint(checkpoint) {
     if (this.#view) {
       this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-      this.#view.webview.postMessage({ type: UI_MESSAGES().AddCheckpoint, payload: checkpoint });
+      this.#view.webview.postMessage({ type: UI_MESSAGES.AddCheckpoint, payload: checkpoint });
     }
   }
   /**
@@ -64,6 +66,7 @@ class CheckpointsViewProvider {
    *
    * @return {Promise<any>}
    */
+  // eslint-disable-next-line no-unused-vars
   async resolveWebviewView(webviewView, context, token) {
     this.#view = webviewView;
     webviewView.webview.options = {
@@ -76,12 +79,12 @@ class CheckpointsViewProvider {
 
     webviewView.webview.onDidReceiveMessage((data) => {
       switch (data.type) {
-        case UI_REQUESTS().DeleteCheckpoint: {
-          vscode.debug.activeDebugSession.customRequest("delete-checkpoint", data.value);
+        case UI_REQUESTS.DeleteCheckpoint: {
+          vscode.debug.activeDebugSession.customRequest(CustomRequests.DeleteCheckpoint, data.value);
           break;
         }
-        case UI_REQUESTS().RunToCheckpoint:
-          vscode.debug.activeDebugSession.customRequest("restart-checkpoint", data.value);
+        case UI_REQUESTS.RunToCheckpoint:
+          vscode.debug.activeDebugSession.customRequest(CustomRequests.RestartCheckpoint, data.value);
           break;
       }
     });
@@ -105,8 +108,7 @@ class CheckpointsViewProvider {
 
     // Use a nonce to only allow a specific script to be run.
     const nonce = getNonce();
-    const serialize = JSON.stringify({ UI_MESSAGES: UI_MESSAGES(), UI_REQUESTS: UI_REQUESTS() });
-    console.log(`Protocol serialized to: ${serialize}`);
+    const serialize = JSON.stringify({ UI_MESSAGES, UI_REQUESTS });
     return `<!DOCTYPE html>
       <html lang="en">
       <head>

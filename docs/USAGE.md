@@ -14,10 +14,10 @@ The reasoning behind this, is that the re-evaluation of watch points when new sc
 Since the VSCode UI for Watch Variables isn't extendable as of now, the design decision has been to add "keywords" that change the output of the watch variable contents. These are described here. In the future
 a context menu will be added, for a more clearer use. Example shown below for how it works.
 
-![Example of frame wildcard specifier](./watch_variable_frame_wildcard_specifier.gif)
 ### Find first
 Sometimes you want to watch a variable that's in a frame above the current frame you're in. In order to do so, prepend the "frame wildcard specifier" `*` before the name, and Midas will attempt to find the variable in any
 of the frames above. This functionality works in tandem with the other watch variable functionalities (like subscript, and hexadecimal formatting).
+![Example of frame wildcard specifier](./watch_variable_frame_wildcard_specifier.gif)
 
 ### Hexadecimal format of watch variables
 

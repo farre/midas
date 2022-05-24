@@ -1,4 +1,6 @@
-//@ts-check
+/* eslint-disable no-undef */
+// @ts-nocheck
+// eslint-disable-next-line no-unused-vars
 function setupUI(protocol) {
   const { UI_MESSAGES, UI_REQUESTS } = JSON.parse(protocol);
   (function () {
@@ -55,10 +57,6 @@ function setupUI(protocol) {
     window.addEventListener("message", (event) => {
       const message = event.data; // The json data that the extension sent
       switch (message.type) {
-        case UI_MESSAGES.AddCheckpoint: {
-          addCheckpoint(message.payload);
-          break;
-        }
         case UI_MESSAGES.ClearCheckpoints: {
           checkpoints = [];
           updateCheckpointsList(checkpoints);
@@ -103,13 +101,6 @@ function setupUI(protocol) {
 
     function removeCheckpoint(checkpointId) {
       checkpoints = checkpoints.filter((cp) => cp.id != checkpointId);
-      updateCheckpointsList(checkpoints);
-    }
-
-    function addCheckpoint(cp) {
-      vscode.debug.activeDebugSession.customRequest("setRRCheckpointRequest");
-      checkpoints.push(cp);
-      console.log(checkpoints);
       updateCheckpointsList(checkpoints);
     }
   })();
