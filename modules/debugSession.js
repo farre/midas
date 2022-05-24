@@ -11,6 +11,7 @@ const fs = require("fs");
 const net = require("net");
 const { isNothing, ContextKeys, toHexString } = require("./utils");
 const nixkernel = require("./kernelsettings");
+const { CustomRequests } = require("./debugSessionCustomRequests");
 let server;
 
 let REPL_MESSAGE_SHOWN = 0;
@@ -76,6 +77,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // the adapter implements the configurationDone request.
     response.body.supportsConfigurationDoneRequest = true;
     // response.body.supportsEvaluateForHovers = true;
+    // @ts-ignore
     response.body.supportsMemoryReferences = true;
     response.body.supportsReadMemoryRequest = true;
     response.body.supportsWriteMemoryRequest = true;
@@ -279,7 +281,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async variablesRequest(response, { variablesReference }, request) {
+  async variablesRequest(response, { variablesReference }) {
     response.body = await this.exec(`variable-request ${variablesReference}`);
     this.checkForHexFormatting(variablesReference, response.body.variables);
     this.sendResponse(response);
@@ -343,6 +345,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     super[name](...args);
   }
 
+  // eslint-disable-next-line no-unused-vars
   async setVariableRequest(response, { variablesReference, name, value }) {
     // todo: needs impl in new backend
     this.sendResponse(response);
@@ -357,6 +360,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // return super.dispatchRequest(args[0]);
   // }
 
+  // eslint-disable-next-line no-unused-vars
   async disconnectRequest(response, args) {
     this.gdb.kill();
     this.gdb.cleanup();
@@ -575,6 +579,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
+  // eslint-disable-next-line no-unused-vars
   async cancelRequest(response, args, request) {
     await this.gdb.interrupt_operations();
     this.sendResponse(response);
@@ -584,7 +589,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  async setInstructionBreakpointsRequest(response, args, request) {
+  async setInstructionBreakpointsRequest(response, args) {
     // we just handle this naively. Delete all bkpts set by explicit address location
     if (this.addressBreakpoints.length != 0) {
       let ids = this.addressBreakpoints.join(" ");
@@ -603,11 +608,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  async disassembleRequest(
-    response,
-    { instructionCount, instructionOffset, memoryReference, offset, resolveSymbols },
-    request
-  ) {
+  // eslint-disable-next-line no-unused-vars
+  async disassembleRequest(response, { instructionCount, instructionOffset, memoryReference, offset, resolveSymbols }) {
     /**
      * This takes the result from `-data-disassemble` and makes sure that the final result is in the format (and count) that VSCode requires.
      * For instance, VSCode might ask for 400 instructions (200 "back" and 200 "forward"), if we only can fetch 137 back
@@ -615,7 +617,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
      * looks different if it's backwards or forwards, meaning, the nulls either are prepended or appended. Also, if
      * we get too many, according to the documents, we need to clamp. It doesn't explicitly say so, but it says it
      * needs to be *exactly* that amount, which only can be interpreted as "exactly that amount". As VSCode extension
-     * documentation is rather lacking, and often poorly worded, we'll leave this larger comment here for future analysis.
+     * documentation is rather lacking, and often poorly worded, we'll leave this larger comment here for future's sake.
      * @param {any} res - Result from `-data-disassemble` MI command
      * @param {boolean} second_half -
      * @param {number} clampOrFillToSize - The amount of elements VSCode expects this part to be.
@@ -658,39 +660,37 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         return { ok: half_result, invalids: [] };
       }
     };
-    if (offset == 0) {
-      let result = [];
-      if (instructionCount == Math.abs(instructionOffset)) {
-        // we end up here, when we're "scrolling up" in the disasm view, thus we want 50 instructions, and we don't want to split it in half.
-        const start = +memoryReference - 8 * instructionCount;
-        const end = memoryReference;
-        const res = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
-        const { ok, invalids } = flattener(res, false, instructionCount);
-        result = invalids.concat(ok);
-      } else {
-        // initial disasm request
-        let mr = +memoryReference;
-        let start = mr - (8 * instructionCount) / 2;
-        let end = mr;
-        const first_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
-        {
-          const { ok, invalids } = flattener(first_half, false, instructionCount / 2);
-          result = result.concat(invalids).concat(ok);
-          start = mr;
-          end = start + (8 * instructionCount) / 2;
-        }
-        {
-          const second_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
-          const { ok, invalids } = flattener(second_half, true, instructionCount / 2);
-          result = result.concat(ok).concat(invalids);
-        }
-      }
-      response.body = {
-        instructions: result,
-      };
-      this.sendResponse(response);
+    let address = +memoryReference + offset;
+    let result = [];
+    if (instructionCount == Math.abs(instructionOffset)) {
+      // we end up here, when we're "scrolling up" in the disasm view, thus we want 50 instructions, and we don't want to split it in half.
+      const start = +address - 8 * instructionCount;
+      const end = address;
+      const res = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+      const { ok, invalids } = flattener(res, false, instructionCount);
+      result = invalids.concat(ok);
     } else {
+      // initial disasm request
+      let mr = +address;
+      let start = mr - (8 * instructionCount) / 2;
+      let end = mr;
+      const first_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+      {
+        const { ok, invalids } = flattener(first_half, false, instructionCount / 2);
+        result = result.concat(invalids).concat(ok);
+        start = mr;
+        end = start + (8 * instructionCount) / 2;
+      }
+      {
+        const second_half = await this.gdb.execMI(`-data-disassemble -s ${start} -e ${end} -- 5`);
+        const { ok, invalids } = flattener(second_half, true, instructionCount / 2);
+        result = result.concat(ok).concat(invalids);
+      }
     }
+    response.body = {
+      instructions: result,
+    };
+    this.sendResponse(response);
   }
 
   /**
@@ -699,7 +699,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async customRequest(command, response, args) {
     switch (command) {
-      case "continueAll": {
+      case CustomRequests.ContinueAll: {
         await this.gdb.continueAll();
         response.body = {
           allThreadsContinued: this.gdb.allStopMode,
@@ -708,21 +708,18 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         this.gdb.sendContinueEvent(1, true);
         break;
       }
-
-      case "pauseAll": {
+      case CustomRequests.PauseAll: {
         await this.gdb.pauseAll();
         let evt = { body: { reason: "pause", allThreadsStopped: true } };
         this.gdb.sendEvent(evt);
         break;
       }
-
-      case "reverse-finish": {
+      case CustomRequests.ReverseFinish: {
         await this.gdb.finishExecution(undefined, true);
         this.sendResponse(response);
         break;
       }
-
-      case "hot-reload-scripts": {
+      case CustomRequests.ReloadMidasScripts: {
         try {
           await this.gdb.reload_scripts();
           vscode.window.showInformationMessage(`Successfully reloaded backend scripts`);
@@ -731,12 +728,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         }
         break;
       }
-
-      case "spawnConfig": {
+      case CustomRequests.SpawnConfig: {
         return this.#spawnConfig;
       }
 
-      case "set-checkpoint": {
+      case CustomRequests.SetCheckpoint: {
         let res = await this.gdb.execCMD("rr-checkpoint");
         if (res["checkpoint-set"]) {
           const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
@@ -745,20 +741,20 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         break;
       }
 
-      case "restart-checkpoint": {
+      case CustomRequests.RestartCheckpoint: {
         // todo(simon): make this invalidate all state in the future
         this.gdb.restartFromCheckpoint(args);
         break;
       }
 
-      case "delete-checkpoint": {
+      case CustomRequests.DeleteCheckpoint: {
         this.gdb.deleteCheckpoint(args);
         const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
         this.#checkpointsUI.updateCheckpoints(checkpoints);
         break;
       }
 
-      case "clear-checkpoints": {
+      case CustomRequests.ClearCheckpoints: {
         // in case we haven't started debug session, yet want to clear checkpoints list
         try {
           const { checkpoints } = await this.gdb.execCMD("rr-info-checkpoints");
