@@ -16,7 +16,6 @@
     "Debuggers"
   ],
   "activationEvents": [
-    "*",
     "onDebug",
     "onCommand:midas.issue-report"
   ],
