@@ -366,13 +366,14 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.gdb.cleanup();
     this.sendResponse(response);
     this.shutdown();
+    this.atMidasExit();
   }
 
   terminateRequest(response, args, request) {
     super.terminateRequest(response, args, request);
     this.gdb.kill();
     this.gdb.cleanup();
-    this.exitGracefully();
+    this.atMidasExit();
   }
 
   async restartRequest(response, { arguments: args }) {
@@ -857,8 +858,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.#spawnConfig;
   }
 
-  exitGracefully() {
+  atMidasExit() {
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
   }
 }
 
