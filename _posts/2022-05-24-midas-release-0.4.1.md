@@ -9,7 +9,7 @@ Debugging using RR and GDB is easy with Midas. It unifies the start up process o
 and pick the desired trace when starting the session. The process is displayed below, running RR in an external terminal. We made `rrcfg-tools` for this purpose
 and just migrated the idea to this debug adapter extension for VSCode. It makes starting an RR debug session in VSCode a breeze. Below is an example
 
-![RR Session startup simplicity](https://github.com/farre/midas/blob/blog/assets/rr-simplicity.gif)
+![RR Session startup simplicity](https://farre.github.io/midas/assets/rr-simplicity.gif)
 
 # New features in Midas 0.4.0
 
@@ -27,7 +27,7 @@ here's how you format numbers to be displayed in hex, watching a range of `Ts`',
 - `*<variable>` - Frame specifier. The `*` in front tells Midas to search for a variable in all frames above the current one.
 
 Below shows an example of finding the variable `app_state.p_child_identifiers` and displaying 5 of the elements pointed to by that pointer, in a frame somewhere above the current.
-![Frame wildcard specifier]({{ site.url }}/assets/frame_specifier.gif)
+![Frame wildcard specifier](https://farre.github.io/midas/assets/frame_specifier.gif)
 
 Midas makes use of pretty printers when GDB has recognized any for a particular type. This means that your pretty printers *should* have the `.children()`
 method implemented. If your pretty printer only has `to_string` only one thing will be displayed and you won't be able to navigate it's members as one would want to.
