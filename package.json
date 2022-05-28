@@ -214,6 +214,10 @@
                 "type": "array",
                 "description": "GDB Commands to run before debugging."
               },
+              "attachOnFork": {
+                "type": "boolean",
+                "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
+              },
               "externalConsole": {
                 "type": "object",
                 "default": {
@@ -246,13 +250,11 @@
             }
           },
           "attach": {
-            "required": [
-              "pid"
-            ],
             "properties": {
               "pid": {
                 "type": "string",
-                "description": "pid of the process to attach to"
+                "description": "Pid of the process to attach to. Can be left out entirely and entered upon debug launch.",
+                "default": "${command:getPid}"
               },
               "program": {
                 "type": "string",
@@ -294,6 +296,10 @@
               "gdbOptions": {
                 "type": "array",
                 "description": "GDB Arguments."
+              },
+              "attachOnFork": {
+                "type": "boolean",
+                "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
               }
             }
           }
@@ -315,7 +321,7 @@
             "request": "attach",
             "name": "Midas Attach",
             "program": "${1:program}",
-            "pid": "${2:pid}",
+            "pid": "${command:getPid}",
             "trace": "${3:Off}",
             "cwd": "${workspaceFolder}",
             "setupCommands": []
@@ -336,7 +342,8 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "allStopMode": true,
-              "setupCommands": []
+              "setupCommands": [],
+              "attachOnFork": false
             }
           },
           {
@@ -347,15 +354,17 @@
               "type": "midas-gdb",
               "request": "attach",
               "name": "${1:Attach to process}",
-              "program": "${2:program}",
-              "pid": "${3:pid}",
+              "program": "^\"\\${workspaceFolder}\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${4:Off}",
+              "pid": "^\"\\${command:getPid}\"",
               "gdbPath": "${5:gdb}",
-              "setupCommands": []
+              "setupCommands": [],
+              "attachOnFork": false
             }
           }
-        ]
+        ],
+        "variables": {"getPid": "midas.getPid"}
       },
       {
         "type": "midas-rr",

@@ -146,6 +146,26 @@ However, you shouldn't have to fill out a placeholder for yourself, VSCode shoul
 
 ![Default Launch config](docs/launchconfig.gif)
 
+## Attach session
+Attaching to a running process is basically done and setup the same way. Midas will provide a default setting:
+
+```json
+{
+  "type": "midas-gdb",
+  "request": "attach",
+  "name": "Attach",
+  "program": "${workspaceFolder}",
+  "cwd": "${workspaceFolder}",
+  "trace": "Off",
+  "pid": "${command:getPid}",
+  "gdbPath": "gdb",
+  "setupCommands": [],
+  "attachOnFork": false
+}
+```
+
+Leave PID field as is (or remove the field entirely) and you will be asked for it at debug session launch where you can type either the PID directly or the process name and get a list of PID's to choose from (if only 1 exists, it automatically gets picked).
+
 ## Usage
 
 Since VSCode is aimed to be as general as possible, some functionality might never be represented in the UI - as such it might appear unintuitive. [Describing such functionality is found here](docs/USAGE.md), like setting watch points, formatting displayed values etc. It's recommended to skim through, to get to know useful Midas features.
