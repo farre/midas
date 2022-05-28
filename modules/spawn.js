@@ -45,6 +45,7 @@ class SpawnConfig {
     this.setupCommands = launchJson.setupCommands;
     this.binary = launchJson.program;
     this.traceSettings = new MidasRunMode(launchJson);
+    this.attachOnFork = launchJson.attachOnFork ?? false;
   }
 
   build() {

@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup } = require("../utils");
+const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid } = require("../utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
 const initializer = (config) => {
@@ -65,10 +65,8 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
 
     if (config.request == "attach") {
       if (!config.pid) {
-        const options = { canPickMany: false, ignoreFocusOut: true, title: "Select process to debug" };
-        const pid = await vscode.window.showInputBox(options);
-        if (!pid) {
-          await vscode.window.showInformationMessage("You must provide a pid for attach requests.");
+        const pid = await getPid();
+        if (isNothing(pid)) {
           return null;
         }
         config.pid = pid;

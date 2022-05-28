@@ -847,7 +847,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   disposeTerminal() {
-    this.#terminal.dispose();
+    if (this.#terminal) this.#terminal.dispose();
   }
 
   get terminal() {
