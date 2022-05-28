@@ -387,6 +387,43 @@ function getVersion(pathToBinary) {
   });
 }
 
+async function getPid() {
+  const input = await vscode.window.showInputBox({
+    prompt: "Type PID or name of process to get a list to select from",
+    placeHolder: "123 | foo",
+    title: "Process to attach to",
+  });
+  if (input) {
+    if (/[^\d]/.test(input)) {
+      const cmd = `pidof ${input}`;
+      try {
+        const data = execSync(cmd).toString();
+        const options = {
+          canPickMany: false,
+          ignoreFocusOut: true,
+          title: `${input}: Select PID to attach to `,
+        };
+        let split = data.split(" ");
+        if (split.length == 1) {
+          return split[0].trim();
+        }
+        return await vscode.window.showQuickPick(
+          split.map((e) => e.trim()),
+          options
+        );
+      } catch (e) {
+        vscode.window.showInformationMessage(`No process with that name: ${input}`);
+        return null;
+      }
+    } else {
+      return input;
+    }
+  } else {
+    vscode.window.showInformationMessage("No PID (or process) selected");
+    return null;
+  }
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -405,4 +442,5 @@ module.exports = {
   parseSemVer,
   getVersion,
   requiresMinimum,
+  getPid,
 };

@@ -168,7 +168,10 @@ class GDB extends GDBMixin(GDBBase) {
     trace = this.#target.buildSettings.trace;
     await this.init();
     this.#target.customRequest(CustomRequests.ClearCheckpoints);
-    // await this.attachOnFork();
+    if (this.#target.getSpawnConfig().attachOnFork) {
+      await this.attachOnFork();
+    }
+
     this.registerAsAllStopMode();
     // const { getVar, midasPy } = require("./scripts");
     await this.setup();
@@ -239,6 +242,9 @@ class GDB extends GDBMixin(GDBBase) {
     }
     await this.execCLI("set breakpoint pending on");
     await this.setPrintOptions(printOptions);
+    if (this.#target.getSpawnConfig().attachOnFork) {
+      await this.attachOnFork();
+    }
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -948,7 +954,7 @@ class GDB extends GDBMixin(GDBBase) {
     gdbProcess.kill(signal);
     if (this.disposeOnExit) this.#target.disposeTerminal();
     else {
-      this.#target.terminal.disposeChildren();
+      if (this.#target.terminal) this.#target.terminal.disposeChildren();
     }
   }
 
