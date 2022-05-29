@@ -252,7 +252,7 @@
           "attach": {
             "properties": {
               "pid": {
-                "type": "number",
+                "type": "string",
                 "description": "Pid of the process to attach to. Can be left out entirely and entered upon debug launch.",
                 "default": "${command:getPid}"
               },

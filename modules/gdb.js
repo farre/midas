@@ -579,7 +579,7 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendContinueEvent(payload.data["thread-id"], true);
       }
     } else {
-      if (payload.data.reason.includes("exited")) {
+      if (payload.data.reason && payload.data.reason.includes("exited")) {
         this.sendEvent(new TerminatedEvent());
       } else if (payload.state == "running") {
         this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
