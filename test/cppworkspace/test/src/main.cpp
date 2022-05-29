@@ -1,12 +1,13 @@
 #include "testcase_namespaces/baseclasses.hpp"
 #include "testcase_namespaces/derive.hpp"
 #include "testcase_namespaces/enum.hpp"
+#include "testcase_namespaces/exceptions.hpp"
 #include "testcase_namespaces/longstack.hpp"
 #include "testcase_namespaces/pp.hpp"
 #include "testcase_namespaces/statics.hpp"
 #include "testcase_namespaces/structrequests.hpp"
-#include "testcase_namespaces/test_ptrs.hpp"
 #include "testcase_namespaces/test_freefloating_watch.hpp"
+#include "testcase_namespaces/test_ptrs.hpp"
 #include <iostream>
 #include <iterator>
 #include <number.hpp>
@@ -145,4 +146,7 @@ int main(int argc, const char **argv) {
   statics::main();
   structsrequests::main();
   freefloating_watch::main();
+
+  exceptions::main(9);
+  exceptions::main(4);
 }

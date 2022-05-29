@@ -28,6 +28,7 @@ const SIGNALS = {
   SIGSEGV: { code: 11, description: "Invalid memory reference" },
   SIGUSR2: { code: 12, description: "User defined signal 2 (POSIX)" },
   SIGPIPE: { code: 13, description: "Broken pipe" },
+  SIGABRT: { code: 14, description: "Aborted" },
   SIGALRM: { code: 14, description: "Alarm clock" },
   SIGTERM: { code: 15, description: "Terminated" },
   SIGSTKFLT: { code: 16, description: "Stack fault" },
@@ -578,7 +579,7 @@ class GDB extends GDBMixin(GDBBase) {
         this.sendContinueEvent(payload.data["thread-id"], true);
       }
     } else {
-      if (payload.data.reason == "exited-normally" || payload.data.reason == "exited") {
+      if (payload.data.reason.includes("exited")) {
         this.sendEvent(new TerminatedEvent());
       } else if (payload.state == "running") {
         this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
@@ -1032,10 +1033,6 @@ class GDB extends GDBMixin(GDBBase) {
     };
     this.registerBreakpoint(bp);
     return bp;
-  }
-
-  async deleteVariableObject(name) {
-    this.execMI(`-var-delete ${name}`);
   }
 
   registerBreakpoint(bp) {
