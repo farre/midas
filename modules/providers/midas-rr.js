@@ -2,11 +2,11 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 
-const { getFreeRandomPort } = require("../netutils");
-const { tracePicked, getTraces, parseProgram } = require("../rrutils");
+const { getFreeRandomPort } = require("../utils/netutils");
+const { tracePicked, getTraces, parseProgram } = require("../utils/rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { spawnExternalRrConsole, showErrorPopup, ContextKeys } = require("../utils");
-const krnl = require("../kernelsettings");
+const { spawnExternalRrConsole, showErrorPopup, ContextKeys } = require("../utils/utils");
+const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
 
 const initializerPopupChoices = {

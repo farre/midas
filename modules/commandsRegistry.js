@@ -1,13 +1,12 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid } = require("./utils");
+const { getPid, getVersion, isNothing } = require("./utils/utils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
 const vscode = require("vscode");
 const { CustomRequests } = require("./debugSessionCustomRequests");
-const { getVersion, isNothing } = require("./utils");
 const { registerCommand } = require("vscode").commands;
 
 /**
@@ -25,11 +24,11 @@ function getVSCodeCommands(context) {
 
     const config = vscode.workspace.getConfiguration("launch", vscode.workspace.workspaceFolders[0].uri);
     // retrieve values
-    const values = config
+    const programs = config
       .get("configurations")
       .filter((cfg) => cfg.type == "midas" || cfg.type == "midas-rr" || cfg.type == "midas-gdb")
-      .map((cfg) => cfg.program);
-    let programs = values.map((c) => c.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
+      .map((cfg) => cfg.program)
+      .map((c) => c.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
     if (programs.length >= 1) {
       let program = await vscode.window.showQuickPick(programs, {
         canPickMany: false,
@@ -66,7 +65,7 @@ function getVSCodeCommands(context) {
         let log_pretext = [];
         try {
           let output = execSync("uname -a");
-          log_pretext.push(output);
+          log_pretext.push(output.toString());
         } catch {
           log_pretext.push("Linux Distro: <enter distro & version>");
         }

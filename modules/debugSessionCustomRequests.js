@@ -1,9 +1,9 @@
 const CustomRequests = {
-  ContinueAll: "continueAll",
-  PauseAll: "pauseAll",
+  ContinueAll: "continue-all",
+  PauseAll: "pause-all",
   ReverseFinish: "reverse-finish",
   ReloadMidasScripts: "hot-reload-scripts",
-  SpawnConfig: "spawnConfig",
+  SpawnConfig: "spawn-config",
   SetCheckpoint: "set-checkpoint",
   RestartCheckpoint: "restart-checkpoint",
   DeleteCheckpoint: "delete-checkpoint",

@@ -4,7 +4,7 @@ const { exec, spawn: _spawn, execSync } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
-const { TerminalInterface } = require("./terminalInterface");
+const { TerminalInterface } = require("../terminalInterface");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 

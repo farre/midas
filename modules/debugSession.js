@@ -9,8 +9,8 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isNothing, ContextKeys, toHexString } = require("./utils");
-const nixkernel = require("./kernelsettings");
+const { isNothing, ContextKeys, toHexString } = require("./utils/utils");
+const nixkernel = require("./utils/kernelsettings");
 const { CustomRequests } = require("./debugSessionCustomRequests");
 let server;
 
@@ -165,6 +165,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
     if (args.type == "midas-rr") {
       vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
+
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
@@ -374,17 +375,15 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // Super's implementation is fine.
-  dispatchRequest(...args) {
-    if (args && args.length > 0 && args[0].command.includes("exception")) {
-      console.log(`Exception related request fired: ${JSON.stringify(args[0])}`);
-    }
-    return super.dispatchRequest(args[0]);
-  }
+  // dispatchRequest(...args) {
+  //   if (args && args.length > 0 && args[0].command.includes("exception")) {
+  //     console.log(`Exception related request fired: ${JSON.stringify(args[0])}`);
+  //   }
+  //   return super.dispatchRequest(args[0]);
+  // }
 
   // eslint-disable-next-line no-unused-vars
   async disconnectRequest(response, args) {
-    this.gdb.kill();
-    this.gdb.cleanup();
     this.sendResponse(response);
     this.shutdown();
     this.atMidasExit();
@@ -392,8 +391,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   terminateRequest(response, args, request) {
     super.terminateRequest(response, args, request);
-    this.gdb.kill();
-    this.gdb.cleanup();
     this.atMidasExit();
   }
 
@@ -847,6 +844,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // terminal where rr has been started in
+  /**
+   * @param {import("./terminalInterface").TerminalInterface } terminal
+   * @param {function} onExitHandler
+   */
   registerTerminal(terminal, onExitHandler = null) {
     this.#terminal = terminal;
     if (onExitHandler) {
@@ -882,6 +883,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   atMidasExit() {
+    this.gdb.atExitCleanUp();
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
     vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
   }

@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const ext = vscode.extensions.getExtension("farrese.midas");
 const dir = `${ext.extensionPath}/modules/python`;
 const { MidasRunMode } = require("./buildMode");
-const { spawn } = require("./utils");
+const { spawn } = require("./utils/utils");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -27,12 +27,20 @@ function midas_setup_settings(traceSettings) {
  * See `RRSpawnConfig`, `LaunchSpawnConfig` and `AttachSpawnConfig` for examples.
  */
 class SpawnConfig {
+  /** @type {string} */
   path;
+  /** @type {string[]} */
   options;
+  /** @type {string} */
   cwd;
+  /** @type {string[]} */
   setupCommands;
+  /** @type {string} */
   binary;
+
   traceSettings;
+  /**@type {{path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit?: boolean }} */
+  externalConsole;
 
   /**
    * @param {*} launchJson - The settings in launch.json
@@ -46,6 +54,7 @@ class SpawnConfig {
     this.binary = launchJson.program;
     this.traceSettings = new MidasRunMode(launchJson);
     this.attachOnFork = launchJson.attachOnFork ?? false;
+    this.externalConsole = launchJson.externalConsole;
   }
 
   build() {
@@ -69,6 +78,14 @@ class SpawnConfig {
 
   get type() {
     return "midas-gdb";
+  }
+
+  isRRSession() {
+    return false;
+  }
+
+  disposeOnExit() {
+    return (this.externalConsole ?? { closeTerminalOnEndOfSession: true }).closeTerminalOnEndOfSession;
   }
 }
 
@@ -137,6 +154,10 @@ class RRSpawnConfig extends SpawnConfig {
 
   get type() {
     return "midas-rr";
+  }
+
+  isRRSession() {
+    return true;
   }
 }
 
