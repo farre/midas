@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid } = require("../utils");
+const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
 const initializer = (config) => {

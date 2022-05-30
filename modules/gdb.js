@@ -61,8 +61,7 @@ const {
   ExclusiveArray,
   showErrorPopup,
   ContextKeys,
-  isNothing,
-} = require("./utils");
+} = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
 let trace = false;
@@ -113,8 +112,6 @@ class GDB extends GDBMixin(GDBBase) {
   #target;
   // program name
   #program = "";
-  // Are we debugging a normal session or an rr session
-  #rrSession = false;
 
   #threads = new Map();
   // threads which we haven't been able to get systag for, yet
@@ -140,20 +137,7 @@ class GDB extends GDBMixin(GDBBase) {
       })()
     );
     this.#target = target;
-    if (isNothing(this.config)) {
-      this.config = {};
-    }
-    this.config.spawnParameters = config;
-    if (config.type == "midas-rr") {
-      if (!this.config.externalConsole) {
-        this.disposeOnExit = true;
-      } else {
-        this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
-      }
-    }
-    if (this.config.externalConsole) {
-      this.disposeOnExit = this.config.externalConsole.closeTerminalOnEndOfSession;
-    }
+    this.config = config;
   }
 
   async setup() {
@@ -181,11 +165,10 @@ class GDB extends GDBMixin(GDBBase) {
     await this.setup();
     if (this.config.externalConsole) {
       this.#target.registerTerminal(this.#target.terminal, () => {
-        this.kill();
+        this.atExitCleanUp();
         this.sendEvent(new TerminatedEvent(false));
       });
     }
-    this.#rrSession = true;
     // re-define restart according to how rr does it.
     this.execCLI(`source ${ext.extensionPath}/modules/.gdb_rrinit`);
     if (stopOnEntry) {
@@ -219,14 +202,14 @@ class GDB extends GDBMixin(GDBBase) {
           await spawnExternalConsole({ terminal: path, closeOnExit: closeTerminalOnEndOfSession }),
           () => {
             if (endSessionOnTerminalExit) {
-              this.kill();
+              this.atExitCleanUp();
               this.sendEvent(new TerminatedEvent(false));
             }
           }
         );
       } catch (err) {
         showErrorPopup("Spawning an external console failed.");
-        this.kill();
+        this.atExitCleanUp();
         this.sendEvent(new TerminatedEvent(false));
       }
     }
@@ -262,7 +245,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (stopOnEntry) {
       await this.execMI("-exec-run");
     } else {
-      if (this.#rrSession) {
+      if (this.config.isRRSession()) {
         await this.execMI("-exec-run");
         await this.execMI(`-exec-continue`);
       } else {
@@ -560,7 +543,7 @@ class GDB extends GDBMixin(GDBBase) {
         }
         break;
       case "0": {
-        if (this.#rrSession) {
+        if (this.config.isRRSession()) {
           // replayable binary has executed to it's start; we're now in rr-land
           let evt = new StoppedEvent("entry", 1);
           let body = {
@@ -582,7 +565,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   #onExec(payload) {
     log(getFunctionName(), payload);
-    if (this.#rrSession) {
+    if (this.config.isRRSession()) {
       if (payload.data.reason == "signal-received") {
         this.#onSignal(payload);
       } else if (payload.data.reason == "exited-normally") {
@@ -639,7 +622,7 @@ class GDB extends GDBMixin(GDBBase) {
         break;
       }
       case "exited-normally": {
-        if (!this.#rrSession) this.sendEvent(new TerminatedEvent());
+        if (!this.config.isRRSession()) this.sendEvent(new TerminatedEvent());
         else {
           this.sendEvent(new StoppedEvent("replay ended"));
         }
@@ -988,14 +971,6 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  kill(signal) {
-    gdbProcess.kill(signal);
-    if (this.disposeOnExit) this.#target.disposeTerminal();
-    else {
-      if (this.#target.terminal) this.#target.terminal.disposeChildren();
-    }
-  }
-
   // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
   registerAsAllStopMode() {
     this.allStopMode = true;
@@ -1087,7 +1062,7 @@ class GDB extends GDBMixin(GDBBase) {
         throw err;
       }
     } else {
-      if (this.#rrSession) {
+      if (this.config.isRRSession()) {
         let a = transformToRRCommands(expression);
         if (expression != a) {
           return await this.execCMD(a);
@@ -1115,9 +1090,11 @@ class GDB extends GDBMixin(GDBBase) {
     gdbProcess.kill(`SIGINT`);
   }
 
-  cleanup() {
-    if (this.disposeOnExit) {
-      this.#target.disposeTerminal();
+  atExitCleanUp(signal) {
+    gdbProcess.kill(signal);
+    if (this.config.disposeOnExit()) this.#target.disposeTerminal();
+    else {
+      if (this.#target.terminal) this.#target.terminal.disposeChildren();
     }
   }
 

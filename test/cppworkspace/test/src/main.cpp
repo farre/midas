@@ -14,6 +14,11 @@
 #include <string>
 #include <vector>
 
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+
 // Singly linked list node mixin
 template <typename T> struct intrusive_list_node { T *next = nullptr; };
 
@@ -46,6 +51,11 @@ void doFooBar() {
   fooBar.j += 1;
 }
 
+void interrupt_signal(int sig) {
+  printf("<------- INTERRUPT ------->:  %d\n", sig);
+  printf(" handler exit ");
+}
+
 void testRValueReferences(std::string &&item) {
   auto result = item;
   std::cout << "item is: " << result;
@@ -60,7 +70,7 @@ inline void alter_t(T &t) {
 
 int main(int argc, const char **argv) {
   std::vector<std::string> foos[3]{};
-
+  signal(SIGINT, interrupt_signal);
   std::vector<std::string> captured_args;
   std::copy(argv, argv + argc, std::back_inserter(captured_args));
   std::copy(argv, argv + argc, std::back_inserter(foos[0]));
@@ -69,7 +79,7 @@ int main(int argc, const char **argv) {
   std::string helloworld{"Hello world, I manage myself and I'm also made sure "
                          "to be allocated on the heap"};
   std::string_view v{helloworld};
-
+  raise(SIGINT);
   doFooBar();
   testRValueReferences(std::move(helloworld));
   T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
