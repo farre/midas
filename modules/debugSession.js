@@ -101,7 +101,20 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // make VS Code provide "Step in Target" functionality
     response.body.supportsStepInTargetsRequest = true;
     // the adapter defines two exceptions filters, one with support for conditions.
-    response.body.supportsExceptionFilterOptions = true;
+    // todo(simon): Add "catch point" breakpoints for VSCode here
+    // response.body.supportsExceptionFilterOptions = true;
+    // response.body.exceptionBreakpointFilters = [
+    //   {
+    //     filter: "exception",
+    //     label: "Uncaught Exceptions",
+    //     description: "This is a other exception",
+    //     default: true,
+    //     supportsCondition: false,
+    //   },
+    // ];
+    // make VS Code send exceptionInfo request
+    response.body.supportsExceptionInfoRequest = true;
+
     response.body.supportsGotoTargetsRequest = true;
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
@@ -116,8 +129,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // Enable this when we upgrade to DAP 1.51.0
     response.body.supportsSingleThreadExecutionRequests = true;
 
-    // make VS Code send exceptionInfo request
-    response.body.supportsExceptionInfoRequest = true;
     // make VS Code send setExpression request
     response.body.supportsSetExpression = true;
     // make VS Code send disassemble request
@@ -276,6 +287,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body = await this.exec(`stacktrace-request ${threadId} ${startFrame} ${levels}`);
     response.body.stackFrames.forEach((e) => {
       // this is.. unfortunate. But we just have to live with it.
+      if (e.source && e.source.path) {
+        if (!fs.existsSync(e.source.path)) {
+          e.source = null;
+        }
+      } else if (e.source && !e.source.path) {
+        e.source = null;
+      }
       e.instructionPointerReference = "0x" + e.instructionPointerReference.toString(16).padStart(16, "0");
     });
     this.sendResponse(response);
@@ -356,9 +374,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   // Super's implementation is fine.
-  // dispatchRequest(...args) {
-  // return super.dispatchRequest(args[0]);
-  // }
+  dispatchRequest(...args) {
+    if (args && args.length > 0 && args[0].command.includes("exception")) {
+      console.log(`Exception related request fired: ${JSON.stringify(args[0])}`);
+    }
+    return super.dispatchRequest(args[0]);
+  }
 
   // eslint-disable-next-line no-unused-vars
   async disconnectRequest(response, args) {
@@ -382,8 +403,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
-  setExceptionBreakPointsRequest(...args) {
-    return this.virtualDispatch(...args);
+  setExceptionBreakPointsRequest(response, args, request) {
+    this.sendResponse(response);
   }
 
   async nextRequest(response, args) {
@@ -564,8 +585,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  exceptionInfoRequest(...args) {
-    return this.virtualDispatch(...args);
+  exceptionInfoRequest(response, args) {
+    let item = this.gdb.getExceptionInfoForThread(args.threadId);
+    response.body = item;
+    this.sendResponse(response);
   }
 
   loadedSourcesRequest(...args) {
