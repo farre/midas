@@ -20,6 +20,7 @@ const SIGNALS = {
   SIGQUIT: { code: 3, description: "Terminal quit" },
   SIGILL: { code: 4, description: "Illegal instruction" },
   SIGTRAP: { code: 5, description: "Trace trap" },
+  SIGABRT: { code: 6, description: "Aborted" },
   SIGIOT: { code: 6, description: "IOT Trap" },
   SIGBUS: { code: 7, description: "BUS error" },
   SIGFPE: { code: 8, description: "Floating point exception" },
@@ -28,7 +29,6 @@ const SIGNALS = {
   SIGSEGV: { code: 11, description: "Invalid memory reference" },
   SIGUSR2: { code: 12, description: "User defined signal 2 (POSIX)" },
   SIGPIPE: { code: 13, description: "Broken pipe" },
-  SIGABRT: { code: 14, description: "Aborted" },
   SIGALRM: { code: 14, description: "Alarm clock" },
   SIGTERM: { code: 15, description: "Terminated" },
   SIGSTKFLT: { code: 16, description: "Stack fault" },
@@ -122,6 +122,9 @@ class GDB extends GDBMixin(GDBBase) {
 
   userRequestedInterrupt = false;
   allStopMode;
+
+  // we push exception-info related data onto this, so that we can reach it from `exceptionInfoRequest` when needed.
+  threadExceptionInfos = new Map();
 
   /**
    *
@@ -269,6 +272,9 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   sendEvent(event) {
+    if (trace) {
+      console.log(`Sending event ${JSON.stringify(event)}`);
+    }
     this.#target.sendEvent(event);
   }
 
@@ -510,15 +516,25 @@ class GDB extends GDBMixin(GDBBase) {
   #onSignalNotifyVsCode(signalPayload) {
     let threadId = +signalPayload["thread-id"];
     let evt = new StoppedEvent("exception", threadId);
+    // set except_info for VSCode to pluck out in `exceptionInfoRequest`
+    this.threadExceptionInfos.set(threadId, {
+      exceptionId: signalPayload["signal-name"],
+      description: ui_prepare_signal_display(SIGNALS[signalPayload["signal-name"]].description),
+      breakMode: "always",
+      details: {
+        message: "No additional information",
+        typeName: signalPayload["signal-name"],
+        stackTrace: "",
+      },
+    });
     let body = {
       reason: "exception",
       description: ui_prepare_signal_display(SIGNALS[signalPayload["signal-name"]].description),
-      text: SIGNALS[signalPayload["signal-name"]].description,
       threadId: threadId,
       allThreadsStopped: signalPayload["stopped-threads"] == "all",
     };
     evt.body = body;
-    this.#target.sendEvent(evt);
+    this.sendEvent(evt);
   }
 
   #onSignal(payload) {
@@ -538,7 +554,7 @@ class GDB extends GDBMixin(GDBBase) {
             allThreadsStopped: true,
           };
           evt.body = body;
-          this.#target.sendEvent(evt);
+          this.sendEvent(evt);
         } else {
           this.#onSignalNotifyVsCode(payload.data);
         }
@@ -554,7 +570,7 @@ class GDB extends GDBMixin(GDBBase) {
             allThreadsStopped: true,
           };
           evt.body = body;
-          this.#target.sendEvent(evt);
+          this.sendEvent(evt);
         }
         break;
       }
@@ -582,9 +598,27 @@ class GDB extends GDBMixin(GDBBase) {
       if (payload.data.reason && payload.data.reason.includes("exited")) {
         this.sendEvent(new TerminatedEvent());
       } else if (payload.state == "running") {
-        this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
+        if (payload.data["thread-id"] == "all") {
+          this.sendContinueEvent(1, true);
+        } else {
+          this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
+        }
       } else if (payload.data.reason == "signal-received") {
         this.#onSignal(payload);
+      } else if (payload.data.reason.includes("watchpoint")) {
+        // todo(simon): look into if we can ignore onStopped messages from GDB entirely and move that entire logic
+        // into onExec as it *always* contains more information than onStopped
+        let msg = `Old value: ${payload.data.value.old}\nNew value: ${payload.data.value.new}`;
+        this.threadExceptionInfos.set(+payload.data["thread-id"], {
+          exceptionId: `Watchpoint`,
+          description: "Watch point triggered",
+          breakMode: "always",
+          details: {
+            message: "No additional information",
+            typeName: payload.data.reason,
+            stackTrace: msg,
+          },
+        });
       }
     }
   }
@@ -622,10 +656,13 @@ class GDB extends GDBMixin(GDBBase) {
       }
       case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
       case "function-finished,breakpoint-hit": {
-        this.#target.sendEvent(newStoppedEvent("pause", "Function finished", this.allStopMode, payload.thread.id));
+        this.sendEvent(newStoppedEvent("pause", "Function finished", this.allStopMode, payload.thread.id));
         break;
       }
+      case "access-watchpoint-trigger":
       case "watchpoint-trigger":
+        this.sendEvent(newStoppedEvent("exception", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
+        break;
       case "read-watchpoint-trigger": {
         this.sendEvent(
           newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id)
@@ -652,14 +689,14 @@ class GDB extends GDBMixin(GDBBase) {
     thread.name = `${this.#program}`;
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
-    this.#target.sendEvent(new ThreadEvent("started", thread.id));
+    this.sendEvent(new ThreadEvent("started", thread.id));
     console.log(`Thread ${thread.id} started`);
   }
 
   #onThreadExited(thread) {
     this.#threads.delete(thread.id);
     this.#uninitializedThread.delete(thread.id);
-    this.#target.sendEvent(new ThreadEvent("exited", thread.id));
+    this.sendEvent(new ThreadEvent("exited", thread.id));
     // unfortunately, thread exited event does not exist in GDB's Python. Until
     // we've added that functionality to it, we have this workaround
     // setImmediate(() => {
@@ -839,7 +876,7 @@ class GDB extends GDBMixin(GDBBase) {
             source: new Source(loc_file, loc_fullname),
             line: +loc_line,
           };
-          this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+          this.sendEvent(new BreakpointEvent("new", newBreakpoint));
           this.#lineBreakpoints.add_to(loc_file, newBreakpoint);
         } else {
           // We delete master breakpoints with multiple locations (*IF* they have different source code locations),
@@ -861,7 +898,7 @@ class GDB extends GDBMixin(GDBBase) {
                 instructionReference: address,
                 message: verified ? null : "Pending breakpoint",
               };
-              this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+              this.sendEvent(new BreakpointEvent("new", newBreakpoint));
               this.#lineBreakpoints.add_to(file, newBreakpoint);
             } catch (e) {
               console.log(`Setting breakpoint at ${loc.addr} failed. Exception: ${e}`);
@@ -877,7 +914,7 @@ class GDB extends GDBMixin(GDBBase) {
         source: new Source(file, fullname),
         line: +line,
       };
-      this.#target.sendEvent(new BreakpointEvent("new", newBreakpoint));
+      this.sendEvent(new BreakpointEvent("new", newBreakpoint));
       this.#lineBreakpoints.add_to(file, newBreakpoint);
     }
   }
@@ -910,7 +947,7 @@ class GDB extends GDBMixin(GDBBase) {
       };
     }
 
-    this.#target.sendEvent(new BreakpointEvent("changed", bp));
+    this.sendEvent(new BreakpointEvent("changed", bp));
     log(getFunctionName(), payload);
   }
 
@@ -920,7 +957,7 @@ class GDB extends GDBMixin(GDBBase) {
   #onNotifyBreakpointDeleted(payload) {
     const { id } = payload;
     const bp = { id: +id, verified: true };
-    this.#target.sendEvent(new BreakpointEvent("removed", bp));
+    this.sendEvent(new BreakpointEvent("removed", bp));
     log(getFunctionName(), payload);
   }
 
@@ -1087,6 +1124,12 @@ class GDB extends GDBMixin(GDBBase) {
   sendContinueEvent(threadId, allThreadsContinued) {
     this.sendEvent(new ContinuedEvent(threadId, allThreadsContinued));
     vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
+  }
+
+  getExceptionInfoForThread(threadId) {
+    let item = this.threadExceptionInfos.get(threadId);
+    this.threadExceptionInfos.delete(threadId);
+    return item;
   }
 }
 
