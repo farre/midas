@@ -588,7 +588,7 @@ class GDB extends GDBMixin(GDBBase) {
         }
       } else if (payload.data.reason == "signal-received") {
         this.#onSignal(payload);
-      } else if (payload.data.reason.includes("watchpoint")) {
+      } else if (payload.data.reason && payload.data.reason.includes("watchpoint")) {
         // todo(simon): look into if we can ignore onStopped messages from GDB entirely and move that entire logic
         // into onExec as it *always* contains more information than onStopped
         let msg = `Old value: ${payload.data.value.old}\nNew value: ${payload.data.value.new}`;
