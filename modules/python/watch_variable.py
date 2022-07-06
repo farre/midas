@@ -81,15 +81,16 @@ class WatchVariable(gdb.Command):
                         foundFrameId = sf.frame_id()
                     if foundFrameId is not None:
                         # when this stack frame goes out of scope, it removes `expr` free floating variable from ec
-                        if begin != -1 and end != -1:
+                        if begin != -1 and end != -1 and gdb.default_visualizer(it) is None:
                             it = it[begin]
                             bound = max((end - begin) - 1, 0)
                             it = it.cast(it.type.array(bound))
                             expr = "{}[{}:{}]".format(expr, begin, end)
+                        elif begin == -1 and end == -1:
+                            begin = 0
+                            end = None
                         sf = ec.get_stackframe(foundFrameId)
-                        var = sf.add_watched_variable(expr, it)
-                        ec.set_free_floating(expr, var)
-                        sf.set_free_floating(expr)
+                        var = sf.add_free_floating_watched_variable(expr, it, begin, end)
                         res = var.to_vs()
                         result = response(success=True,
                                     message=None,
@@ -109,14 +110,17 @@ class WatchVariable(gdb.Command):
                                 success=False,
                                 message="could not evaluate"), midas_utils.prepare_command_response)
             else:
-                if begin != -1 and end != -1:
+                if begin != -1 and end != -1 and gdb.default_visualizer(it) is None:
                     it = it[begin]
                     bound = max((end - begin) - 1, 0)
                     it = it.cast(it.type.array(bound))
                     expr = "{}[{}:{}]".format(expr, begin, end)
-                sf = ec.get_stackframe(frameId)
+                elif begin == -1 and end == -1:
+                    begin = 0
+                    end = None
 
-                v = sf.add_watched_variable(expr, it)
+                sf = ec.get_stackframe(frameId)
+                v = sf.add_watched_variable(expr, it, begin, end)
                 res = v.to_vs()
                 result = response(success=True,
                                   message=None,
