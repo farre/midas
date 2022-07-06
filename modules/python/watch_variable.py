@@ -57,6 +57,8 @@ class WatchVariable(gdb.Command):
                 raise gdb.GdbError("Execution context does not exist")
             var = ec.free_floating_watchvariable(expr)
             if var is not None:
+                var.start = begin
+                var.end = end
                 res = var.to_vs()
                 result = response(success=True,
                                     message=None,
@@ -99,6 +101,8 @@ class WatchVariable(gdb.Command):
                                     variableReference=var.get_variable_reference())
                         midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
                         return
+                raise gdb.GdbError("{} Could not be evaluated".format(expr))
+
             for comp in components[1:]:
                 it = it[comp]
                 if it is None:
