@@ -76,6 +76,8 @@ class ReferencedValue:
         pp = gdb.default_visualizer(value)
         if pp is not None:
             if hasattr(pp, "children"):
+                # if user wrote foo[0], unless we set end = start + 1, we will return nothing, due to how islice works
+                end = start + 1 if start == end else end
                 for (name, value) in itertools.islice(pp.children(), start, end):
                     v = Variable.from_value(name, value)
                     vref = v.get_variable_reference()

@@ -302,7 +302,6 @@ class StackFrame:
         tmp = self.watch_variables.get(expr)
         if tmp is not None:
             vr = tmp.get_variable_reference()
-        config.update_logger().debug("Adding {}".format(expr))
         v = Variable.from_value(expr, variable, expr, start, end)
         # assume the previous VRID, no need to keep incrementing; since we know the variable by expr anyway
         # this comes with the added benefit of the Python reference at self.watchVariableReferences[vr] going to 0 => de alloc
