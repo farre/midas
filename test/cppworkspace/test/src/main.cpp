@@ -10,6 +10,7 @@
 #include "testcase_namespaces/test_ptrs.hpp"
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <number.hpp>
 #include <string>
 #include <vector>
@@ -69,10 +70,23 @@ inline void alter_t(T &t) {
 }
 
 int main(int argc, const char **argv) {
+  std::map<int, std::string> mumbojumbo;
+  mumbojumbo[10] = "hello";
+  mumbojumbo[1337] = "world";
+  mumbojumbo[9] = "main";
+  mumbojumbo[23] = "foo()";
+  mumbojumbo[19] = "bar()";
+  mumbojumbo[190] = "check()";
   std::vector<std::string> foos[3]{};
+  // testing for pretty printed child values of pretty printed type behind a pointer
+  auto foovec = new std::vector<std::string>{};
+
   signal(SIGINT, interrupt_signal);
   std::vector<std::string> captured_args;
   std::copy(argv, argv + argc, std::back_inserter(captured_args));
+  for(const auto& arg : captured_args) {
+    foovec->push_back(arg);
+  }
   std::copy(argv, argv + argc, std::back_inserter(foos[0]));
   std::copy(argv, argv + argc, std::back_inserter(foos[1]));
   std::copy(argv, argv + argc, std::back_inserter(foos[2]));
