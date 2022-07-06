@@ -8,6 +8,9 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Create specific handlers for all VSCode requests directly in Python
 
+## [0.4.7] - 2022-07-06
+- Added ability to get range of pretty printed child values for watch variables
+
 ## [0.4.0] - 2022-05-23
 - Hooked up Midas to work with VSCode Disassembly view
 - Added "Create issue log" command
