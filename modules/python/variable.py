@@ -10,6 +10,7 @@ modelling in the typical OO sense.
 import gdb
 import midas_utils
 import config
+import itertools
 
 
 def vs_display(name: str,
@@ -69,12 +70,13 @@ class ReferencedValue:
                 pass
         return False
 
-    def resolve_children(self, value, owningStackFrame):
+    # start and end are defaulted to include all children, if a pretty printer exists.
+    def resolve_children(self, value, owningStackFrame, start = 0, end = None):
         result = []
         pp = gdb.default_visualizer(value)
         if pp is not None:
             if hasattr(pp, "children"):
-                for name, value in pp.children():
+                for (name, value) in itertools.islice(pp.children(), start, end):
                     v = Variable.from_value(name, value)
                     vref = v.get_variable_reference()
                     if vref != 0:
@@ -87,19 +89,9 @@ class ReferencedValue:
             else:
                 res = pp.to_string()
                 if hasattr(res, "value"):
-                    result.append({
-                        "name": "value",
-                        "value": "{}".format(res.value()),
-                        "evaluateName": None,
-                        "variablesReference": 0
-                    })
+                    result.append({ "name": "value", "value": "{}".format(res.value()), "evaluateName": None, "variablesReference": 0 })
                 else:
-                    result.append({
-                        "name": "value",
-                        "value": "{}".format(res),
-                        "evaluateName": None,
-                        "variablesReference": 0
-                    })
+                    result.append({ "name": "value", "value": "{}".format(res), "evaluateName": None, "variablesReference": 0 })
                 return result
 
         if ReferencedValue.is_array(value):
@@ -153,14 +145,15 @@ class ReferencedValue:
     def is_watched(self):
         return self.watched
 
-
 class Variable(ReferencedValue):
 
-    def __init__(self, name, gdbValue, evaluateName=None):
+    def __init__(self, name, gdbValue, evaluateName=None, start = 0, end = None):
         super(Variable, self).__init__(name, gdbValue, evaluateName)
+        self.start = start
+        self.end = end
 
-    def from_value(name, value, evaluateName=None):
-        return Variable(name, value, evaluateName)
+    def from_value(name, value, evaluateName=None, start = 0, end = None):
+        return Variable(name, value, evaluateName, start, end)
 
     def from_symbol(symbol, frame):
         value = symbol.value(frame)
@@ -193,7 +186,7 @@ class Variable(ReferencedValue):
         if midas_utils.value_is_reference(it.type):
             it = it.referenced_value()
         try:
-            return super().resolve_children(it, owningStackFrame)
+            return super().resolve_children(it, owningStackFrame, self.start, self.end)
         except gdb.MemoryError as memexc:
             config.log_exception(config.error_logger(),
                                  "Midas failed to resolve variable value: {}".format(memexc), memexc)

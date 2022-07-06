@@ -296,13 +296,14 @@ class StackFrame:
     def frame_id(self):
         return self.localsReference
 
-    def add_watched_variable(self, expr, variable):
+    def add_watched_variable(self, expr, variable, start = 0, end = None):
         """ Adds variable to watch if it doesn't exist and returns created/existing `Variable`"""
         vr = None
         tmp = self.watch_variables.get(expr)
         if tmp is not None:
             vr = tmp.get_variable_reference()
-        v = Variable.from_value(expr, variable)
+        config.update_logger().debug("Adding {}".format(expr))
+        v = Variable.from_value(expr, variable, expr, start, end)
         # assume the previous VRID, no need to keep incrementing; since we know the variable by expr anyway
         # this comes with the added benefit of the Python reference at self.watchVariableReferences[vr] going to 0 => de alloc
         v.variableRef = -1 if vr is None else vr
@@ -320,3 +321,9 @@ class StackFrame:
 
     def set_free_floating(self, expr):
         self.freeFloating.append(expr)
+
+    def add_free_floating_watched_variable(self, expr, it, start = 0, end = None):
+        var = self.add_watched_variable(expr, it, start, end)
+        self.ec.set_free_floating(expr, var)
+        self.set_free_floating(expr)
+        return var
