@@ -120,27 +120,41 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
 
 ## Replayable debug session (rr)
 
-Configuration example of a rr debug session:
+A minimum required launch config for RR is really simple as Midas will query RR for it's traces in `$RR_TRACE_DIR`.
+
+```json
+{
+  "type": "midas-rr",
+  "request": "launch",
+  "name": "Minimum rr",
+  "trace": "Off",
+}
+```
+
+This requires that `GDB` and `rr` can be found in `$PATH`. It is recommended that you provide `setupCommands: ["set auto-load safe-path /"]` so that GDB can load whatever pretty printers, or other functionality needed by your debugging experience. If security is a concern, replace the root path (`/`) with the path you need. [Information about GDB auto loading](https://sourceware.org/gdb/onlinedocs/gdb/Auto_002dloading-safe-path.html).
+
+Configuration example, for a rr debug session of for example a `firefox` test:
 
 ```json
 {
   "type": "midas-rr",
   "request": "launch",
   "name": "Launch replay debug session",
-  "program": "${workspaceFolder}/path/binary",
   "cwd": "${workspaceFolder}",
   "stopOnEntry": true,
   "trace": "Off",
   "gdbPath": "gdb",
   "rrPath": "rr",
-  "serverAddress": "localhost:50505"
+  "serverAddress": "localhost:50505",
+  "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```
 
-rrServerAddress defines the host and port that rr will be told to listen on, which we connect to with GDB. If this field is not set
-Midas will use `127.0.0.1:RandomFreePort` which just scans for free ports in the range `50505 : uint16 MAX`.
+`serverAddress` defines the host and port that rr will listen on, which we connect to with GDB. If this field is not set
+Midas will use `127.0.0.1:RandomFreePort` which just checks for free ports in the range `50505 : uint16 MAX`. For every day work,
+this should not have to be set.
 
-rrPath behaves just like the gdbPath field and defaults to trying to find `rr` in `$PATH`.
+rrPath behaves just like the gdbPath field and defaults to trying to find `rr` in `$PATH` if not set. Only useful if these applications are not in `$PATH` or, you are running multiple versions of them.
 
 However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`), shown below.
 
