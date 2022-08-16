@@ -42,6 +42,10 @@ function* get_field(line) {
   return null;
 }
 
+/**
+ * @param { string } data
+ * @returns { { pid: string, ppid: string, exit: string, cmd: string }[] }
+ */
 function fallbackParseOfrrps(data) {
   return data
     .split("\n")
@@ -55,12 +59,6 @@ function fallbackParseOfrrps(data) {
 
 /** @type {(trace: string) => Thenable<readonly (vscode.QuickPickItem & {value: string})[]>} */
 function getTraceInfo(trace) {
-  const prefix = `'BEGIN { OFS = ","; printf "["; sep="" } NR!=1`;
-  const suffix = `END { print "]" }`;
-
-  const json = `\\"pid\\": %d,\\"ppid\\": \\"%s\\",\\"exit\\": \\"%d\\",\\"cmd\\": \\"%s\\"`;
-  const rrps = `rr ps ${trace} | awk ${prefix} { printf "%s{ ${json} }",sep,$1,$2,$3,substr($0, index($0, $4));sep=","} ${suffix}'`;
-
   return new Promise((resolve, reject) => {
     subprocess.exec(`rr ps ${trace}`, (error, stdout, stderr) => {
       if (error) {
@@ -70,16 +68,31 @@ function getTraceInfo(trace) {
         resolve(json);
       }
     });
-  }).then((picks) =>
-    picks.map(({ pid, ppid, exit, cmd }) => {
+  }).then((picks) => {
+    return picks.map(({ pid, ppid, exit, cmd }, index) => {
+      let binary = cmd.trim();
+      try {
+        // if forked, RR doesn't provide us with a binary, scan backwards in list to find forked-from process
+        if (cmd.includes("forked without exec")) {
+          for (let findBinaryIndex = index - 1; findBinaryIndex >= 0; findBinaryIndex--) {
+            if (!picks[findBinaryIndex].cmd.includes("forked without exec")) {
+              binary = picks[findBinaryIndex].cmd;
+            }
+          }
+        }
+      } catch (ex) {
+        console.log(`Failed to prepare RR replay parameters: ${ex}`);
+        throw new Error(`Failed to prepare RR replay parameters`);
+      }
       return {
         value: pid,
         label: `${path.basename(cmd.split(" ")[0] ?? cmd)}`,
         description: `PID: ${pid}, PPID: ${ppid === "--" ? "--" : +ppid}, EXIT: ${exit}`,
-        detail: cmd,
+        detail: cmd.trim(),
+        binary,
       };
-    })
-  );
+    });
+  });
 }
 
 function initDefaults(config) {
@@ -107,14 +120,7 @@ function initDefaults(config) {
  * @throws Throws an exception if a file can't be parsed from `rr_ps_output_cmd`
  */
 function parseProgram(rr_ps_output_cmd) {
-  let splits = rr_ps_output_cmd.split(" ");
-  let prog = splits[splits.length - 1];
-  if (prog.includes("/")) {
-    const tmp = prog.split("/");
-    prog = tmp[tmp.length - 1];
-    return prog;
-  }
-  return prog;
+  return rr_ps_output_cmd.split(" ")[0];
 }
 
 const tracePicked = async (traceWorkspace) => {
@@ -125,7 +131,7 @@ const tracePicked = async (traceWorkspace) => {
   };
   return await vscode.window.showQuickPick(getTraceInfo(traceWorkspace), options).then((selection) => {
     if (selection) {
-      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.detail };
+      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.binary };
       return replay_parameters;
     }
     return null;
