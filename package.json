@@ -8,7 +8,7 @@
     "midas",
     "debug"
   ],
-  "version": "0.5.1",
+  "version": "0.5.2",
   "engines": {
     "vscode": "^1.66.0"
   },
