@@ -1,7 +1,7 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid, getVersion, isNothing } = require("./utils/utils");
+const { getPid, getVersion, isNothing, getRR } = require("./utils/utils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -108,7 +108,19 @@ function getVSCodeCommands(context) {
 
   const getPid_ = registerCommand("midas.getPid", getPid);
 
-  return [rrRecord, continueAll, pauseAll, reverseFinish, hotReloadScripts, displayLogs, issueGithubReport, getPid_];
+  const getRR_ = registerCommand("midas.get-rr", getRR);
+
+  return [
+    rrRecord,
+    continueAll,
+    pauseAll,
+    reverseFinish,
+    hotReloadScripts,
+    displayLogs,
+    issueGithubReport,
+    getPid_,
+    getRR_,
+  ];
 }
 
 module.exports = {
