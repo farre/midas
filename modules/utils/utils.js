@@ -5,6 +5,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
+const { rejects } = require("assert");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -424,6 +425,68 @@ async function getPid() {
   }
 }
 
+function which(path) {
+  return new Promise((resolve) =>
+    exec(`which ${path}`, (err, stdout) => {
+      if (err) {
+        resolve("");
+        return;
+      }
+      resolve(stdout);
+    })
+  );
+}
+
+async function guessInstaller() {
+  if ("" != (await which("dpkg"))) {
+    return "apt";
+  }
+
+  if ("" != (await which("rpm"))) {
+    return "dnf";
+  }
+
+  return "unknown";
+}
+
+async function installRRFromRepository() {
+  let installer = await guessInstaller();
+  vscode.window.showInformationMessage(`Install from repository (${installer})`);
+}
+
+async function installRRFromDownload() {
+  vscode.window.showInformationMessage("Download and install");
+}
+
+async function installRRFromSource() {
+  vscode.window.showInformationMessage("Downlod, build and install from source");
+}
+
+async function getRR() {
+  const { method } = await vscode.window.showQuickPick(
+    [
+      {
+        label: "Install from repository",
+        description: "Install rr from the OS package repository",
+        method: installRRFromRepository,
+      },
+      {
+        label: "Install from download",
+        description: "Download the latest release and install it",
+        method: installRRFromDownload,
+      },
+      {
+        label: "Install from source",
+        description: "Download, build, and install from source",
+        method: installRRFromSource,
+      },
+    ],
+    { placeHolder: "Choose method of installing rr" }
+  );
+
+  await method();
+}
+
 module.exports = {
   buildTestFiles,
   getFunctionName,
@@ -443,4 +506,5 @@ module.exports = {
   getVersion,
   requiresMinimum,
   getPid,
+  getRR,
 };

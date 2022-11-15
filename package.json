@@ -17,7 +17,8 @@
   ],
   "activationEvents": [
     "onDebug",
-    "onCommand:midas.issue-report"
+    "onCommand:midas.issue-report",
+    "onCommand:midas.get-rr"
   ],
   "main": "./extension.js",
   "publisher": "farrese",
@@ -89,6 +90,11 @@
         "command": "midas.show-logs",
         "title": "Midas: Open logs",
         "shortTitle": "Midas: Open logs"
+      },
+      {
+        "command": "midas.get-rr",
+        "title": "Midas: Get rr",
+        "shortTitle": "Get rr"
       },
       {
         "command": "midas.clear-checkpoints",
