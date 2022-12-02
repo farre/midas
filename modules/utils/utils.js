@@ -21,6 +21,10 @@ const ContextKeys = {
   RRSession: "midas.rrSession",
 };
 
+function getExtensionPath() {
+  return vscode.extensions.getExtension("farrese.midas").extensionPath;
+}
+
 function isNothing(e) {
   return e == undefined || e == null;
 }
