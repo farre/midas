@@ -1,4 +1,4 @@
-const vscode = require("vscode");
+const { getExtensionPathOf } = require("./utils/utils");
 
 const DebugLogging = {
   Off: "off",
@@ -59,9 +59,8 @@ class MidasRunMode {
   }
 
   async reloadStdLib(gdb) {
-    const ext = vscode.extensions.getExtension("farrese.midas");
-    const dir = `${ext.extensionPath}/modules/python`;
-    await gdb.execCMD(`source ${dir}/midas.py`);
+    const file = getExtensionPathOf("/modules/python/midas.py");
+    await gdb.execCMD(`source ${file}`);
   }
 
   get trace() {

@@ -1,8 +1,6 @@
 const vscode = require("vscode");
-const ext = vscode.extensions.getExtension("farrese.midas");
-const dir = `${ext.extensionPath}/modules/python`;
 const { MidasRunMode } = require("./buildMode");
-const { spawn } = require("./utils/utils");
+const { spawn, getExtensionPathOf } = require("./utils/utils");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -12,9 +10,9 @@ const { spawn } = require("./utils/utils");
 function midas_setup_settings(traceSettings) {
   return [
     ["-iex", "set pagination off"],
-    ["-iex", `source ${dir}/setup.py`],
+    ["-iex", `source ${getExtensionPathOf("/modules/python/setup.py")}`],
     traceSettings.getCommandParameters(),
-    ["-iex", `source ${dir}/midas.py`],
+    ["-iex", `source ${getExtensionPathOf("/modules/python/midas.py")}`],
   ];
 }
 

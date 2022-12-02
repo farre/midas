@@ -1,7 +1,7 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid, getVersion, isNothing, getRR } = require("./utils/utils");
+const { getPid, getVersion, isNothing, getRR, getExtensionPathOf } = require("./utils/utils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -76,7 +76,7 @@ function getVSCodeCommands(context) {
           log_pretext.push(`User RR Version: ${rr_version.major}.${rr_version.minor}.${rr_version.patch}`);
         }
         log_pretext.push("Python Error Logs:");
-        const python_log = `${context.extensionPath}/error.log`;
+        const python_log = getExtensionPathOf("error.log");
         const data = fs.readFileSync(python_log);
         log_pretext.push("\n");
         log_pretext.push(data.toString());
@@ -94,11 +94,11 @@ function getVSCodeCommands(context) {
   });
 
   let displayLogs = registerCommand("midas.show-logs", async () => {
-    const debug_log = `${context.extensionPath}/debug.log`;
+    const debug_log = getExtensionPathOf("debug.log");
     if (fs.existsSync(debug_log)) {
       vscode.window.showTextDocument(vscode.Uri.parse(debug_log), { viewColumn: 1 });
-      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/error.log`), { viewColumn: 2 });
-      vscode.window.showTextDocument(vscode.Uri.parse(`${context.extensionPath}/performance_time.log`), {
+      vscode.window.showTextDocument(vscode.Uri.parse(getExtensionPathOf("error.log")), { viewColumn: 2 });
+      vscode.window.showTextDocument(vscode.Uri.parse(getExtensionPathOf("performance_time.log")), {
         viewColumn: 3,
       });
     } else {
