@@ -61,6 +61,7 @@ const {
   ExclusiveArray,
   showErrorPopup,
   ContextKeys,
+  getExtensionPathOf,
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
@@ -95,7 +96,6 @@ function newStoppedEvent(reason, description, allThreadsStopped, threadId = unde
 
 /** @constructor */
 let GDBBase = gdbjs.GDB;
-const ext = vscode.extensions.getExtension("farrese.midas");
 
 let gdbProcess = null;
 /** @typedef {number} ThreadId */
@@ -161,7 +161,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
 
     this.registerAsAllStopMode();
-    // const { getVar, midasPy } = require("./scripts");
     await this.setup();
     if (this.config.externalConsole) {
       this.#target.registerTerminal(this.#target.terminal, () => {
@@ -170,7 +169,7 @@ class GDB extends GDBMixin(GDBBase) {
       });
     }
     // re-define restart according to how rr does it.
-    this.execCLI(`source ${ext.extensionPath}/modules/.gdb_rrinit`);
+    this.execCLI(`source ${getExtensionPathOf("/modules/.gdb_rrinit")}`);
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
       await this.execMI("-exec-run --start");

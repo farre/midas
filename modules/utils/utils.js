@@ -21,8 +21,20 @@ const ContextKeys = {
   RRSession: "midas.rrSession",
 };
 
-function getExtensionPath() {
-  return vscode.extensions.getExtension("farrese.midas").extensionPath;
+/**
+ * Returns a full constructed path of `fileOrDir` inside the extension directory
+ * @param {string} fileOrDir
+ * @returns { string }
+ */
+function getExtensionPathOf(fileOrDir = null) {
+  if (fileOrDir != null) {
+    if (fileOrDir[0] == "/") {
+      fileOrDir = fileOrDir.substring(1);
+    }
+    return vscode.extensions.getExtension("farrese.midas").extensionPath + `/${fileOrDir}`;
+  } else {
+    return vscode.extensions.getExtension("farrese.midas").extensionPath;
+  }
 }
 
 function isNothing(e) {
@@ -511,4 +523,5 @@ module.exports = {
   requiresMinimum,
   getPid,
   getRR,
+  getExtensionPathOf,
 };
