@@ -6,6 +6,7 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
 const { rejects } = require("assert");
+const { DependencyInstaller } = require("./installerProgress");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -440,7 +441,11 @@ async function getPid() {
     return null;
   }
 }
-
+/**
+ *
+ * @param {string} path
+ * @returns {Promise<string>}
+ */
 function which(path) {
   return new Promise((resolve) =>
     exec(`which ${path}`, (err, stdout) => {
@@ -448,7 +453,11 @@ function which(path) {
         resolve("");
         return;
       }
-      resolve(stdout);
+      if (stdout.charAt(stdout.length - 1) == "\n") {
+        resolve(stdout.slice(0, stdout.length - 1));
+      } else {
+        resolve(stdout);
+      }
     })
   );
 }
@@ -465,13 +474,60 @@ async function guessInstaller() {
   return "unknown";
 }
 
+async function sudo(deps_logger, command) {
+  try {
+    let _sudo = await which("sudo");
+    const args = ["-S", ...command];
+    deps_logger.appendLine("sudo found: " + _sudo);
+    deps_logger.appendLine(_sudo + " " + args.join(" "));
+    return _spawn(_sudo, args, { stdio: "pipe", shell: true });
+  } catch (e) {
+    vscode.window.showErrorMessage("Failed to run install command");
+  }
+}
+
+async function installDependenciesUbuntu(deps_logger) {
+  // eslint-disable-next-line max-len
+  let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+  // f*** me extension development for VSCode is buggy. I don't want to have to do this.
+  if (!pass) {
+    pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+  }
+  try {
+    let dependencyInstaller = new DependencyInstaller(deps_logger);
+    const install = await sudo(deps_logger, [
+      await which("python"),
+      getExtensionPathOf("modules/python/apt_manager.py"),
+    ]);
+
+    install.stdout.on("data", (data) => {
+      deps_logger.appendLine(data);
+    });
+
+    install.stderr.on("data", (data) => {
+      if (data.includes("[sudo]")) {
+        install.stdin.write(pass + "\n");
+        deps_logger.appendLine("wrote pass");
+      } else {
+        deps_logger.appendLine("[STDERR]: " + data);
+      }
+    });
+    return dependencyInstaller.getProgress();
+  } catch (err) {
+    vscode.window.showErrorMessage("FAILED TO CREATE DEPENDENCY INSTALLER");
+  }
+}
+
 async function installRRFromRepository() {
   let installer = await guessInstaller();
   vscode.window.showInformationMessage(`Install from repository (${installer})`);
 }
 
 async function installRRFromDownload() {
+  let deps_logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
+  deps_logger.show();
   vscode.window.showInformationMessage("Download and install");
+  await installDependenciesUbuntu(deps_logger);
 }
 
 async function installRRFromSource() {
