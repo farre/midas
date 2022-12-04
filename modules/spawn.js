@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const { MidasRunMode } = require("./buildMode");
-const { spawn, getExtensionPathOf } = require("./utils/utils");
+const { spawn } = require("./utils/utils");
+const { getExtensionPathOf } = require("./utils/sysutils");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
