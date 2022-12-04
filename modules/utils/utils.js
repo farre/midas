@@ -5,8 +5,8 @@ const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
-const { rejects } = require("assert");
-const { DependencyInstaller } = require("./installerProgress");
+const { initInstaller } = require("./installerProgress");
+const { which, resolveCommand } = require("./sysutils");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -21,22 +21,6 @@ const ContextKeys = {
   DebugType: "midas.debugType",
   RRSession: "midas.rrSession",
 };
-
-/**
- * Returns a full constructed path of `fileOrDir` inside the extension directory
- * @param {string} fileOrDir
- * @returns { string }
- */
-function getExtensionPathOf(fileOrDir = null) {
-  if (fileOrDir != null) {
-    if (fileOrDir[0] == "/") {
-      fileOrDir = fileOrDir.substring(1);
-    }
-    return vscode.extensions.getExtension("farrese.midas").extensionPath + `/${fileOrDir}`;
-  } else {
-    return vscode.extensions.getExtension("farrese.midas").extensionPath;
-  }
-}
 
 function isNothing(e) {
   return e == undefined || e == null;
@@ -78,7 +62,7 @@ function getFunctionName() {
  * stdin/stdout.
  * @param {string} gdbPath
  */
-function spawn(gdbPath, args, externalConsoleProcess /* todo */ = null) {
+function spawn(gdbPath, args) {
   let p = _spawn(gdbPath, args);
 
   return {
@@ -205,28 +189,6 @@ class ExclusiveArray {
   get data() {
     return this.#data;
   }
-}
-/**
- * Resolve a symlink to where it points to. `fully` sets if
- * it should be resolved fully (i.e, if it's a symlink to a symlink etc
- * follow the entire chain to it's end).
- * @param {boolean} fully
- */
-function resolveCommand(cmd, fully = true) {
-  if (fs.existsSync(cmd)) {
-    return fs.realpathSync(cmd);
-  }
-  const whereis = execSync(`whereis ${cmd}`);
-  const parts = whereis.toString().split(" ");
-  if (parts.length < 2) {
-    throw new Error(`${cmd} could not be resolved`);
-  }
-  for (const result of parts.slice(1)) {
-    if (Path.basename(result) == cmd) {
-      return result;
-    }
-  }
-  throw new Error(`${cmd} could not properly be resolved. Try providing a fully qualified path`);
 }
 
 // Due to the client/server architecture that has been introduced to
@@ -441,81 +403,31 @@ async function getPid() {
     return null;
   }
 }
-/**
- *
- * @param {string} path
- * @returns {Promise<string>}
- */
-function which(path) {
-  return new Promise((resolve) =>
-    exec(`which ${path}`, (err, stdout) => {
-      if (err) {
-        resolve("");
-        return;
-      }
-      if (stdout.charAt(stdout.length - 1) == "\n") {
-        resolve(stdout.slice(0, stdout.length - 1));
-      } else {
-        resolve(stdout);
-      }
-    })
-  );
-}
 
 async function guessInstaller() {
   if ("" != (await which("dpkg"))) {
-    return "apt";
+    return await which("apt-get");
   }
 
   if ("" != (await which("rpm"))) {
-    return "dnf";
+    return await which("dnf");
   }
-
-  return "unknown";
+  throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manuall");
 }
 
-async function sudo(deps_logger, command) {
+async function installDependenciesAPT() {
   try {
-    let _sudo = await which("sudo");
-    const args = ["-S", ...command];
-    deps_logger.appendLine("sudo found: " + _sudo);
-    deps_logger.appendLine(_sudo + " " + args.join(" "));
-    return _spawn(_sudo, args, { stdio: "pipe", shell: true });
-  } catch (e) {
-    vscode.window.showErrorMessage("Failed to run install command");
-  }
-}
-
-async function installDependenciesUbuntu(deps_logger) {
-  // eslint-disable-next-line max-len
-  let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
-  // f*** me extension development for VSCode is buggy. I don't want to have to do this.
-  if (!pass) {
-    pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
-  }
-  try {
-    let dependencyInstaller = new DependencyInstaller(deps_logger);
-    const install = await sudo(deps_logger, [
-      await which("python"),
-      getExtensionPathOf("modules/python/apt_manager.py"),
-    ]);
-
-    install.stdout.on("data", (data) => {
-      deps_logger.appendLine(data);
-    });
-
-    install.stderr.on("data", (data) => {
-      if (data.includes("[sudo]")) {
-        install.stdin.write(pass + "\n");
-        deps_logger.appendLine("wrote pass");
-      } else {
-        deps_logger.appendLine("[STDERR]: " + data);
-      }
-    });
-    return dependencyInstaller.getProgress();
+    await initInstaller();
   } catch (err) {
     vscode.window.showErrorMessage("FAILED TO CREATE DEPENDENCY INSTALLER");
+    console.log(err);
   }
+}
+
+function openOutputLogger() {
+  let install_logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
+  install_logger.show();
+  return install_logger;
 }
 
 async function installRRFromRepository() {
@@ -524,13 +436,14 @@ async function installRRFromRepository() {
 }
 
 async function installRRFromDownload() {
-  let deps_logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
-  deps_logger.show();
-  vscode.window.showInformationMessage("Download and install");
-  await installDependenciesUbuntu(deps_logger);
+  const logger = openOutputLogger();
+  let dependencyInstaller = await guessInstaller();
+  await installDependenciesAPT();
 }
 
 async function installRRFromSource() {
+  const logger = openOutputLogger();
+  let dependenciesInstaller = await guessInstaller();
   vscode.window.showInformationMessage("Downlod, build and install from source");
 }
 
@@ -579,5 +492,4 @@ module.exports = {
   requiresMinimum,
   getPid,
   getRR,
-  getExtensionPathOf,
 };
