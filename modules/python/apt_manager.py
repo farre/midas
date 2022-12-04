@@ -2,9 +2,27 @@ import apt
 import apt_pkg
 import apt.progress.base
 import apt.progress
-import io
+import os
 import json
 import socket
+import signal
+
+pid = os.getpid()
+ppid = os.getppid()
+
+USER_CANCELLED = False
+install_begun = False
+
+# we install a signal handler for SIGUSR1, that we call from Midas (with sudo)
+def sig(sig, frame):
+  global USER_CANCELLED
+  USER_CANCELLED = True
+
+signal.signal(signal.SIGUSR1, sig)
+
+def did_cancel():
+  global USER_CANCELLED
+  return USER_CANCELLED
 
 RR_REQUIRED_DEPENDENCIES = ["ccache", "cmake", "make", "g++-multilib", "gdb", "pkg-config", "coreutils", "python3-pexpect", "manpages-dev", "git", "ninja-build", "capnproto", "libcapnp-dev", "zlib1g-dev"]
 comms_address = "/tmp/rr-build-progress"
@@ -38,35 +56,11 @@ TEST_PKGS = [
   "obs-studio",
 ]
 
-class MidasInstallProgress(apt.progress.base.InstallProgress):
-  def __init__(self):
-    super(MidasInstallProgress, self).__init__()
-    self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+class MidasReport():
+  def __init__(self, action, socket):
+    self.action = action
+    self.socket = socket
     self.socket.connect(comms_address)
-    self.last_known_progress = 0
-
-  def conffile(self, current: str, new: str) -> None:
-    self.report_to_midas({"type": "conffile", "action": "install", "data": { "current": current, "new": new }})
-
-  def error(self, pkg: str, errormsg: str) -> None:
-    self.report_to_midas({"type": "error", "action": "install", "data": { "package": pkg, "msg": errormsg }})
-
-  def processing(self, pkg: str, stage: str) -> None:
-    self.report_to_midas({"type": "processing", "action": "install", "data": { "package": pkg, "stage": stage }})
-
-  def dpkg_status_change(self, pkg: str, status: str) -> None:
-    self.report_to_midas({"type": "dpkg", "action": "install", "data": { "package": pkg, "status": status }})
-
-  def status_change(self, pkg: str, percent: float, status: str) -> None:
-    increment = percent - self.last_known_progress
-    self.last_known_progress = percent
-    self.report_to_midas({ "type": "update", "action": "install", "data": { "package": pkg, "progress": percent, "increment": increment } })
-
-  def start_update(self) -> None:
-    self.report_to_midas({ "type": "start", "action": "install" })
-
-  def finish_update(self) -> None:
-    self.report_to_midas({ "type": "finish", "action": "install" })
 
   def report_to_midas(self, json_like):
     """ Reports to Midas the progress as a JSON packet { package: name, progress: percent } """
@@ -74,21 +68,60 @@ class MidasInstallProgress(apt.progress.base.InstallProgress):
     self.socket.send(payload)
     self.socket.send(b"\n")
 
-class MidasFetchProgress(apt.progress.base.AcquireProgress):
-  def __init__(self, packages, total_download_bytes):
-    super(MidasFetchProgress, self).__init__()
-    self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    self.socket.connect(comms_address)
+  def report(self, type, data=None):
+    self.report_to_midas({"type": type, "action": self.action, "data": data})
+
+install_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+fetch_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+class MidasInstallProgress(apt.progress.base.InstallProgress, MidasReport):
+  def __init__(self, socket):
+    MidasReport.__init__(self, "install", socket)
+    self.last_known_progress = 0
+
+  def conffile(self, current: str, new: str) -> None:
+    self.report("conffile", { "current": current, "new": new })
+
+  def error(self, pkg: str, errormsg: str) -> None:
+    self.report("error", { "package": pkg, "msg": errormsg })
+
+  def processing(self, pkg: str, stage: str) -> None:
+    self.report("processing", { "package": pkg, "stage": stage })
+
+  def dpkg_status_change(self, pkg: str, status: str) -> None:
+    self.report("dpkg", { "package": pkg, "status": status })
+
+  def status_change(self, pkg: str, percent: float, status: str) -> None:
+    if did_cancel():
+      self.report("cancel", "start")
+      raise Exception
+    increment = percent - self.last_known_progress
+    self.last_known_progress = percent
+    self.report("update", { "package": pkg, "progress": percent, "increment": increment })
+
+  def start_update(self) -> None:
+    global install_begun
+    install_begun = True
+    self.report("start")
+
+  def finish_update(self) -> None:
+    self.report("finish")
+
+class MidasFetchProgress(apt.progress.base.AcquireProgress, MidasReport):
+  def __init__(self, socket, packages, total_download_bytes):
+    MidasReport.__init__(self, "download", socket)
     self.total_required = total_download_bytes
     self.packages = packages
     self.last_known_progress = 0
+    self.report("setup", {"pid": pid, "ppid": ppid})
+    self.was_cancelled = False
 
   def done(self, item: apt_pkg.AcquireItemDesc) -> None:
     done_package = item.shortdesc
-    self.report_to_midas({"type": "done", "action": "download", "data": { "done": done_package }})
+    self.report("done", { "done": done_package })
 
   def fail(self, item: apt_pkg.AcquireItemDesc) -> None:
-    self.report_to_midas({"type": "error", "action": "download", "data": { "package": item.shortdesc }})
+    self.report("error", { "package": item.shortdesc })
 
   def fetch(self, item: apt_pkg.AcquireItemDesc) -> None:
     return super().fetch(item)
@@ -100,25 +133,24 @@ class MidasFetchProgress(apt.progress.base.AcquireProgress):
     return super().media_change(media, drive)
 
   def pulse(self, owner: apt_pkg.Acquire) -> bool:
+    if did_cancel():
+      self.was_cancelled = True
+      self.report("cancel", "start")
+      return False
     download_progress = round((self.current_bytes / self.total_required) * 100.0, 2)
     increment = download_progress - self.last_known_progress
     self.last_known_progress = download_progress
-    self.report_to_midas({ "type": "update", "action": "download", "data": { "bytes": self.current_bytes, "progress": download_progress, "increment": increment } })
+    self.report("update", { "bytes": self.current_bytes, "progress": download_progress, "increment": increment })
     return super().pulse(owner)
 
   def start(self) -> None:
-    self.report_to_midas({ "type": "start", "action": "download", "data": { "packages": self.packages, "bytes" : self.total_required } })
+    self.report("start", { "packages": self.packages, "bytes" : self.total_required })
     return super().start()
 
   def stop(self) -> None:
-    self.report_to_midas({ "type": "finish", "action": "download", "data": { "bytes" : self.current_bytes } })
+    if not self.was_cancelled:
+      self.report("finish", { "bytes" : self.current_bytes })
     return super().stop()
-
-  def report_to_midas(self, json_like):
-    """ Reports to Midas the progress as a JSON packet { package: name, progress: percent } """
-    payload = json.dumps(json_like).encode("UTF-8")
-    self.socket.send(payload)
-    self.socket.send(b"\n")
 
 cache = apt.Cache()
 cache.update()
@@ -132,4 +164,32 @@ for package in TEST_PKGS:
     pkg.mark_install()
     packages.append(package)
 
-cache.commit(fetch_progress=MidasFetchProgress(packages, cache.required_download), install_progress=MidasInstallProgress())
+fetch_progress = MidasFetchProgress(socket=fetch_socket, packages=packages, total_download_bytes=cache.required_download)
+install_progress = MidasInstallProgress(socket=install_socket)
+
+try:
+  cache.commit(fetch_progress=fetch_progress, install_progress=install_progress)
+except Exception as e:
+  cache.close()
+  # installerProgress send kill `pidof this`, which sends a signal that interrupts this script
+  # causing it to throw. We don't even need two-way communication
+  cache = apt.Cache()
+  cache.update()
+  cache.open()
+  for package in packages:
+    pkg = cache[package]
+    pkg.mark_delete()
+  cache.commit()
+  cache.close()
+  action = "download" if not install_begun else "install"
+  payload_data = {"type": "cancel", "action": action, "data": "done" }
+  payload = json.dumps(payload_data).encode("UTF-8")
+  if not install_begun:
+    fetch_socket.send(payload)
+    fetch_socket.send(b"\n")
+  else:
+    install_socket.send(payload)
+    install_socket.send(b"\n")
+
+  fetch_socket.close()
+  install_socket.close()
