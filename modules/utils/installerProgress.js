@@ -1,11 +1,36 @@
 const vscode = require("vscode");
 var net = require("net");
 const EventEmitter = require("events");
-const { sudo, which, getExtensionPathOf } = require("./sysutils");
+const { sudo, which } = require("./sysutils");
+const os = require("os");
 
 const comms_address = "/tmp/rr-build-progress";
 
-async function initInstaller() {
+function prepare_request(deps) {
+  const endinanness = os.endianness();
+  const payload = deps.join(" ");
+  const payload_length = new Int32Array(1);
+  payload_length[0] = Buffer.byteLength(payload, "utf-8");
+  const len = Buffer.alloc(4);
+  if (endinanness == "BE") {
+    len.writeUInt32BE(payload_length[0]);
+  } else {
+    len.writeUInt32LE(payload_length[0]);
+  }
+  const packet_size = new Uint8Array(4);
+  packet_size[0] = len[0];
+  packet_size[1] = len[1];
+  packet_size[2] = len[2];
+  packet_size[3] = len[3];
+  return { packet_size: packet_size, payload: payload };
+}
+
+/**
+ *
+ * @param {string} repo_type - whether we're using apt or dnf
+ * @param {string[]} pkgs -
+ */
+async function initInstaller(repo_type, pkgs) {
   let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
   logger.show();
   // eslint-disable-next-line max-len
@@ -17,47 +42,50 @@ async function initInstaller() {
   const cancel = async (pid) => {
     let kill = await which("kill");
     const args = [kill, "-s", "SIGUSR1", `${pid}`];
-    console.log(`interrupt cmd: ${args.join(" ")}`);
     return await sudo(args, pass);
   };
   const installer = () => {
     return which("python")
       .then((python) => {
-        return sudo([python, getExtensionPathOf("modules/python/apt_manager.py")], pass);
+        return sudo([python, repo_type], pass);
       })
       .then((install) => {
         return install;
       });
   };
   let listeners = { download: new EventEmitter(), install: new EventEmitter() };
-  let server = net
-    .createServer((client) => {
-      console.log("creating server...");
+  let client_number = 0;
+  let server = net.createServer((client) => {
+    if (client_number == 1) {
+      const { packet_size, payload } = prepare_request(pkgs);
+      client.write(packet_size);
       client.setEncoding("utf8");
-      client.on("end", () => {});
-      let overlap_buffer = "";
-      client.on("data", (socket_payload) => {
-        let str = socket_payload.toString();
-        if (overlap_buffer.length > 0) {
-          str = overlap_buffer.concat(str);
-          overlap_buffer = "";
+      client.write(payload);
+    }
+    client_number += 1;
+    client.setEncoding("utf8");
+    let overlap_buffer = "";
+    client.on("data", (socket_payload) => {
+      let str = socket_payload.toString();
+      if (overlap_buffer.length > 0) {
+        str = overlap_buffer.concat(str);
+        overlap_buffer = "";
+      }
+      let payloads = str.split("\n");
+      for (const message_payload of payloads) {
+        try {
+          const json = JSON.parse(message_payload);
+          handle_payload(listeners, json);
+        } catch (e) {
+          console.log(`Error: ${e}`);
+          vscode.window.showErrorMessage(e);
+          overlap_buffer = message_payload;
         }
-        let payloads = str.split("\n");
-        for (const message_payload of payloads) {
-          try {
-            const json = JSON.parse(message_payload);
-            handle_payload(listeners, json);
-          } catch (e) {
-            console.log(`Error: ${e}`);
-            vscode.window.showErrorMessage(e);
-            overlap_buffer = message_payload;
-          }
-        }
-      });
-    })
-    .listen(comms_address);
-
-  server.on("close", () => {
+      }
+    });
+  });
+  server.listen(comms_address);
+  const unlink_unix_socket = () => {
     console.log(`closing installer services...`);
     try {
       if (require("fs").existsSync(comms_address)) {
@@ -66,10 +94,18 @@ async function initInstaller() {
     } catch (err) {
       console.log(`Exception: ${err}`);
     }
-  });
+  };
+  server.on("error", unlink_unix_socket);
+  server.on("close", unlink_unix_socket);
+  server.on("drop", unlink_unix_socket);
+
   let remaining_download = [];
   let installed_packages = [];
   let processInfo = { pid: 0, ppid: 0 };
+  listeners.install.on("setup", (payload) => {
+    processInfo = payload;
+  });
+
   listeners.download.on("setup", (payload) => {
     processInfo = payload;
   });
@@ -94,19 +130,15 @@ async function initInstaller() {
             await cancel(processInfo.pid);
           });
 
-          listeners.download.on("cancel", (data) => {
-            if (data == "start") {
-              console.log(`Cancel start begun for download service... waiting for clean up OK`);
-            } else if (data == "done") {
-              vscode.window.showInformationMessage("Download cancelled - cleaned up");
-              server.close((err) => {
-                console.log("server closed.");
-                if (err) {
-                  logger.appendLine("Could not close InstallingManager connection. Remove ");
-                }
-              });
-              resolve();
-            }
+          listeners.download.on("cancel", () => {
+            vscode.window.showInformationMessage("Download cancelled - cleaned up");
+            server.close((err) => {
+              console.log("server closed.");
+              if (err) {
+                logger.appendLine("Could not close InstallingManager connection. Remove ");
+              }
+            });
+            resolve();
           });
 
           listeners.download.on("done", ({ done }) => {
@@ -152,18 +184,14 @@ async function initInstaller() {
             reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
           });
 
-          listeners.install.on("cancel", (data) => {
-            if (data == "start") {
-              console.log(`Cancel start begun for install service... waiting for clean up OK`);
-            } else {
-              vscode.window.showInformationMessage("Installation cancelled... Removed installed packages");
-              server.close((err) => {
-                if (err) {
-                  logger.appendLine("Could not close InstallingManager connection. Remove ");
-                }
-              });
-              resolve();
-            }
+          listeners.install.on("cancel", () => {
+            vscode.window.showInformationMessage("Installation cancelled... Removed installed packages");
+            server.close((err) => {
+              if (err) {
+                logger.appendLine("Could not close InstallingManager connection. Remove ");
+              }
+            });
+            resolve();
           });
 
           listeners.install.on("finish", () => {
