@@ -6,7 +6,7 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
 const { initInstaller } = require("./installerProgress");
-const { which, resolveCommand } = require("./sysutils");
+const { which, resolveCommand, getExtensionPathOf } = require("./sysutils");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -404,46 +404,142 @@ async function getPid() {
   }
 }
 
+const FEDORA_DEPS =
+  // eslint-disable-next-line max-len
+  "ccache cmake make gcc gcc-c++ gdb libgcc libgcc.i686 glibc-devel glibc-devel.i686 libstdc++-devel libstdc++-devel.i686 libstdc++-devel.x86_64 python3-pexpect man-pages ninja-build capnproto capnproto-libs capnproto-devel zlib-devel".split(
+    " "
+  );
+
+const UBUNTU_DEPS =
+  "ccache cmake make g++-multilib gdb pkg-config coreutils python3-pexpect manpages-dev git ninja-build capnproto libcapnp-dev zlib1g-dev".split(
+    " "
+  );
+
 async function guessInstaller() {
   if ("" != (await which("dpkg"))) {
-    return await which("apt-get");
+    return { name: "apt", pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"), deps: UBUNTU_DEPS };
   }
 
   if ("" != (await which("rpm"))) {
-    return await which("dnf");
+    return { name: "dnf", pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"), deps: FEDORA_DEPS };
   }
   throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manuall");
 }
 
-async function installDependenciesAPT() {
+async function installRRFromRepository() {
   try {
-    await initInstaller();
+    // we can ignore deps. dpkg / apt will do that for us here.
+    // eslint-disable-next-line no-unused-vars
+    const { name, pkg_manager, deps } = await guessInstaller();
+    await initInstaller(pkg_manager, ["rr"]);
   } catch (err) {
-    vscode.window.showErrorMessage("FAILED TO CREATE DEPENDENCY INSTALLER");
-    console.log(err);
+    vscode.window.showErrorMessage("Failed to install RR from repository");
   }
 }
 
-function openOutputLogger() {
-  let install_logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
-  install_logger.show();
-  return install_logger;
-}
-
-async function installRRFromRepository() {
-  let installer = await guessInstaller();
-  vscode.window.showInformationMessage(`Install from repository (${installer})`);
-}
-
 async function installRRFromDownload() {
-  const logger = openOutputLogger();
-  let dependencyInstaller = await guessInstaller();
-  await installDependenciesAPT();
+  // eslint-disable-next-line no-unused-vars
+  const { name, pkg_manager, deps } = await guessInstaller();
+  const uname = await which("uname");
+  const arch = execSync(`${uname} -m`).toString().trim();
+  if (name == "apt") {
+    let file = await http_download(
+      `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.deb`,
+      `rr-5.6.0-Linux-${arch}.deb`
+    );
+    // todo(simon): implement installing of `file`
+  } else if (name == "dnf") {
+    let file = await http_download(
+      `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.rpm`,
+      `rr-5.6.0-Linux-${arch}.rpm`
+    );
+    // todo(simon): implement installing of `file`
+  } else {
+    throw new Error("Failed to guess repo manager");
+  }
+  // todo(simon): start installing
+}
+
+async function http_download(url, file_name) {
+  const path = getExtensionPathOf(file_name);
+  if (fs.existsSync(path)) {
+    // remove old file. We're in extension folder, so we can freely remove stuff
+    fs.unlinkSync(path);
+  }
+  let p = await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Notification,
+      cancellable: true,
+      title: "Downloading",
+    },
+    (progress, token) =>
+      new Promise((resolve, reject) => {
+        const output_stream = fs.createWriteStream(path, { flags: "wx" });
+        const cleanup = (err) => {
+          vscode.window.showErrorMessage(err);
+          output_stream.close();
+          fs.unlinkSync(path);
+          reject(err);
+        };
+
+        const controller = new AbortController();
+        const signal = controller.signal;
+        signal.addEventListener(
+          "abort",
+          () => {
+            cleanup("Download cancelled");
+          },
+          { once: true }
+        );
+        const handle_response = (request, response) => {
+          if (response.statusCode != 200) {
+            throw new Error(
+              `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`
+            );
+          }
+          response.pipe(output_stream);
+          const file_size = response.headers["content-length"];
+          response.on("data", (chunk) => {
+            const increment = (chunk.length / +file_size) * 100.0;
+            progress.report({ increment: increment, message: `${url}` });
+          });
+          token.onCancellationRequested(() => {
+            controller.abort();
+          });
+          request.on("error", (err) => {
+            cleanup(err.message);
+          });
+
+          output_stream.on("error", (err) => {
+            cleanup(err.message);
+          });
+          output_stream.on("close", () => {
+            resolve(path);
+          });
+        };
+
+        const request = require("https").get(url, { signal: signal }, (response) => {
+          if (response.statusCode == 302) {
+            let new_request = require("https").get(response.headers.location, { signal: signal }, (response) => {
+              handle_response(new_request, response);
+            });
+          } else if (response.statusCode == 200) {
+            handle_response(request, response);
+          } else {
+            cleanup(`Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`);
+          }
+        });
+      })
+  );
+  return p;
 }
 
 async function installRRFromSource() {
-  const logger = openOutputLogger();
-  let dependenciesInstaller = await guessInstaller();
+  // eslint-disable-next-line no-unused-vars
+  const { name, pkg_manager, deps } = await guessInstaller();
+  await initInstaller(pkg_manager, deps);
+  await http_download("https://github.com/rr-debugger/rr/archive/refs/heads/master.zip", "rr-master.zip");
+  // todo(simon): add build from source functionality, which requires downloading source + untar it + run build command
   vscode.window.showInformationMessage("Downlod, build and install from source");
 }
 
@@ -468,8 +564,11 @@ async function getRR() {
     ],
     { placeHolder: "Choose method of installing rr" }
   );
-
-  await method();
+  try {
+    await method();
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed: ${err}`);
+  }
 }
 
 module.exports = {
