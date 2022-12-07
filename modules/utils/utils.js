@@ -417,21 +417,21 @@ const UBUNTU_DEPS =
 
 async function guessInstaller() {
   if ("" != (await which("dpkg"))) {
-    return { name: "apt", pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"), deps: UBUNTU_DEPS };
+    return { name: "apt", pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"), deps: UBUNTU_DEPS, cancellable: true };
   }
 
   if ("" != (await which("rpm"))) {
-    return { name: "dnf", pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"), deps: FEDORA_DEPS };
+    return { name: "dnf", pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"), deps: FEDORA_DEPS, cancellable: true };
   }
-  throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manuall");
+  throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manually");
 }
 
 async function installRRFromRepository() {
   try {
     // we can ignore deps. dpkg / apt will do that for us here.
     // eslint-disable-next-line no-unused-vars
-    const { name, pkg_manager, deps } = await guessInstaller();
-    await initInstaller(pkg_manager, ["rr"]);
+    const { name, pkg_manager, deps, cancellable} = await guessInstaller();
+    await initInstaller(pkg_manager, ["rr"], cancellable);
   } catch (err) {
     vscode.window.showErrorMessage("Failed to install RR from repository");
   }
@@ -443,24 +443,71 @@ async function installRRFromDownload() {
   const uname = await which("uname");
   const arch = execSync(`${uname} -m`).toString().trim();
   if (name == "apt") {
-    let file = await http_download(
+    const { path, success } = await http_download(
       `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.deb`,
       `rr-5.6.0-Linux-${arch}.deb`
     );
-    // todo(simon): implement installing of `file`
+    if (success) {
+      // todo(simon): implement installing of `file`
+    }
+
   } else if (name == "dnf") {
-    let file = await http_download(
+    let { path, success } = await http_download(
       `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.rpm`,
       `rr-5.6.0-Linux-${arch}.rpm`
     );
-    // todo(simon): implement installing of `file`
+    if (success) {
+      // todo(simon): implement installing of `file`
+    }
   } else {
     throw new Error("Failed to guess repo manager");
   }
-  // todo(simon): start installing
 }
 
-async function http_download(url, file_name) {
+async function installRRFromSource() {
+  // eslint-disable-next-line no-unused-vars
+  const { name, pkg_manager, deps, cancellable} = await guessInstaller();
+  await http_download("https://github.com/rr-debugger/rr/archive/refs/heads/master.zip", "rr-master.zip");
+  await initInstaller(pkg_manager, deps, cancellable);
+  // todo(simon): add build from source functionality, which requires downloading source + untar it + run build command
+  vscode.window.showInformationMessage("Downlod, build and install from source");
+}
+
+async function getRR() {
+  const { method } = await vscode.window.showQuickPick(
+    [
+      {
+        label: "Install from repository",
+        description: "Install rr from the OS package repository",
+        method: installRRFromRepository,
+      },
+      {
+        label: "Install from download",
+        description: "Download the latest release and install it",
+        method: installRRFromDownload,
+      },
+      {
+        label: "Install from source",
+        description: "Download, build, and install from source",
+        method: installRRFromSource,
+      },
+    ],
+    { placeHolder: "Choose method of installing rr" }
+  );
+  try {
+    await method();
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed: ${err}`);
+  }
+}
+
+/**
+ * Downloads a file from `url` and saves it as `file_name` in the extension folder.
+ * @param {string} url - The url of the file to download
+ * @param {string} file_name - Desired file name of download. N.B: without path, Midas resolves its own path.
+ * @returns {Promise<{path: string, success: boolean}>} `path` of saved file and `success` indicates if it downloaded fully
+ */
+ async function http_download(url, file_name) {
   const path = getExtensionPathOf(file_name);
   if (fs.existsSync(path)) {
     // remove old file. We're in extension folder, so we can freely remove stuff
@@ -505,6 +552,7 @@ async function http_download(url, file_name) {
           });
           token.onCancellationRequested(() => {
             controller.abort();
+            resolve({path: path, success: false})
           });
           request.on("error", (err) => {
             cleanup(err.message);
@@ -514,7 +562,7 @@ async function http_download(url, file_name) {
             cleanup(err.message);
           });
           output_stream.on("close", () => {
-            resolve(path);
+            resolve({path: path, success: true});
           });
         };
 
@@ -532,43 +580,6 @@ async function http_download(url, file_name) {
       })
   );
   return p;
-}
-
-async function installRRFromSource() {
-  // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps } = await guessInstaller();
-  await initInstaller(pkg_manager, deps);
-  await http_download("https://github.com/rr-debugger/rr/archive/refs/heads/master.zip", "rr-master.zip");
-  // todo(simon): add build from source functionality, which requires downloading source + untar it + run build command
-  vscode.window.showInformationMessage("Downlod, build and install from source");
-}
-
-async function getRR() {
-  const { method } = await vscode.window.showQuickPick(
-    [
-      {
-        label: "Install from repository",
-        description: "Install rr from the OS package repository",
-        method: installRRFromRepository,
-      },
-      {
-        label: "Install from download",
-        description: "Download the latest release and install it",
-        method: installRRFromDownload,
-      },
-      {
-        label: "Install from source",
-        description: "Download, build, and install from source",
-        method: installRRFromSource,
-      },
-    ],
-    { placeHolder: "Choose method of installing rr" }
-  );
-  try {
-    await method();
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed: ${err}`);
-  }
 }
 
 module.exports = {
