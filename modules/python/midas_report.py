@@ -5,6 +5,8 @@ import os
 import logging
 import logging.handlers
 
+COMMS_ADDRESS = "/tmp/rr-build-progress"
+
 def resolveExtensionFile(fileName):
     extensionPath = os.path.dirname(os.path.realpath(__file__))
     return "{}/../../{}".format(extensionPath, fileName)
