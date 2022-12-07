@@ -26,11 +26,12 @@ function prepare_request(deps) {
 }
 
 /**
- *
+ * Inits and runs installer
  * @param {string} repo_type - whether we're using apt or dnf
- * @param {string[]} pkgs -
+ * @param {string[]} pkgs - list of depedencies to install
+ * @param {boolean} cancellable - Whether or not the install operation can be cancelled
  */
-async function initInstaller(repo_type, pkgs) {
+async function initInstaller(repo_type, pkgs, cancellable) {
   let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
   logger.show();
   // eslint-disable-next-line max-len
@@ -115,7 +116,7 @@ async function initInstaller(repo_type, pkgs) {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        cancellable: true,
+        cancellable: cancellable,
         title: "Downloading dependencies",
       },
       (reporter, token) => {
@@ -170,7 +171,7 @@ async function initInstaller(repo_type, pkgs) {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        cancellable: true,
+        cancellable: cancellable,
         title: "Installing dependencies",
       },
       (reporter, canceller) => {
