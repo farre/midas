@@ -3,7 +3,6 @@ import apt_pkg
 import apt.progress.base
 import apt.progress
 import apt.cache
-import json
 import signal
 
 import midas_report
@@ -145,14 +144,11 @@ except Exception as e:
   cache.commit()
   cache.close()
   action = "download" if not install_begun else "install"
-  payload_data = {"type": "cancel", "action": action, "data": "done" }
-  payload = json.dumps(payload_data).encode("UTF-8")
+  payload = {"type": "cancel", "action": action, "data": "done" }
   if not install_begun:
     fetch_socket.send_payload(payload)
-    fetch_socket.send_payload(b"\n")
   else:
     install_socket.send_payload(payload)
-    install_socket.send_payload(b"\n")
 
   fetch_socket.close()
   install_socket.close()
