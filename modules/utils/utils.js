@@ -5,7 +5,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
-const { initInstaller } = require("./installerProgress");
+const { run_install } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf } = require("./sysutils");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
@@ -417,11 +417,21 @@ const UBUNTU_DEPS =
 
 async function guessInstaller() {
   if ("" != (await which("dpkg"))) {
-    return { name: "apt", pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"), deps: UBUNTU_DEPS, cancellable: true };
+    return {
+      name: "apt",
+      pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"),
+      deps: UBUNTU_DEPS,
+      cancellable: true,
+    };
   }
 
   if ("" != (await which("rpm"))) {
-    return { name: "dnf", pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"), deps: FEDORA_DEPS, cancellable: true };
+    return {
+      name: "dnf",
+      pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"),
+      deps: FEDORA_DEPS,
+      cancellable: true,
+    };
   }
   throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manually");
 }
@@ -430,10 +440,11 @@ async function installRRFromRepository() {
   try {
     // we can ignore deps. dpkg / apt will do that for us here.
     // eslint-disable-next-line no-unused-vars
-    const { name, pkg_manager, deps, cancellable} = await guessInstaller();
-    await initInstaller(pkg_manager, ["rr"], cancellable);
+    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+    let result = await run_install(pkg_manager, ["rr"], cancellable);
+    vscode.window.showInformationMessage(result);
   } catch (err) {
-    vscode.window.showErrorMessage("Failed to install RR from repository");
+    vscode.window.showErrorMessage(`Failed to install RR: ${err}`);
   }
 }
 
@@ -443,20 +454,15 @@ async function installRRFromDownload() {
   const uname = await which("uname");
   const arch = execSync(`${uname} -m`).toString().trim();
   if (name == "apt") {
-    const { path, success } = await http_download(
-      `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.deb`,
-      `rr-5.6.0-Linux-${arch}.deb`
-    );
-    if (success) {
+    const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
+    const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
+    if (status == "success") {
       // todo(simon): implement installing of `file`
     }
-
   } else if (name == "dnf") {
-    let { path, success } = await http_download(
-      `https://github.com/rr-debugger/rr/releases/download/5.6.0/rr-5.6.0-Linux-${arch}.rpm`,
-      `rr-5.6.0-Linux-${arch}.rpm`
-    );
-    if (success) {
+    const { version, url } = await resolveLatestVersion(arch);
+    const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
+    if (status == "success") {
       // todo(simon): implement installing of `file`
     }
   } else {
@@ -465,55 +471,200 @@ async function installRRFromDownload() {
 }
 
 async function installRRFromSource() {
-  // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps, cancellable} = await guessInstaller();
-  await http_download("https://github.com/rr-debugger/rr/archive/refs/heads/master.zip", "rr-master.zip");
-  await initInstaller(pkg_manager, deps, cancellable);
-  // todo(simon): add build from source functionality, which requires downloading source + untar it + run build command
-  vscode.window.showInformationMessage("Downlod, build and install from source");
+  return new Promise(async (resolve, reject) => {
+    // eslint-disable-next-line no-unused-vars
+    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+    try {
+      const { path, status } = await http_download(
+        "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
+        "rr-master.zip"
+      );
+      if (status == "success") {
+        let result = await run_install(pkg_manager, deps, cancellable);
+        vscode.window.showInformationMessage(`${result} dependencies`);
+        // eslint-disable-next-line no-unused-vars
+        const { version, url } = await resolveLatestVersion("we-don't-care-about-arch-here");
+        vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
+          (progress, token) => {
+            return new Promise(async (progress_resolve) => {
+              const build_path = getExtensionPathOf(`rr-${version}/`);
+              const logger = vscode.window.createOutputChannel("Building RR");
+              logger.show();
+              logger.appendLine(`creating dir ${build_path}`);
+              fs.mkdirSync(build_path);
+
+              const has_ninja = (await which("ninja")) != "";
+              const unzip = await which("unzip");
+              const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
+              logger.appendLine(unzip_cmd);
+              execSync(unzip_cmd);
+              const cmake_cfg = _spawn(
+                "cmake",
+                [
+                  "-S",
+                  `${build_path}rr-master`,
+                  "-B",
+                  build_path,
+                  "-DCMAKE_BUILD_TYPE=Release",
+                  has_ninja ? "-G Ninja" : "",
+                ],
+                { shell: true, stdio: "pipe", cwd: build_path }
+              );
+              cmake_cfg.stdout.on("data", (data) => {
+                logger.append(data.toString());
+              });
+
+              cmake_cfg.stderr.on("data", (data) => {
+                logger.append(data.toString());
+              });
+
+              let last = 0;
+              const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
+
+              cmake_cfg.on("exit", () => {
+                const cmake_build = _spawn("cmake", ["--build", build_path, "-j"], {
+                  stdio: "pipe",
+                  detached: true,
+                  cwd: build_path,
+                });
+                cmake_build.stdout.on("data", (data) => {
+                  const str = data.toString();
+                  const matches = str.matchAll(matcher);
+                  for (const res of matches) {
+                    const { current, total } = res.groups;
+                    const inc = ((+current - last) / +total) * 100.0;
+                    last = +current;
+                    progress.report({ message: "Building...", increment: inc });
+                  }
+                  logger.append(str);
+                });
+                cmake_build.stderr.on("data", (data) => {
+                  logger.append(data.toString());
+                });
+                cmake_build.on("exit", (code) => {
+                  if (code == 0) {
+                    logger.appendLine("Build completed successfully");
+                    progress_resolve();
+                    resolve("Build completed successfully");
+                  } else {
+                    logger.appendLine(`Build failed - finished with exit code ${code}`);
+                    progress_resolve();
+                    reject(`Build failed - finished with exit code ${code}`);
+                  }
+                });
+                cmake_build.on("error", (err) => {
+                  progress_resolve();
+                  reject(`Build failed: ${err}`);
+                });
+
+                token.onCancellationRequested(() => {
+                  // -pid kills the process tree. We are a vengeful, hateful, spiteful god of the linux universe
+                  // (we do this, because "cmake --build" spawns new processes)
+                  process.kill(-cmake_build.pid, "SIGTERM");
+                  // controller.abort();
+                  progress_resolve("Cancelled");
+                  resolve("Cancelled");
+                });
+              });
+            });
+          }
+        );
+      } else {
+        resolve("Download cancelled");
+      }
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 async function getRR() {
-  const { method } = await vscode.window.showQuickPick(
-    [
-      {
-        label: "Install from repository",
-        description: "Install rr from the OS package repository",
-        method: installRRFromRepository,
-      },
-      {
-        label: "Install from download",
-        description: "Download the latest release and install it",
-        method: installRRFromDownload,
-      },
-      {
-        label: "Install from source",
-        description: "Download, build, and install from source",
-        method: installRRFromSource,
-      },
-    ],
-    { placeHolder: "Choose method of installing rr" }
+  const answers = [
+    { title: "No", isCloseAffordance: true },
+    { title: "Yes", isCloseAffordance: false },
+  ];
+  let answer = await vscode.window.showInformationMessage(
+    "To install depedencies for RR, Midas requires you input your sudo password - are you ok with this?",
+    { modal: true, detail: "Midas do not save or store any data about you." },
+    ...answers
   );
-  try {
-    await method();
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed: ${err}`);
+  if (answer.title == answers[0].title) {
+    const { method } = await vscode.window.showQuickPick(
+      [
+        {
+          label: "Install from repository",
+          description: "Install rr from the OS package repository",
+          method: installRRFromRepository,
+        },
+        {
+          label: "Install from download",
+          description: "Download the latest release and install it",
+          method: installRRFromDownload,
+        },
+        {
+          label: "Install from source",
+          description: "Download, build, and install from source",
+          method: installRRFromSource,
+        },
+      ],
+      { placeHolder: "Choose method of installing rr" }
+    );
+    try {
+      await method();
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed: ${err}`);
+    }
   }
+}
+
+/**
+ * Returns latest version and url to the package (without file extension). Append .deb or .rpm to get full url.
+ * @param {string | "x86_64" | "i686"} arch
+ * @returns {Promise<{version: string, url: string }>}
+ */
+function resolveLatestVersion(arch) {
+  const tag = "/tag/";
+  return new Promise((resolve) => {
+    const latest_url = "https://github.com/rr-debugger/rr/releases/latest";
+    try {
+      require("https").get(latest_url, (response) => {
+        if (response.statusCode !== 302) {
+          throw new Error("Could not resolve latest version...");
+        } else {
+          let redirected = response.headers.location;
+          const idx = redirected.lastIndexOf(tag);
+          if (idx != -1) {
+            const version = redirected.slice(idx + tag.length).split("/")[0];
+            resolve({
+              version: version,
+              url: `https://github.com/rr-debugger/rr/releases/download/${version}/rr-${version}-Linux-${arch}`,
+            });
+          } else {
+            throw new Error("Could not resolve latest version...");
+          }
+        }
+      });
+    } catch (err) {
+      vscode.window.showInformationMessage(`${err} falling back on version 5.6`);
+      resolve({ version: "5.6.0", url: "https://github.com/rr-debugger/rr/releases/download/5.6.0/" });
+    }
+  });
 }
 
 /**
  * Downloads a file from `url` and saves it as `file_name` in the extension folder.
  * @param {string} url - The url of the file to download
  * @param {string} file_name - Desired file name of download. N.B: without path, Midas resolves its own path.
- * @returns {Promise<{path: string, success: boolean}>} `path` of saved file and `success` indicates if it downloaded fully
+ * @returns {Promise<{path: string, status: "success" | "cancelled" }>} `path` of saved file and `status` indicates if it
  */
- async function http_download(url, file_name) {
+async function http_download(url, file_name) {
   const path = getExtensionPathOf(file_name);
   if (fs.existsSync(path)) {
     // remove old file. We're in extension folder, so we can freely remove stuff
     fs.unlinkSync(path);
   }
-  let p = await vscode.window.withProgress(
+  return await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       cancellable: true,
@@ -531,13 +682,11 @@ async function getRR() {
 
         const controller = new AbortController();
         const signal = controller.signal;
-        signal.addEventListener(
-          "abort",
-          () => {
-            cleanup("Download cancelled");
-          },
-          { once: true }
-        );
+        signal.addEventListener("abort", () => {
+          output_stream.close();
+          fs.unlinkSync(path);
+          resolve({ path: path, status: "cancelled" });
+        });
         const handle_response = (request, response) => {
           if (response.statusCode != 200) {
             throw new Error(
@@ -545,31 +694,28 @@ async function getRR() {
             );
           }
           response.pipe(output_stream);
-          const file_size = response.headers["content-length"];
+          const file_size = response.headers["content-length"] ?? 0;
           response.on("data", (chunk) => {
+            // if github says "nopesies" to sending content-length, due to compression, we'll get no progress here.
             const increment = (chunk.length / +file_size) * 100.0;
             progress.report({ increment: increment, message: `${url}` });
           });
           token.onCancellationRequested(() => {
             controller.abort();
-            resolve({path: path, success: false})
           });
           request.on("error", (err) => {
             cleanup(err.message);
           });
-
-          output_stream.on("error", (err) => {
-            cleanup(err.message);
-          });
+          output_stream.on("error", cleanup);
           output_stream.on("close", () => {
-            resolve({path: path, success: true});
+            resolve({ path: path, status: "success" });
           });
         };
 
         const request = require("https").get(url, { signal: signal }, (response) => {
           if (response.statusCode == 302) {
-            let new_request = require("https").get(response.headers.location, { signal: signal }, (response) => {
-              handle_response(new_request, response);
+            let new_request = require("https").get(response.headers.location, { signal: signal }, (res) => {
+              handle_response(new_request, res);
             });
           } else if (response.statusCode == 200) {
             handle_response(request, response);
@@ -579,7 +725,6 @@ async function getRR() {
         });
       })
   );
-  return p;
 }
 
 module.exports = {
