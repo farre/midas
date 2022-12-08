@@ -112,43 +112,57 @@ class MidasFetchProgress(apt.progress.base.AcquireProgress, midas_report.MidasRe
     super().stop()
     if not self.was_cancelled:
       self.report("finish", { "bytes" : self.current_bytes })
-
-fetch_socket = midas_report.MidasSocket(comms_address)
-install_socket = midas_report.MidasSocket(comms_address)
-DEPS = install_socket.wait_for_packages()
-
-cache = apt.Cache()
-cache.update()
-cache.open()
-
-for package in DEPS:
-  pkg = cache[package]
-  if not pkg.is_installed:
-    pkg.mark_install()
-
-packages = [x.name for x in cache.get_changes()]
-
-fetch_progress = MidasFetchProgress(socket=fetch_socket, packages=packages, total_download_bytes=cache.required_download)
-install_progress = MidasInstallProgress(socket=install_socket)
-
 try:
-  cache.commit(fetch_progress=fetch_progress, install_progress=install_progress)
-except Exception as e:
-  midas_report.get_logger().debug("Exception or cancelled operation. {} Message: {}".format(type(e), e))
-  resolver = apt.cache.ProblemResolver(cache)
-  midas_report.get_logger().debug("Deleting packages...")
-  for package in packages:
-    pkg = cache[package]
-    resolver.remove(pkg)
-  midas_report.get_logger().debug("Delete count: {}".format(cache.delete_count))
-  cache.commit()
-  cache.close()
-  action = "download" if not install_begun else "install"
-  payload = {"type": "cancel", "action": action, "data": "done" }
-  if not install_begun:
-    fetch_socket.send_payload(payload)
-  else:
-    install_socket.send_payload(payload)
+  fetch_socket = midas_report.MidasSocket(comms_address)
+  install_socket = midas_report.MidasSocket(comms_address)
+  DEPS = install_socket.wait_for_packages()
 
-  fetch_socket.close()
-  install_socket.close()
+  cache = apt.Cache()
+  cache.open()
+  try:
+    for package in DEPS:
+      pkg = cache[package]
+      if not pkg.is_installed:
+        pkg.mark_install()
+  except Exception as e:
+    midas_report.get_logger().debug("Updating APT cache ({})".format(e))
+    # we might have to update cache if we have no cache. This can take some time though.
+    cache.update()
+    for package in DEPS:
+      pkg = cache[package]
+      if not pkg.is_installed:
+        pkg.mark_install()
+
+  packages = [x.name for x in cache.get_changes()]
+
+  fetch_progress = MidasFetchProgress(socket=fetch_socket, packages=packages, total_download_bytes=cache.required_download)
+  install_progress = MidasInstallProgress(socket=install_socket)
+  if len(packages) == 0:
+    midas_report.get_logger().debug("All required dependencies met")
+    fetch_progress.start()
+    fetch_progress.stop()
+    install_progress.start_update()
+    install_progress.finish_update()
+  else:
+    try:
+      cache.commit(fetch_progress=fetch_progress, install_progress=install_progress)
+    except Exception as e:
+      midas_report.get_logger().debug("Exception or cancelled operation. {} Message: {}".format(type(e), e))
+      resolver = apt.cache.ProblemResolver(cache)
+      midas_report.get_logger().debug("Deleting packages...")
+      for package in packages:
+        pkg = cache[package]
+        resolver.remove(pkg)
+      midas_report.get_logger().debug("Delete count: {}".format(cache.delete_count))
+      cache.commit()
+      cache.close()
+      action = "download" if not install_begun else "install"
+      payload = {"type": "cancel", "action": action, "data": "done" }
+      if not install_begun:
+        fetch_socket.send_payload(payload)
+      else:
+        install_socket.send_payload(payload)
+      fetch_socket.close()
+      install_socket.close()
+except Exception as e:
+  midas_report.get_logger().debug("Cache operation excetion caught: {}".format(e))
