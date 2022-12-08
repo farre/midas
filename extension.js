@@ -7,8 +7,8 @@ const { activateExtension, deactivateExtension } = require("./modules/activateDe
 /**
  * @param {vscode.ExtensionContext} context
  */
-function activate(context) {
-  activateExtension(context);
+async function activate(context) {
+  return activateExtension(context);
 }
 
 // this method is called when your extension is deactivated
