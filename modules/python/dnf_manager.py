@@ -1,7 +1,8 @@
 from midas_report import get_logger, MidasReport, MidasSocket, COMMS_ADDRESS
-import dnf, dnf.base, dnf.callback, dnf.package, dnf.exceptions
+import dnf, dnf.base, dnf.callback, dnf.package, dnf.exceptions, dnf.transaction
 import platform
 import signal
+from functools import reduce
 
 USER_CANCELLED = False
 
@@ -26,13 +27,22 @@ class MidasDownloadProgress(dnf.callback.DownloadProgress, MidasReport):
   def __init__(self, socket: MidasSocket, packages) -> None:
     MidasReport.__init__(self, "download", socket=socket)
     self.packages = packages
+    self.install_size = reduce(lambda a, b:a + b, [x.installsize for x in packages])
     self.total_size = 0
     self.downloaded_lookup = {}
     self.last_total = 0
+    # started_first means we're using this to multiple calls of base.download_packages
+    self.started_first = False
+    self.downloaded = 0
 
   def start(self, total_files, total_size, total_drpms=0):
-    self.total_size = total_size
-    self.report("start", {"packages": [x.name for x in self.packages], "bytes": total_size})
+    if not self.started_first:
+      self.total_size = total_size
+      self.report("start", {"packages": [x.name for x in self.packages], "bytes": total_size})
+      self.started_first = True
+      self.downloaded += 1
+    else:
+      self.downloaded += 1
     return super().start(total_files, total_size, total_drpms)
 
   def progress(self, payload, done):
@@ -42,16 +52,17 @@ class MidasDownloadProgress(dnf.callback.DownloadProgress, MidasReport):
       new_total += v
     if new_total == self.last_total:
       return
-    increment = ((new_total - self.last_total) / self.total_size) * 100.0
+    increment = ((new_total - self.last_total) / self.install_size) * 100.0
     self.last_total = new_total
-    self.report("update", { "bytes": self.last_total, "increment": increment, "progress": (new_total / self.total_size) * 100.0 })
+    self.report("update", { "bytes": self.last_total, "increment": increment, "progress": (new_total / self.install_size) * 100.0, "pkg": "{}".format(payload) })
     return super().progress(payload, done)
 
   def end(self, payload, status, msg):
-    downloaded = 0
-    for k, v in self.downloaded_lookup.items():
-      downloaded += v
-    self.report("finish", { "bytes": downloaded })
+    if self.downloaded == len(self.packages):
+      downloaded = 0
+      for k, v in self.downloaded_lookup.items():
+        downloaded += v
+      self.report("finish", { "bytes": downloaded, "pkg": "{}".format(payload)})
     return super().end(payload, status, msg)
 
 class MidasInstallProgress(dnf.callback.TransactionProgress, MidasReport):
@@ -120,16 +131,16 @@ with dnf.base.Base() as base:
         found = True
     if not found:
       final.append(item)
-
-  progress = MidasDownloadProgress(socket=download_socket, packages=final)
-  install_progress = MidasInstallProgress(socket=install_socket, packages=final)
+      base.package_install(item)
+  base.resolve()
+  get_logger().debug("Resolved dependencies: {}".format(" ".join([x.name for x in base.transaction.install_set])))
+  progress = MidasDownloadProgress(socket=download_socket, packages=base.transaction.install_set)
+  install_progress = MidasInstallProgress(socket=install_socket, packages=base.transaction.install_set)
 
   try:
-    base.download_packages(final, progress)
-    for item in final:
-      base.package_install(item)
-    throw_if_cancelled()
-    base.resolve()
+    for item in base.transaction.install_set:
+      base.download_packages([item], progress)
+      throw_if_cancelled()
     base.do_transaction(install_progress)
   except UserCancelled:
     install_socket.send_payload({"type": "cancel", "action": "install"})
