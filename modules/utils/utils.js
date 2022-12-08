@@ -448,49 +448,53 @@ async function installRRFromRepository() {
   }
 }
 
+async function installFileUsingManager(args) {
+  let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+  // f*** me extension development for VSCode is buggy. I don't want to have to do this.
+  if (!pass) {
+    pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+  }
+  const pkg_manager = await sudo(args, pass);
+  const logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
+  logger.show();
+  pkg_manager.stdout.on("data", (data) => {
+    logger.append(data.toString());
+  });
+
+  pkg_manager.stderr.on("data", (data) => {
+    if (!data.includes("[sudo]")) logger.append(data.toString());
+  });
+
+  return new Promise((resolve, reject) => {
+    pkg_manager.on("exit", (code) => {
+      if (code == 0) {
+        vscode.window.showInformationMessage("Successfully installed RR");
+        resolve();
+      } else {
+        vscode.window.showInformationMessage("Failed to install RR. Try again or another method");
+        reject(`Failed with code ${code}`);
+      }
+    });
+  });
+}
+
 async function installRRFromDownload() {
   // eslint-disable-next-line no-unused-vars
   const { name, pkg_manager, deps } = await guessInstaller();
   const uname = await which("uname");
   const arch = execSync(`${uname} -m`).toString().trim();
+
   if (name == "apt") {
     const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
     const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
     if (status == "success") {
-      // todo(simon): implement installing of `file`
+      return installFileUsingManager(["apt-get", "install", "-y", path]);
     }
   } else if (name == "dnf") {
     const { version, url } = await resolveLatestVersion(arch);
     const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
     if (status == "success") {
-      // todo(simon): implement installing of `file`
-      let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
-      // f*** me extension development for VSCode is buggy. I don't want to have to do this.
-      if (!pass) {
-        pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
-      }
-      const dnf = await sudo(["dnf", "-y", "localinstall", path], pass);
-      const logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
-      logger.show();
-      dnf.stdout.on("data", (data) => {
-        logger.append(data.toString());
-      });
-
-      dnf.stderr.on("data", (data) => {
-        if(!data.includes("[sudo]"))
-          logger.append(data.toString());
-      });
-
-      return new Promise((resolve, reject) => {
-        dnf.on("exit", (code) => {
-          if(code == 0) {
-            vscode.window.showInformationMessage("Successfully installed RR");
-            resolve();
-          } else {
-            reject(`Failed with code ${code}`);
-          }
-        });
-      });
+      return installFileUsingManager(["dnf", "-y", "localinstall", path]);
     }
   } else {
     throw new Error("Failed to guess repo manager");
