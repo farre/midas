@@ -29,7 +29,6 @@ function which(binary) {
     exec(`which ${binary}`, (err, stdout) => {
       if (err) {
         resolve("");
-        return;
       }
       if (stdout.charAt(stdout.length - 1) == "\n") {
         resolve(stdout.slice(0, stdout.length - 1));
