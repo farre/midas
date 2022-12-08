@@ -22,6 +22,33 @@ const ContextKeys = {
   RRSession: "midas.rrSession",
 };
 
+/**
+ * @typedef {{ cache : { rr: { path: string, version: string | undefined }, gdb: { path: string, version: string | undefined } }}} MidasCache
+ * @returns { Promise<MidasCache> }
+ */
+async function cache_read() {
+  return vscode.extensions
+    .getExtension("farrese.midas")
+    .activate()
+    .then(({ CacheManager }) => {
+      return CacheManager.read();
+    });
+}
+
+/**
+ *
+ * @param { MidasCache } cache
+ * @returns
+ */
+async function cache_write(cache) {
+  return vscode.extensions
+    .getExtension("farrese.midas")
+    .activate()
+    .then(({ CacheManager }) => {
+      return CacheManager.write(cache);
+    });
+}
+
 function isNothing(e) {
   return e == undefined || e == null;
 }
@@ -573,9 +600,15 @@ async function installRRFromSource() {
                 cmake_build.stderr.on("data", (data) => {
                   logger.append(data.toString());
                 });
-                cmake_build.on("exit", (code) => {
+                cmake_build.on("exit", async (code) => {
                   if (code == 0) {
-                    logger.appendLine("Build completed successfully");
+                    logger.appendLine(
+                      // eslint-disable-next-line max-len
+                      `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
+                    );
+                    let { cache } = await cache_read();
+                    cache.rr.path = `${build_path}/bin/rr`;
+                    await cache_write({ cache });
                     progress_resolve();
                     resolve("Build completed successfully");
                   } else {
