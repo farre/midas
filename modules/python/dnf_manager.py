@@ -16,12 +16,18 @@ signal.signal(signal.SIGUSR1, sig)
 signal.signal(signal.SIGUSR2, sig)
 
 class UserCancelled(Exception):
-  pass
+  def __init__(self, action: str):
+    super().__init__()
+    self.action = action
 
-def throw_if_cancelled():
+  def __str__(self):
+    return self.action
+
+
+def throw_if_cancelled(action: str):
   global USER_CANCELLED
   if USER_CANCELLED:
-    raise UserCancelled()
+    raise UserCancelled(action)
 
 class MidasDownloadProgress(dnf.callback.DownloadProgress, MidasReport):
   def __init__(self, socket: MidasSocket, packages) -> None:
@@ -123,14 +129,12 @@ with dnf.base.Base() as base:
   filtered_query = query.filter(name=DEPENDENCIES, arch=[architecture, "noarch"]).latest()
   filtered = list(filtered_query)
   installed = list(filtered_query.installed())
-  final = []
   for item in filtered:
     found = False
     for i in installed:
       if item.name == i.name:
         found = True
     if not found:
-      final.append(item)
       base.package_install(item)
   base.resolve()
   get_logger().debug("Resolved dependencies: {}".format(" ".join([x.name for x in base.transaction.install_set])))
@@ -140,10 +144,10 @@ with dnf.base.Base() as base:
   try:
     for item in base.transaction.install_set:
       base.download_packages([item], progress)
-      throw_if_cancelled()
+      throw_if_cancelled("download")
     base.do_transaction(install_progress)
-  except UserCancelled:
-    install_socket.send_payload({"type": "cancel", "action": "install"})
+  except UserCancelled as e:
+    install_socket.send_payload({"type": "cancel", "action": "{}".format(e)})
   except dnf.exceptions.DownloadError as e:
     download_socket.send_payload({"type": "error", "action": "download", "data": {"message": "{}".format(e)}})
   except Exception as ex:
