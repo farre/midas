@@ -6,7 +6,7 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
 const { run_install } = require("./installerProgress");
-const { which, resolveCommand, getExtensionPathOf } = require("./sysutils");
+const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -464,6 +464,33 @@ async function installRRFromDownload() {
     const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
     if (status == "success") {
       // todo(simon): implement installing of `file`
+      let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+      // f*** me extension development for VSCode is buggy. I don't want to have to do this.
+      if (!pass) {
+        pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+      }
+      const dnf = await sudo(["dnf", "-y", "localinstall", path], pass);
+      const logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
+      logger.show();
+      dnf.stdout.on("data", (data) => {
+        logger.append(data.toString());
+      });
+
+      dnf.stderr.on("data", (data) => {
+        if(!data.includes("[sudo]"))
+          logger.append(data.toString());
+      });
+
+      return new Promise((resolve, reject) => {
+        dnf.on("exit", (code) => {
+          if(code == 0) {
+            vscode.window.showInformationMessage("Successfully installed RR");
+            resolve();
+          } else {
+            reject(`Failed with code ${code}`);
+          }
+        });
+      });
     }
   } else {
     throw new Error("Failed to guess repo manager");
