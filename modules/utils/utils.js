@@ -589,7 +589,7 @@ async function getRR() {
     { modal: true, detail: "Midas do not save or store any data about you." },
     ...answers
   );
-  if (answer.title == answers[0].title) {
+  if (answer.title == answers[1].title) {
     const { method } = await vscode.window.showQuickPick(
       [
         {
