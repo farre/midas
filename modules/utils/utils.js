@@ -793,4 +793,5 @@ module.exports = {
   requiresMinimum,
   getPid,
   getRR,
+  getCacheManager,
 };
