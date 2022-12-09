@@ -23,30 +23,13 @@ const ContextKeys = {
 };
 
 /**
- * @typedef {{ cache : { rr: { path: string, version: string | undefined }, gdb: { path: string, version: string | undefined } }}} MidasCache
- * @returns { Promise<MidasCache> }
+ * @returns { Promise<import("../activateDebuggerExtension").MidasCacheManager> }
  */
-async function cache_read() {
+async function getCacheManager() {
   return vscode.extensions
     .getExtension("farrese.midas")
     .activate()
-    .then(({ CacheManager }) => {
-      return CacheManager.read();
-    });
-}
-
-/**
- *
- * @param { MidasCache } cache
- * @returns
- */
-async function cache_write(cache) {
-  return vscode.extensions
-    .getExtension("farrese.midas")
-    .activate()
-    .then(({ CacheManager }) => {
-      return CacheManager.write(cache);
-    });
+    .then(({ cache }) => cache);
 }
 
 function isNothing(e) {
@@ -606,9 +589,8 @@ async function installRRFromSource() {
                       // eslint-disable-next-line max-len
                       `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
                     );
-                    let { cache } = await cache_read();
-                    cache.rr.path = `${build_path}/bin/rr`;
-                    await cache_write({ cache });
+                    const cacheManager = await getCacheManager();
+                    await cacheManager.set_rr({ path: `${build_path}/bin/rr`, version });
                     progress_resolve();
                     resolve("Build completed successfully");
                   } else {
