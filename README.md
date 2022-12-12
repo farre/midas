@@ -24,13 +24,24 @@ Midas has been tested with the following GDB versions
 - GDB 9.1, GDB 11.1 and [GDB built from source](https://www.sourceware.org/gdb/current/)
 - rr 5.5.0: seeing as how this uses the GDB remote serial protocol, earlier versions should probably be fine
 
-Currently Midas will only work for GDB versions above 9.1 due to the nature of the Python implementation of earlier GDB versions. There might be some work put into getting earlier versions to work. But it might not be possible
-depending on how far back Python support exists in GDB.
+Currently Midas will only work for GDB versions above 9.1 due to the nature of the Python implementation of earlier GDB versions. There might be some work put into getting earlier versions to work. But it might not be possible depending on how far back Python support exists in GDB.
+
+If you don't have RR installed, Midas provides 3 ways of installing it for you. You execute the midas function `Get RR` (`ctrl + p` to open the panel, type: `Midas: get rr` and hit enter) at which point you can choose 
+to either:
+- Install from repository
+- Download .deb or .rpm file (Midas will figure out what package manager you are using) and install using that.
+- Build from source
+
+Currently, all three ways require that you run a Linux system that uses either `dnf` or `apt` as package managers to resolve dependencies. The first two options installs RR system wide, while the 3rd option (Build from source)
+downloads the latest master from github and builds it locally and places it in the Midas extension folder. Typically, VSCode extension folder lives somewhere under `/home/user/.vscode/extensions`.
+
+N.B! You will be required to input your sudo password for all three of these to work. A message box will ask you if this is OK. Midas does not store your password nor any other information about you.
+
+If you choose to build from source, Midas will pick this RR when launching a debug session, unless you explicitly provide an RR path in the `launch.json` file.
 
 ## Launch configuration
 
-We distinguish between a "normal" debug session and a "replayable debug session" by setting up the following configurations
-in `launch.json` config:
+We distinguish between a "normal" debug session and a "replayable debug session" by setting up the configurations in `launch.json` described below.
 
 ### Normal debug session:
 
@@ -131,7 +142,7 @@ A minimum required launch config for RR is really simple as Midas will query RR 
 }
 ```
 
-This requires that `GDB` and `rr` can be found in `$PATH`. It is recommended that you provide `setupCommands: ["set auto-load safe-path /"]` so that GDB can load whatever pretty printers, or other functionality needed by your debugging experience. If security is a concern, replace the root path (`/`) with the path you need. [Information about GDB auto loading](https://sourceware.org/gdb/onlinedocs/gdb/Auto_002dloading-safe-path.html).
+This requires that `GDB` and `rr` can be found in `$PATH` (or that the latter was build by Midas). It is recommended that you provide `setupCommands: ["set auto-load safe-path /"]` so that GDB can load whatever pretty printers, or other functionality needed by your debugging experience. If security is a concern, replace the root path (`/`) with the path you need. [Information about GDB auto loading](https://sourceware.org/gdb/onlinedocs/gdb/Auto_002dloading-safe-path.html).
 
 Configuration example, for a rr debug session of for example a `firefox` test:
 
