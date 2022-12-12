@@ -61,10 +61,10 @@ const {
   ExclusiveArray,
   showErrorPopup,
   ContextKeys,
-  getExtensionPathOf,
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
+const { getExtensionPathOf } = require("./utils/sysutils");
 let trace = false;
 let LOG_ID = 0;
 function log(location, payload) {
