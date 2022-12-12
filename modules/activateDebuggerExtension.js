@@ -54,6 +54,14 @@ class MidasCacheManager {
     await this.#write_cache(cache_);
   }
 
+  get rr() {
+    return this.cache.toolchain.rr;
+  }
+
+  get gdb() {
+    return this.cache.toolchain.gdb;
+  }
+
   /**
    * @param {{path?: string, version?: string}} gdb_update - update the global gdb settings.
    * Each property is optional and only the passed in properties are set. Passing `gdb_update` as undefined
@@ -134,7 +142,6 @@ async function activateExtension(context) {
   };
 
   let cacheManager = new MidasCacheManager(getGlobalState);
-  cacheManager.set_rr(undefined);
   return { cache: cacheManager };
 }
 
