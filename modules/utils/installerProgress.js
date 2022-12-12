@@ -127,6 +127,7 @@ function run_install(repo_type, pkgs, cancellable) {
     });
     // eslint-disable-next-line no-unused-vars
     listeners.download.on("start", async ({ packages, bytes }) => {
+      console.log(`Download started for ${packages}`);
       remaining_download = packages;
       await vscode.window.withProgress(
         {
@@ -143,6 +144,7 @@ function run_install(repo_type, pkgs, cancellable) {
             });
 
             listeners.download.on("cancel", () => {
+              console.log(`Download cancelled`);
               server.close((err) => {
                 console.log("server closed.");
                 if (err) {
@@ -161,6 +163,7 @@ function run_install(repo_type, pkgs, cancellable) {
 
             // eslint-disable-next-line no-unused-vars
             listeners.download.on("update", ({ bytes, progress, increment }) => {
+              console.log(`Download update: ${bytes} bytes. Increment: ${increment}`);
               reporter.report({
                 increment: increment,
                 message: remaining_download.join(", "),
@@ -172,6 +175,7 @@ function run_install(repo_type, pkgs, cancellable) {
     });
 
     listeners.install.on("start", async () => {
+      console.log(`Install started`);
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -181,6 +185,7 @@ function run_install(repo_type, pkgs, cancellable) {
         (reporter, canceller) => {
           return new Promise((resolve) => {
             listeners.install.on("finish", () => {
+              console.log(`Install finished`);
               server.close((err) => {
                 if (err) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
@@ -194,6 +199,7 @@ function run_install(repo_type, pkgs, cancellable) {
             });
 
             listeners.install.on("cancel", () => {
+              console.log(`Install cancelled`);
               server.close((err) => {
                 if (err) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
@@ -204,6 +210,7 @@ function run_install(repo_type, pkgs, cancellable) {
             });
 
             listeners.install.on("update", (payload) => {
+              console.log(`Install update: ${JSON.stringify(payload)}`);
               reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
             });
           });
