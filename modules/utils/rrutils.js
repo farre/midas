@@ -1,14 +1,17 @@
 const vscode = require("vscode");
 const path = require("path");
 const subprocess = require("child_process");
-const { REGEXES } = require("./utils");
+const { REGEXES, getCacheManager } = require("./utils");
 
 /**
  * @returns { Thenable<string[]> }
  */
-function getTraces() {
+async function getTraces() {
+  let cacheManager = await getCacheManager();
+  const { path } = cacheManager.rr;
+
   return new Promise((resolve, reject) => {
-    subprocess.exec(`rr ls -l -t -r`, (err, stdout, stderr) => {
+    subprocess.exec(`${path} ls -l -t -r`, (err, stdout, stderr) => {
       if (err) {
         reject(stderr);
       } else {
@@ -57,10 +60,11 @@ function fallbackParseOfrrps(data) {
     });
 }
 
-/** @type {(trace: string) => Thenable<readonly (vscode.QuickPickItem & {value: string})[]>} */
-function getTraceInfo(trace) {
+/** @type {(trace: string) => Promise<readonly (vscode.QuickPickItem & {value: string})[]>} */
+async function getTraceInfo(trace) {
+  const cacheManager = await getCacheManager();
   return new Promise((resolve, reject) => {
-    subprocess.exec(`rr ps ${trace}`, (error, stdout, stderr) => {
+    subprocess.exec(`${cacheManager.rr.path} ps ${trace}`, (error, stdout, stderr) => {
       if (error) {
         reject(stderr);
       } else {

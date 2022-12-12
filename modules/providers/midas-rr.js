@@ -28,8 +28,8 @@ const initializer = async (config) => {
     config.gdbPath = "gdb";
   }
   if (!config.hasOwnProperty("rrPath")) {
-    let cacheManager = getCacheManager();
-    config.rrPath = (await cacheManager).cache.toolchain.rr.path;
+    let cacheManager = await getCacheManager();
+    config.rrPath = cacheManager.cache.toolchain.rr.path;
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];

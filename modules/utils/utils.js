@@ -521,7 +521,7 @@ async function installRRFromSource() {
         "rr-master.zip"
       );
       if (status == "success") {
-        let result = await run_install(pkg_manager, deps, cancellable);
+        let result = await run_install(pkg_manager, deps, true);
         vscode.window.showInformationMessage(`${result} dependencies`);
         // eslint-disable-next-line no-unused-vars
         const { version, url } = await resolveLatestVersion("we-don't-care-about-arch-here");
@@ -529,7 +529,7 @@ async function installRRFromSource() {
           { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
           (progress, token) => {
             return new Promise(async (progress_resolve) => {
-              const build_path = getExtensionPathOf(`rr-${version}/`);
+              const build_path = getExtensionPathOf(`rr-${version}`);
               const logger = vscode.window.createOutputChannel("Building RR");
               logger.show();
               logger.appendLine(`creating dir ${build_path}`);
@@ -544,7 +544,7 @@ async function installRRFromSource() {
                 "cmake",
                 [
                   "-S",
-                  `${build_path}rr-master`,
+                  `${build_path}/rr-master`,
                   "-B",
                   build_path,
                   "-DCMAKE_BUILD_TYPE=Release",
