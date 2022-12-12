@@ -4,9 +4,8 @@ All notable changes to the "midas" extension will be documented in this file. Ch
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
-## [Unreleased]
-
-- Create specific handlers for all VSCode requests directly in Python
+## [0.5.5] - 2022-12-12
+- Added ability to install RR, or build it from source and install it locally in the extension folder. Resolving dependencies are performed by dnf or apt and requries sudo.
 
 ## [0.4.7] - 2022-07-06
 - Added ability to get range of pretty printed child values for watch variables
