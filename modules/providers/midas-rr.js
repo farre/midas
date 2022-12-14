@@ -63,7 +63,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     }
 
     if (config.traceWorkspace && !config.replay.pid) {
-      config = await tracePicked(config.traceWorkspace).then((replay_parameters) => {
+      config = await tracePicked(config.rrPath, config.traceWorkspace).then((replay_parameters) => {
         if (replay_parameters) {
           config.replay.parameters = replay_parameters;
           return config;
@@ -79,8 +79,8 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         title: "Select process to debug",
       };
       config = await vscode.window
-        .showQuickPick(getTraces(), options)
-        .then(tracePicked)
+        .showQuickPick(getTraces(config.rrPath), options)
+        .then((ws) => tracePicked(config.rrPath, ws))
         .then((replay_parameters) => {
           if (replay_parameters) {
             try {
