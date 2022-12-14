@@ -4,14 +4,12 @@ const subprocess = require("child_process");
 const { REGEXES, getCacheManager } = require("./utils");
 
 /**
- * @returns { Thenable<string[]> }
+ * @param { string } rr - Path to rr
+ * @returns { Promise<string[]> }
  */
-async function getTraces() {
-  let cacheManager = await getCacheManager();
-  const { path } = cacheManager.rr;
-
+async function getTraces(rr) {
   return new Promise((resolve, reject) => {
-    subprocess.exec(`${path} ls -l -t -r`, (err, stdout, stderr) => {
+    subprocess.exec(`${rr} ls -l -t -r`, (err, stdout, stderr) => {
       if (err) {
         reject(stderr);
       } else {
@@ -60,11 +58,15 @@ function fallbackParseOfrrps(data) {
     });
 }
 
-/** @type {(trace: string) => Promise<readonly (vscode.QuickPickItem & {value: string})[]>} */
-async function getTraceInfo(trace) {
-  const cacheManager = await getCacheManager();
+/**
+ *
+ * @param { string } rr - path to RR
+ * @param { string } trace - trace directory
+ * @returns
+ */
+async function getTraceInfo(rr, trace) {
   return new Promise((resolve, reject) => {
-    subprocess.exec(`${cacheManager.rr.path} ps ${trace}`, (error, stdout, stderr) => {
+    subprocess.exec(`${rr} ps ${trace}`, (error, stdout, stderr) => {
       if (error) {
         reject(stderr);
       } else {
@@ -127,13 +129,13 @@ function parseProgram(rr_ps_output_cmd) {
   return rr_ps_output_cmd.split(" ")[0];
 }
 
-const tracePicked = async (traceWorkspace) => {
+const tracePicked = async (rr, traceWorkspace) => {
   const options = {
     canPickMany: false,
     ignoreFocusOut: true,
     title: "Select process to debug",
   };
-  return await vscode.window.showQuickPick(getTraceInfo(traceWorkspace), options).then((selection) => {
+  return await vscode.window.showQuickPick(getTraceInfo(rr, traceWorkspace), options).then((selection) => {
     if (selection) {
       const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.binary };
       return replay_parameters;
