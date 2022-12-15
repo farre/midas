@@ -142,7 +142,7 @@ A minimum required launch config for RR is really simple as Midas will query RR 
 }
 ```
 
-This requires that `GDB` and `rr` can be found in `$PATH` (or that the latter was build by Midas). It is recommended that you provide `setupCommands: ["set auto-load safe-path /"]` so that GDB can load whatever pretty printers, or other functionality needed by your debugging experience. If security is a concern, replace the root path (`/`) with the path you need. [Information about GDB auto loading](https://sourceware.org/gdb/onlinedocs/gdb/Auto_002dloading-safe-path.html).
+This requires that `GDB` and `rr` can be found in `$PATH` (or that the latter was built by Midas). It is recommended that you provide `setupCommands: ["set auto-load safe-path /"]` so that GDB can load whatever pretty printers, or other functionality needed by your debugging experience. If security is a concern, replace the root path (`/`) with the path you need. [Information about GDB auto loading](https://sourceware.org/gdb/onlinedocs/gdb/Auto_002dloading-safe-path.html).
 
 Configuration example, for a rr debug session of for example a `firefox` test:
 
