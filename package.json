@@ -27,6 +27,18 @@
     "url": "https://github.com/farre/midas"
   },
   "contributes": {
+		"configuration":[
+			{
+				"title": "Midas",
+				"properties": {
+					"midas.rr": {
+						"type": "string",
+						"default": null,
+						"description": "Path to RR. If you set this it will override the rr path that can be set in launch.json"
+					}
+				}
+			}
+		],
     "views": {
       "debug": [
         {

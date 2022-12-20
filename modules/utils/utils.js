@@ -8,6 +8,23 @@ const { TerminalInterface } = require("../terminalInterface");
 const { run_install } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 
+class MidasVsPreferences {
+  /** @type {string} */
+  #rr_path;
+  constructor() {
+    const cfg = vscode.workspace.getConfiguration("midas");
+    const rrpath = cfg.get("rr");
+    if(rrpath == "")
+      this.#rr_path = null;
+    else
+      this.#rr_path = rrpath;
+  }
+
+  get rr() {
+    return this.#rr_path;
+  }
+}
+
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 const REGEXES = {
@@ -794,4 +811,5 @@ module.exports = {
   getPid,
   getRR,
   getCacheManager,
+  MidasVsPreferences
 };

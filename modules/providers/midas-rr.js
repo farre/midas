@@ -5,7 +5,7 @@ const fs = require("fs");
 const { getFreeRandomPort } = require("../utils/netutils");
 const { tracePicked, getTraces, parseProgram } = require("../utils/rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getCacheManager } = require("../utils/utils");
+const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getCacheManager, MidasVsPreferences } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
 
@@ -52,13 +52,18 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveReplayConfig(folder, config, token) {
+    const midas_cfg = new MidasVsPreferences();
+    config.rrPath = midas_cfg.rr ?? config.rrPath;
+    config.IsThisTheSubstituded = "Yes";
+    if(!fs.existsSync(config.rrPath)) {
+      throw new Error(`No RR found at ${config.rrPath}`);
+    }
     if (!config.serverAddress) {
       try {
         let port = await getFreeRandomPort();
         config.serverAddress = `127.0.0.1:${port}`;
       } catch (err) {
-        showErrorPopup("No port available for rr to listen on");
-        return null;
+        throw new Error("No port available for rr to listen on");
       }
     }
 
@@ -68,8 +73,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           config.replay.parameters = replay_parameters;
           return config;
         } else {
-          showErrorPopup("You did not pick a trace.");
-          return null;
+          throw new Error("You did not pick a trace.")
         }
       });
     } else if (!config.traceWorkspace && !config.replay) {
@@ -78,24 +82,20 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         ignoreFocusOut: true,
         title: "Select process to debug",
       };
-      config = await vscode.window
-        .showQuickPick(getTraces(config.rrPath), options)
-        .then((ws) => tracePicked(config.rrPath, ws))
-        .then((replay_parameters) => {
-          if (replay_parameters) {
-            try {
-              config.program = parseProgram(replay_parameters.cmd);
-            } catch (e) {
-              showErrorPopup("Could not parse binary");
-              return null;
-            }
-            config.replay = replay_parameters;
-            return config;
-          } else {
-            showErrorPopup("You did not pick a trace.");
-            return null;
-          }
-        });
+      const traces = await getTraces(config.rrPath);
+      const ws = await vscode.window.showQuickPick(traces, options);
+      const replay_parameters = await tracePicked(config.rrPath, ws);
+      if (replay_parameters) {
+        try {
+          config.program = parseProgram(replay_parameters.cmd);
+        } catch (e) {
+          throw new Error("Could not parse binary");
+        }
+        config.replay = replay_parameters;
+        return config;
+      } else {
+        throw new Error("You did not pick a trace.")
+      }
     }
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     return config;
@@ -137,16 +137,15 @@ class RRDebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    const rrPath = config.rrPath;
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
     let [addr, port] = config.serverAddress.split(":");
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
     addr = addr == "localhost" ? "127.0.0.1" : addr;
-    const cmd_str = `${rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+    const cmd_str = `${config.rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if (config.externalConsole) {
-      const rrArgs = { path: rrPath, addr, port, pid, traceWorkspace };
+      const rrArgs = { path: config.rrPath, addr, port, pid, traceWorkspace };
       try {
         let terminalInterface = await spawnExternalRrConsole(
           { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },
