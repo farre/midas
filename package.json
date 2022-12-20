@@ -492,7 +492,6 @@
             "type": "midas-rr",
             "request": "launch",
             "name": "Launch replay session",
-            "program": "${workspaceFolder}/${2:binary}",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
             "rrPath": "rr",
@@ -505,17 +504,15 @@
           {
             "name": "midas-rr",
             "label": "Midas rr debug session",
-            "description": "Launches midas debugging session against an rr replay",
+            "description": "Launches an RR debugging session",
             "body": {
               "type": "midas-rr",
               "request": "launch",
               "name": "${1:Launch replay debug session}",
-              "program": "${2:/path/to/binary}",
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "serverAddress": "${5:localhost:50505}",
               "setupCommands": []
             }
           }
