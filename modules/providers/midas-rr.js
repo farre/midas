@@ -5,7 +5,13 @@ const fs = require("fs");
 const { getFreeRandomPort } = require("../utils/netutils");
 const { tracePicked, getTraces, parseProgram } = require("../utils/rrutils");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getCacheManager, MidasVsPreferences } = require("../utils/utils");
+const {
+  spawnExternalRrConsole,
+  showErrorPopup,
+  ContextKeys,
+  getCacheManager,
+  MidasVsPreferences,
+} = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
 
@@ -28,8 +34,14 @@ const initializer = async (config) => {
     config.gdbPath = "gdb";
   }
   if (!config.hasOwnProperty("rrPath")) {
-    let cacheManager = await getCacheManager();
-    config.rrPath = cacheManager.cache.toolchain.rr.path;
+    try {
+      const rr_path = vscode.workspace.getConfiguration("midas").get("rr");
+      if (rr_path == null || rr_path == undefined || rr_path == "")
+        throw new Error("No RR setting set. Fallback on cache");
+    } catch (err) {
+      let cacheManager = await getCacheManager();
+      config.rrPath = cacheManager.cache.toolchain.rr.path;
+    }
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
@@ -55,7 +67,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     const midas_cfg = new MidasVsPreferences();
     config.rrPath = midas_cfg.rr ?? config.rrPath;
     config.IsThisTheSubstituded = "Yes";
-    if(!fs.existsSync(config.rrPath)) {
+    if (!fs.existsSync(config.rrPath)) {
       throw new Error(`No RR found at ${config.rrPath}`);
     }
     if (!config.serverAddress) {
@@ -73,7 +85,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           config.replay.parameters = replay_parameters;
           return config;
         } else {
-          throw new Error("You did not pick a trace.")
+          throw new Error("You did not pick a trace.");
         }
       });
     } else if (!config.traceWorkspace && !config.replay) {
@@ -94,7 +106,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         config.replay = replay_parameters;
         return config;
       } else {
-        throw new Error("You did not pick a trace.")
+        throw new Error("You did not pick a trace.");
       }
     }
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
