@@ -14,8 +14,12 @@ async function getTraces(rr) {
         reject(stderr);
       } else {
         let lines = stdout.split("\n").splice(1);
-        const traces = lines.map((line) => line.split(" ")[0].trim()).filter((trace) => trace.length > 0);
-        resolve(traces);
+        const traces = lines.map((line) => line.split(" ")[0].trim()).filter((trace) => trace.length > 0 && trace != "cpu_lock");
+        if(traces.length == 1 && traces[0] == "latest-trace") {
+          reject(`No traces found by rr ps command`);
+        } else {
+          resolve(traces);
+        }
       }
     });
   });
@@ -130,6 +134,9 @@ function parseProgram(rr_ps_output_cmd) {
 }
 
 const tracePicked = async (rr, traceWorkspace) => {
+  if(traceWorkspace == null || traceWorkspace == undefined) {
+    throw new Error("You did not pick a trace");
+  }
   const options = {
     canPickMany: false,
     ignoreFocusOut: true,
