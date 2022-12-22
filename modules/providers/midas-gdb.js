@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid } = require("../utils/utils");
+const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
 const initializer = (config) => {
@@ -27,7 +27,7 @@ const initializer = (config) => {
     if (isNothing(config.externalConsole.path)) {
       throw new Error("Path field for externalConsole not provided in configuration");
     }
-    if (config.externalConsole.path == "") {
+    if (strEmpty(config.externalConsole.path)) {
       try {
         config.externalConsole.path = resolveCommand("x-terminal-emulator");
       } catch (err) {

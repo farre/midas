@@ -1,7 +1,8 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid, getVersion, isNothing, getRR, getExtensionPathOf } = require("./utils/utils");
+const { getPid, getVersion, isNothing, getRR } = require("./utils/utils");
+const { getExtensionPathOf } = require("./utils/sysutils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -11,10 +12,9 @@ const { registerCommand } = require("vscode").commands;
 
 /**
  * Returns VS Code commands that are to be registered
- * @param {vscode.ExtensionContext} context
  * @returns { Disposable[] }
  */
-function getVSCodeCommands(context) {
+function getVSCodeCommands() {
   let rrRecord = registerCommand("midas.rr-record", async () => {
     const spawnTerminalRunRecord = (pathToBinary) => {
       let t = vscode.window.createTerminal("rr record terminal");

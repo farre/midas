@@ -4,7 +4,6 @@ const DebugAdapter = require("@vscode/debugadapter");
 const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
-const { DebugProtocol } = require("@vscode/debugprotocol");
 const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
@@ -64,8 +63,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
    * As per Mock debug adapter:
    * The 'initialize' request is the first request called by the frontend
    * to interrogate the features the debug adapter provides.
-   * @param {DebugProtocol.InitializeResponse} response
-   * @param {DebugProtocol.InitializeRequestArguments} args
+   * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeResponse} response
+   * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeRequestArguments} args
    */
   initializeRequest(response, args) {
     this._reportProgress = args.supportsProgressReporting;
@@ -144,8 +143,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /**
    * Called at the end of the configuration sequence.
    * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
-   * @param {DebugProtocol.ConfigurationDoneResponse} response
-   * @param {DebugProtocol.ConfigurationDoneArguments} args
+   * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneResponse} response
+   * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneArguments} args
    * @returns {void}
    */
   configurationDoneRequest(response, args) {
