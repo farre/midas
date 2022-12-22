@@ -1,4 +1,3 @@
-const vscode = require("vscode");
 const { isNothing, getVersion, requiresMinimum, showErrorPopup } = require("../utils/utils");
 class ConfigurationProviderInitializer {
   /**

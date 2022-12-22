@@ -8,23 +8,6 @@ const { TerminalInterface } = require("../terminalInterface");
 const { run_install } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 
-class MidasVsPreferences {
-  /** @type {string} */
-  #rr_path;
-  constructor() {
-    const cfg = vscode.workspace.getConfiguration("midas");
-    const rrpath = cfg.get("rr");
-    if(rrpath == "")
-      this.#rr_path = null;
-    else
-      this.#rr_path = rrpath;
-  }
-
-  get rr() {
-    return this.#rr_path;
-  }
-}
-
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 const REGEXES = {
@@ -40,13 +23,23 @@ const ContextKeys = {
 };
 
 /**
- * @returns { Promise<import("../activateDebuggerExtension").MidasCacheManager> }
+ * @returns { Promise<import("../activateDebuggerExtension").MidasAPI> }
  */
+async function getAPI() {
+  return await vscode.extensions
+    .getExtension("farrese.midas")
+    .activate();
+}
+
 async function getCacheManager() {
   return vscode.extensions
     .getExtension("farrese.midas")
     .activate()
-    .then(({ cache }) => cache);
+    .then((api) => api.cacheManager);
+}
+
+function strEmpty(str) {
+  return str === undefined || str === null || str === "";
 }
 
 function isNothing(e) {
@@ -69,7 +62,7 @@ async function buildTestFiles(testPath) {
     }).once("exit", resolve)
   );
 
-  await new Promise((resolve) => exec("cmake --build .", { cwd: buildPath }).once("exit", resolve));
+  await new Promise((resolve) => exec("cmake --build .", { cwd: buildPath }).once("exit", (exit_code) => resolve(exit_code)));
 }
 
 function getFunctionName() {
@@ -546,7 +539,7 @@ async function installRRFromSource() {
           { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
           (progress, token) => {
             return new Promise(async (progress_resolve) => {
-              const build_path = getExtensionPathOf(`rr-${version}`);
+              const build_path = (await getAPI()).getGlobalStoragePathOf(`rr-${version}`);
               const logger = vscode.window.createOutputChannel("Building RR");
               logger.show();
               logger.appendLine(`creating dir ${build_path}`);
@@ -648,7 +641,7 @@ async function getRR() {
     { title: "Yes", isCloseAffordance: false },
   ];
   let answer = await vscode.window.showInformationMessage(
-    "To install depedencies for RR, Midas requires you input your sudo password - are you ok with this?",
+    "To install RR (or it's depedencies), Midas requires you input your sudo password - are you ok with this?",
     { modal: true, detail: "Midas do not save or store any data about you." },
     ...answers
   );
@@ -722,9 +715,9 @@ function resolveLatestVersion(arch) {
  * @returns {Promise<{path: string, status: "success" | "cancelled" }>} `path` of saved file and `status` indicates if it
  */
 async function http_download(url, file_name) {
-  const path = getExtensionPathOf(file_name);
+  const api = await getAPI();
+  const path = api.getGlobalStoragePathOf(file_name);
   if (fs.existsSync(path)) {
-    // remove old file. We're in extension folder, so we can freely remove stuff
     fs.unlinkSync(path);
   }
   return await vscode.window.withProgress(
@@ -811,5 +804,5 @@ module.exports = {
   getPid,
   getRR,
   getCacheManager,
-  MidasVsPreferences
+  strEmpty
 };

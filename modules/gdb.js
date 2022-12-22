@@ -61,6 +61,7 @@ const {
   ExclusiveArray,
   showErrorPopup,
   ContextKeys,
+  strEmpty,
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
@@ -1018,7 +1019,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns { Promise<{id: number, enabled: boolean, verified: boolean, source: Source, line: number }> }
    */
   async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
-    if ((condition ?? "") == "") {
+    if(strEmpty(condition)) {
       let bp = await this.setPendingBreakpoint(path, line, threadId);
       if (bp) {
         this.registerBreakpoint(bp);

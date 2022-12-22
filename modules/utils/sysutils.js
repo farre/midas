@@ -4,7 +4,9 @@ const fs = require("fs");
 const Path = require("path");
 
 /**
- * Returns a full constructed path of `fileOrDir` inside the extension directory
+ * Returns a full constructed path of `fileOrDir` inside the extension directory.
+ * Data found in this directory is not persistent and is removed on updates. Do not rely on persistent storage here.
+ * Use APIManager.getExtensionGlobalStorage instead.
  * @param {string} fileOrDir
  * @returns { string }
  */
@@ -65,9 +67,8 @@ async function sudo(command, pass) {
  * Resolve a symlink to where it points to. `fully` sets if
  * it should be resolved fully (i.e, if it's a symlink to a symlink etc
  * follow the entire chain to it's end).
- * @param {boolean} fully
  */
-function resolveCommand(cmd, fully = true) {
+function resolveCommand(cmd) {
   if (fs.existsSync(cmd)) {
     return fs.realpathSync(cmd);
   }

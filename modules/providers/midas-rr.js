@@ -10,7 +10,7 @@ const {
   showErrorPopup,
   ContextKeys,
   getCacheManager,
-  MidasVsPreferences,
+  strEmpty,
 } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
@@ -36,11 +36,14 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("rrPath")) {
     try {
       const rr_path = vscode.workspace.getConfiguration("midas").get("rr");
-      if (rr_path == null || rr_path == undefined || rr_path == "")
+      if (strEmpty(rr_path))
         throw new Error("No RR setting set. Fallback on cache");
     } catch (err) {
       let cacheManager = await getCacheManager();
       config.rrPath = cacheManager.cache.toolchain.rr.path;
+      if(strEmpty(config.rrPath)) {
+        config.rrPath = "rr"; // fallback on trying to find it in $PATH
+      }
     }
   }
   if (!config.hasOwnProperty("setupCommands")) {
@@ -64,8 +67,6 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveReplayConfig(folder, config, token) {
-    const midas_cfg = new MidasVsPreferences();
-    config.rrPath = midas_cfg.rr ?? config.rrPath;
     config.IsThisTheSubstituded = "Yes";
     if (!fs.existsSync(config.rrPath)) {
       throw new Error(`No RR found at ${config.rrPath}`);
