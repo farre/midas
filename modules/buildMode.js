@@ -1,4 +1,4 @@
-const { getExtensionPathOf } = require("./utils/utils");
+const { getExtensionPathOf } = require("./utils/sysutils");
 
 const DebugLogging = {
   Off: "off",
