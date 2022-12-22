@@ -1,7 +1,7 @@
 const vscode = require("vscode");
 const path = require("path");
 const subprocess = require("child_process");
-const { REGEXES, getCacheManager } = require("./utils");
+const { REGEXES } = require("./utils");
 
 /**
  * @param { string } rr - Path to rr
@@ -105,24 +105,6 @@ async function getTraceInfo(rr, trace) {
   });
 }
 
-function initDefaults(config) {
-  if (!config.hasOwnProperty("stopOnEntry")) {
-    config.stopOnEntry = false;
-  }
-  if (!config.hasOwnProperty("trace")) {
-    config.trace = false;
-  }
-  if (!config.hasOwnProperty("allStopMode")) {
-    config.allStopMode = true;
-  }
-  if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = "gdb";
-  }
-  if (!config.hasOwnProperty("setupCommands")) {
-    config.setupCommands = [];
-  }
-}
-
 /**
  * Parse the required launch config `program` field from the field `cmd` of the `rr ps` result
  * @param {string} rr_ps_output_cmd - the `cmd` field returned from `tracePicked`
@@ -155,5 +137,4 @@ module.exports = {
   tracePicked,
   getTraces,
   parseProgram,
-  initDefaults,
 };
