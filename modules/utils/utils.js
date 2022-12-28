@@ -42,6 +42,17 @@ function strEmpty(str) {
   return str === undefined || str === null || str === "";
 }
 
+/**
+ * 
+ * @param {*} str
+ * @param {{or: string}} other_str
+ * @returns
+ */
+function strValueOr(str, other_str) {
+  if(strEmpty(str)) return other_str.or;
+  else return str;
+}
+
 function isNothing(e) {
   return e == undefined || e == null;
 }
@@ -804,5 +815,6 @@ module.exports = {
   getPid,
   getRR,
   getCacheManager,
-  strEmpty
+  strEmpty,
+  strValueOr
 };

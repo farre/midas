@@ -62,9 +62,7 @@ const {
   showErrorPopup,
   ContextKeys,
   strEmpty,
-  strValueOr,
-  getOptValue,
-  OptionalStr,
+  strValueOr
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
