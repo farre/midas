@@ -62,6 +62,9 @@ const {
   showErrorPopup,
   ContextKeys,
   strEmpty,
+  strValueOr,
+  getOptValue,
+  OptionalStr,
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
 const { CustomRequests } = require("./debugSessionCustomRequests");
@@ -405,8 +408,12 @@ class GDB extends GDBMixin(GDBBase) {
       try {
         let r = await this.execMI(`-thread-info ${t.id}`);
         if (r.threads.length > 0) {
-          let details = r.threads[0]["details"] ? ` (${r.threads[0]["details"]})` : "";
-          this.#threads.get(t.id).name = `${r.threads[0]["target-id"]}${details}`;
+          const thread_name = strValueOr(
+            r.threads[0].name,
+            r.threads[0]["target-id"]
+          );
+          const name = `[${t.id}]: ${thread_name}`;
+          this.#threads.get(t.id).name = name;
           this.#uninitializedThread.delete(t.id);
         }
       } catch (err) {
