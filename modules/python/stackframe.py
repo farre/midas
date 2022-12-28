@@ -167,7 +167,8 @@ class StackFrame:
         # we want the innermost block-symbol with name X to be displayed
         # therefore we sort out the outermost. C++/C/etc can't reference them by name, any how.
         names = set()
-        for b in iterate_frame_blocks(self.frame):
+        b = self.frame.block()
+        while not b.is_static and not b.superblock.is_global:
             blockvalues = []
             for symbol in b:
                 if symbol.is_variable and not symbol.is_argument and symbol.name not in names and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
@@ -179,6 +180,7 @@ class StackFrame:
                         self.variableReferences[vr] = v
                     names.add(symbol.name)
             self.block_values.append(blockvalues)
+            b = b.superblock
         result = []
         for block_values in self.block_values:
             for v in block_values:
@@ -213,7 +215,8 @@ class StackFrame:
     def get_args(self):
         result = []
         names = set()
-        for b in iterate_frame_blocks(self.frame):
+        b = self.frame.block()
+        while not b.is_static and not b.superblock.is_global:
             for symbol in b:
                 if symbol.is_argument and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT) and symbol.name not in names:
                     v = Variable.from_symbol(symbol, self.frame)
@@ -223,6 +226,7 @@ class StackFrame:
                         self.variableReferences[vr] = v
                     result.append(v.to_vs())
                     names.add(symbol.name)
+            b = b.superblock
         return result
 
     @config.timeInvocation
