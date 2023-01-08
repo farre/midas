@@ -38,6 +38,6 @@ class VariableRequest(gdb.Command):
         except Exception as e:
             config.log_exception(
                 config.error_logger(),
-                "Variable Request failed for variable reference {} (in exec context {}): {}".format(
-                    variableReference, refId.threadId, e), e)
+                "Variable Request failed for variable reference {} (in exec context {} and frame: {} and frameVarRefId: {}): {}".format(
+                    variableReference, refId.threadId, sf.frame, refId.frameId, e), e)
             midas_utils.send_response(self.name, {"variables": []}, midas_utils.prepare_command_response)
