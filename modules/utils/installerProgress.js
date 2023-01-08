@@ -1,7 +1,7 @@
 const vscode = require("vscode");
 var net = require("net");
 const EventEmitter = require("events");
-const { sudo, which } = require("./sysutils");
+const { sudo, which, whereis } = require("./sysutils");
 const os = require("os");
 
 const comms_address = "/tmp/rr-build-progress";
@@ -87,14 +87,25 @@ function run_install(repo_type, pkgs, cancellable) {
       const args = [kill, "-s", "SIGUSR1", `${pid}`];
       await sudo(args, pass);
     };
-    const installer = () => {
-      return which("python")
-        .then((python) => {
-          return sudo([python, repo_type], pass);
-        })
-        .then((install) => {
-          return install;
-        });
+
+    // starts python installer services application
+    const run_installer_services = () => {
+      if(!process.env.hasOwnProperty("VIRTUAL_ENV")) {
+        return which("python")
+          .then((python) => sudo([python, repo_type], pass))
+      } else {
+        // Means that $VIRTUAL_ENV is set
+        // but we need the system-wide installed python to access DNF / APT
+        return whereis("python")
+          .then(pythons => {
+            for(let python of pythons) {
+              if(!python.includes(process.env.VIRTUAL_ENV)) {
+                return python;
+              }
+            }
+            ireject(`Could not find system install of python. whereis command returned ${pythons.join(" ")}`);
+          }).then(python => sudo([python, repo_type], pass));
+      }
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(pkgs, listeners);
@@ -108,9 +119,9 @@ function run_install(repo_type, pkgs, cancellable) {
         console.log(`Exception: ${err}`);
       }
     };
-    server.on("error", () => {
+    server.on("error", (err) => {
       unlink_unix_socket();
-      ireject("Installer services failed");
+      ireject(`Installer services failed with error ${err}`);
     });
     server.on("close", unlink_unix_socket);
     server.on("drop", unlink_unix_socket);
@@ -217,7 +228,7 @@ function run_install(repo_type, pkgs, cancellable) {
         }
       );
     });
-    await installer();
+    await run_installer_services();
   });
 }
 

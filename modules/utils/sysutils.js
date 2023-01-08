@@ -27,10 +27,10 @@ function getExtensionPathOf(fileOrDir = null) {
  * @returns {Promise<string>}
  */
 function which(binary) {
-  return new Promise((resolve) =>
+  return new Promise((resolve, reject) =>
     exec(`which ${binary}`, (err, stdout) => {
       if (err) {
-        resolve("");
+        reject(err);
       }
       if (stdout.charAt(stdout.length - 1) == "\n") {
         resolve(stdout.slice(0, stdout.length - 1));
@@ -39,6 +39,34 @@ function which(binary) {
       }
     })
   );
+}
+
+/**
+ * Returns where `binary` exists. Can return items which are not executable binaries.
+ * @param { string } binary
+ * @returns { Promise<string[]> }
+ */
+function whereis(binary) {
+  return new Promise((resolve, reject) => {
+    exec(`whereis ${binary}`, (err, stdout) => {
+      if(err) reject(err);
+      try {
+        // whereis returns
+        // binary: /path/to/first/binary /path/to/second/binary ...
+        // therefore, strip `binary:` from output
+        const result =
+          stdout.toString()
+            .substring(binary.length+1)
+            .trim()
+            .split(" ")
+            .filter(s => s != "");
+        resolve(result);
+      } catch(err) {
+        console.log(`could not perform 'whereis': ${err}`);
+        reject([]);
+      }
+    })
+  });
 }
 
 /**
@@ -88,6 +116,7 @@ function resolveCommand(cmd) {
 module.exports = {
   getExtensionPathOf,
   which,
+  whereis,
   sudo,
   resolveCommand,
 };
