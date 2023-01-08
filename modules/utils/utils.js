@@ -641,6 +641,7 @@ async function installRRFromSource() {
         resolve("Download cancelled");
       }
     } catch (err) {
+      vscode.window.showErrorMessage(`Failed to build RR from source: ${err}`);
       reject(err);
     }
   });
@@ -657,7 +658,7 @@ async function getRR() {
     ...answers
   );
   if (answer.title == answers[1].title) {
-    const { method } = await vscode.window.showQuickPick(
+    const result = await vscode.window.showQuickPick(
       [
         {
           label: "Install from repository",
@@ -677,10 +678,10 @@ async function getRR() {
       ],
       { placeHolder: "Choose method of installing rr" }
     );
-    try {
-      await method();
-    } catch (err) {
-      vscode.window.showErrorMessage(`Failed: ${err}`);
+    if(result) {
+      await result.method();
+    } else {
+      console.log(`no choice picked`);
     }
   }
 }
