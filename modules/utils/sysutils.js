@@ -30,7 +30,7 @@ function which(binary) {
   return new Promise((resolve, reject) =>
     exec(`which ${binary}`, (err, stdout) => {
       if (err) {
-        reject(err);
+        resolve("");
       }
       if (stdout.charAt(stdout.length - 1) == "\n") {
         resolve(stdout.slice(0, stdout.length - 1));
