@@ -11,6 +11,10 @@ const process = require("process");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
+function getAPI() {
+  return global.API;
+}
+
 const REGEXES = {
   MajorMinorPatch: /(\d+)\.(\d+)\.*((\d+))?/,
   WhiteSpace: /\s/,
@@ -23,28 +27,12 @@ const ContextKeys = {
   RRSession: "midas.rrSession",
 };
 
-/**
- * @returns { Promise<import("../activateDebuggerExtension").MidasAPI> }
- */
-async function getAPI() {
-  return await vscode.extensions
-    .getExtension("farrese.midas")
-    .activate();
-}
-
-async function getCacheManager() {
-  return vscode.extensions
-    .getExtension("farrese.midas")
-    .activate()
-    .then((api) => api.cacheManager);
-}
-
 function strEmpty(str) {
   return str === undefined || str === null || str === "";
 }
 
 /**
- * 
+ *
  * @param {*} str
  * @param {{or: string}} other_str
  * @returns
@@ -527,6 +515,7 @@ async function installRRFromRepository() {
     // eslint-disable-next-line no-unused-vars
     const { name, pkg_manager, deps, cancellable } = await guessInstaller();
     let result = await run_install(pkg_manager, ["rr"], cancellable);
+    getAPI().write_rr({ path: "rr", version: "", managed: false});
     vscode.window.showInformationMessage(result);
   } catch (err) {
     vscode.window.showErrorMessage(`Failed to install RR: ${err}`);
@@ -539,18 +528,19 @@ async function installRRFromDownload() {
     const { name, pkg_manager, deps } = await guessInstaller();
     const uname = await which("uname");
     const arch = execSync(`${uname} -m`).toString().trim();
-  
     if (name == "apt") {
       const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
       const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
       if (status == "success") {
-        return installFileUsingManager(["apt-get", "install", "-y", path]);
+        return await installFileUsingManager(["apt-get", "install", "-y", path])
+          .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
       }
     } else if (name == "dnf") {
       const { version, url } = await resolveLatestVersion(arch);
       const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
       if (status == "success") {
-        return installFileUsingManager(["dnf", "-y", "localinstall", path]);
+        return await installFileUsingManager(["dnf", "-y", "localinstall", path])
+          .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
       }
     }
   } catch(err) {
@@ -576,7 +566,7 @@ async function installRRFromSource() {
           { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
           (progress, token) => {
             return new Promise(async (progress_resolve) => {
-              const build_path = (await getAPI()).getGlobalStoragePathOf(`rr-${version}`);
+              const build_path = getAPI().get_storage_path_of(`rr-${version}`);
               const logger = vscode.window.createOutputChannel("Building RR");
               logger.show();
               logger.appendLine(`creating dir ${build_path}`);
@@ -636,8 +626,7 @@ async function installRRFromSource() {
                       // eslint-disable-next-line max-len
                       `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
                     );
-                    const cacheManager = await getCacheManager();
-                    await cacheManager.set_rr({ path: `${build_path}/bin/rr`, version });
+                    getAPI().write_rr({ path: `${build_path}/bin/rr`, version, managed: true });
                     progress_resolve();
                     resolve("Build completed successfully");
                   } else {
@@ -753,8 +742,7 @@ function resolveLatestVersion(arch) {
  * @returns {Promise<{path: string, status: "success" | "cancelled" }>} `path` of saved file and `status` indicates if it
  */
 async function http_download(url, file_name) {
-  const api = await getAPI();
-  const path = api.getGlobalStoragePathOf(file_name);
+  const path = getAPI().get_storage_path_of(file_name);
   if (fs.existsSync(path)) {
     fs.unlinkSync(path);
   }
@@ -841,7 +829,7 @@ module.exports = {
   requiresMinimum,
   getPid,
   getRR,
-  getCacheManager,
   strEmpty,
-  strValueOr
+  strValueOr,
+  getAPI
 };
