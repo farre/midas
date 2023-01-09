@@ -276,7 +276,7 @@
             "properties": {
               "pid": {
                 "type": "string",
-                "description": "Pid of the process to attach to. Can be left out entirely and entered upon debug launch.",
+                "description": "Pid of the process to attach to. ${command:getPid} provides the user with an input box where the user types the process name. If multiple processes with that name exists a drop down list of PIDs to choose from will be displayed",
                 "default": "${command:getPid}"
               },
               "program": {
@@ -332,7 +332,7 @@
             "type": "midas-gdb",
             "request": "launch",
             "name": "Midas Launch",
-            "program": "${workspaceFolder}/${2:binary}",
+            "program": "${workspaceFolder}/program",
             "stopOnEntry": true,
             "trace": "Off",
             "allStopMode": true,
@@ -345,7 +345,7 @@
             "name": "Midas Attach",
             "program": "${1:program}",
             "pid": "${command:getPid}",
-            "trace": "${3:Off}",
+            "trace": "Off",
             "cwd": "${workspaceFolder}",
             "setupCommands": []
           }
