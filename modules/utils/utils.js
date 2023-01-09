@@ -447,7 +447,7 @@ const UBUNTU_DEPS =
   );
 
 async function guessInstaller() {
-  if ("" != (await which("dpkg"))) {
+  if (!strEmpty((await which("dpkg")))) {
     return {
       name: "apt",
       pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"),
@@ -456,7 +456,7 @@ async function guessInstaller() {
     };
   }
 
-  if ("" != (await which("rpm"))) {
+  if (!strEmpty(await which("rpm"))) {
     return {
       name: "dnf",
       pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"),
@@ -556,7 +556,7 @@ async function installRRFromSource() {
               logger.appendLine(`creating dir ${build_path}`);
               fs.mkdirSync(build_path);
 
-              const has_ninja = (await which("ninja")) != "";
+              const has_ninja = !strEmpty((await which("ninja")));
               const unzip = await which("unzip");
               const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
               logger.appendLine(unzip_cmd);
