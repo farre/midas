@@ -3,6 +3,7 @@ var net = require("net");
 const EventEmitter = require("events");
 const { sudo, which, whereis } = require("./sysutils");
 const os = require("os");
+const { existsSync, unlinkSync } = require("fs");
 
 const comms_address = "/tmp/rr-build-progress";
 
@@ -90,25 +91,13 @@ function run_install(repo_type, pkgs, cancellable) {
 
     // starts python installer services application
     const run_installer_services = () => {
-      if(!process.env.hasOwnProperty("VIRTUAL_ENV")) {
-        return which("python")
-          .then((python) => sudo([python, repo_type], pass))
-      } else {
-        // Means that $VIRTUAL_ENV is set
-        // but we need the system-wide installed python to access DNF / APT
-        return whereis("python")
-          .then(pythons => {
-            for(let python of pythons) {
-              if(!python.includes(process.env.VIRTUAL_ENV)) {
-                return python;
-              }
-            }
-            ireject(`Could not find system install of python. whereis command returned ${pythons.join(" ")}`);
-          }).then(python => sudo([python, repo_type], pass));
-      }
+      return which("python").then((python) => sudo([python, repo_type], pass))
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(pkgs, listeners);
+    if(existsSync(comms_address)) {
+      unlinkSync(comms_address);
+    }
     server.listen(comms_address);
     const unlink_unix_socket = () => {
       try {

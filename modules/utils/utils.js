@@ -7,6 +7,7 @@ const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
 const { run_install } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
+const process = require("process");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
@@ -447,7 +448,26 @@ const UBUNTU_DEPS =
   );
 
 async function guessInstaller() {
+  const verify_py_imports = async (args) => {
+    const py = await which("python");
+    return new Promise(resolve => {
+      _spawn(py, args).on("exit", (code) => {
+        if(code == 0) {
+          console.log(`${py} ${args.join(" ")} succeeded!`);
+          resolve(true);
+        } else {
+          console.log(`${py} ${args.join(" ")} failed!`);
+          resolve(false);
+        }
+      });
+    })
+  };
+
   if (!strEmpty((await which("dpkg")))) {
+    if(!await verify_py_imports(["-c", "import apt"])) {
+      // eslint-disable-next-line max-len
+      throw new Error(`Could not import DNF module on a verified RPM system. You might be running in a virtual environment. Open VSCode in another folder or without virtual env to perform this command.`);
+    }
     return {
       name: "apt",
       pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"),
@@ -457,6 +477,10 @@ async function guessInstaller() {
   }
 
   if (!strEmpty(await which("rpm"))) {
+    if(!await verify_py_imports(["-c", `import dnf`])) {
+      // eslint-disable-next-line max-len
+      throw new Error(`Could not import DNF module on a verified RPM system. You might be running in a virtual environment. Open VSCode in another folder or without virtual env to perform this command.`);
+    }
     return {
       name: "dnf",
       pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"),
@@ -465,18 +489,6 @@ async function guessInstaller() {
     };
   }
   throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manually");
-}
-
-async function installRRFromRepository() {
-  try {
-    // we can ignore deps. dpkg / apt will do that for us here.
-    // eslint-disable-next-line no-unused-vars
-    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
-    let result = await run_install(pkg_manager, ["rr"], cancellable);
-    vscode.window.showInformationMessage(result);
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed to install RR: ${err}`);
-  }
 }
 
 async function installFileUsingManager(args) {
@@ -509,34 +521,48 @@ async function installFileUsingManager(args) {
   });
 }
 
+async function installRRFromRepository() {
+  try {
+    // we can ignore deps. dpkg / apt will do that for us here.
+    // eslint-disable-next-line no-unused-vars
+    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+    let result = await run_install(pkg_manager, ["rr"], cancellable);
+    vscode.window.showInformationMessage(result);
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to install RR: ${err}`);
+  }
+}
+
 async function installRRFromDownload() {
   // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps } = await guessInstaller();
-  const uname = await which("uname");
-  const arch = execSync(`${uname} -m`).toString().trim();
-
-  if (name == "apt") {
-    const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
-    const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
-    if (status == "success") {
-      return installFileUsingManager(["apt-get", "install", "-y", path]);
+  try {
+    const { name, pkg_manager, deps } = await guessInstaller();
+    const uname = await which("uname");
+    const arch = execSync(`${uname} -m`).toString().trim();
+  
+    if (name == "apt") {
+      const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
+      const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
+      if (status == "success") {
+        return installFileUsingManager(["apt-get", "install", "-y", path]);
+      }
+    } else if (name == "dnf") {
+      const { version, url } = await resolveLatestVersion(arch);
+      const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
+      if (status == "success") {
+        return installFileUsingManager(["dnf", "-y", "localinstall", path]);
+      }
     }
-  } else if (name == "dnf") {
-    const { version, url } = await resolveLatestVersion(arch);
-    const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
-    if (status == "success") {
-      return installFileUsingManager(["dnf", "-y", "localinstall", path]);
-    }
-  } else {
-    throw new Error("Failed to guess repo manager");
+  } catch(err) {
+    vscode.window.showErrorMessage(`Failed to install RR: ${err}`)
   }
 }
 
 async function installRRFromSource() {
   return new Promise(async (resolve, reject) => {
     // eslint-disable-next-line no-unused-vars
-    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
     try {
+      const { name, pkg_manager, deps, cancellable } = await guessInstaller();
       const { path, status } = await http_download(
         "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
         "rr-master.zip"
@@ -642,7 +668,7 @@ async function installRRFromSource() {
       }
     } catch (err) {
       vscode.window.showErrorMessage(`Failed to build RR from source: ${err}`);
-      reject(err);
+      resolve();
     }
   });
 }
