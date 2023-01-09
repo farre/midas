@@ -9,8 +9,8 @@ const {
   spawnExternalRrConsole,
   showErrorPopup,
   ContextKeys,
-  getCacheManager,
   strEmpty,
+  getAPI
 } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
@@ -39,8 +39,8 @@ const initializer = async (config) => {
       if (strEmpty(rr_path))
         throw new Error("No RR setting set. Fallback on cache");
     } catch (err) {
-      let cacheManager = await getCacheManager();
-      config.rrPath = cacheManager.cache.toolchain.rr.path;
+      const { rr } = getAPI().get_toolchain();
+      config.rrPath = rr.path;
       if(strEmpty(config.rrPath)) {
         config.rrPath = "rr"; // fallback on trying to find it in $PATH
       }
