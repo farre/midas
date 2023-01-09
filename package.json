@@ -68,11 +68,6 @@
         "shortTitle": "Midas: Create github issue log"
       },
       {
-        "command": "midas.setup-toolchain",
-        "title": "Midas: Setup toolchain",
-        "shortTitle": "Midas: Setup RR toolchain"
-      },
-      {
         "command": "midas.rr-record",
         "title": "Record the execution of a binary",
         "shortTitle": "rr Record"
