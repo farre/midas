@@ -27,7 +27,7 @@ function getExtensionPathOf(fileOrDir = null) {
  * @returns {Promise<string>}
  */
 function which(binary) {
-  return new Promise((resolve, reject) =>
+  return new Promise((resolve) =>
     exec(`which ${binary}`, (err, stdout) => {
       if (err) {
         resolve("");
