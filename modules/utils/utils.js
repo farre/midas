@@ -5,12 +5,11 @@ const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
-const { run_install } = require("./installerProgress");
+const { run_install, InstallerExceptions } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 const process = require("process");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
-
 function getAPI() {
   return global.API;
 }
@@ -453,8 +452,7 @@ async function guessInstaller() {
 
   if (!strEmpty((await which("dpkg")))) {
     if(!await verify_py_imports(["-c", "import apt"])) {
-      // eslint-disable-next-line max-len
-      throw new Error(`Could not import DNF module on a verified RPM system. You might be running in a virtual environment. Open VSCode in another folder or without virtual env to perform this command.`);
+      throw { type: InstallerExceptions.ModuleImportFailed, message: `[Python Error]: Could not import APT module on a verified dpkg system.`};
     }
     return {
       name: "apt",
@@ -466,8 +464,7 @@ async function guessInstaller() {
 
   if (!strEmpty(await which("rpm"))) {
     if(!await verify_py_imports(["-c", `import dnf`])) {
-      // eslint-disable-next-line max-len
-      throw new Error(`Could not import DNF module on a verified RPM system. You might be running in a virtual environment. Open VSCode in another folder or without virtual env to perform this command.`);
+      throw { type: InstallerExceptions.ModuleImportFailed, message: `[Python Error]: Could not import DNF module on a verified RPM system.`};
     }
     return {
       name: "dnf",
@@ -476,7 +473,7 @@ async function guessInstaller() {
       cancellable: true,
     };
   }
-  throw new Error("Package Manager installed on your system is unknown to Midas. You have to install manually");
+  throw { type: InstallerExceptions.PackageManagerNotFound, message: "Could not resolve what package manager is used on your system"};
 }
 
 async function installFileUsingManager(args) {
@@ -503,48 +500,40 @@ async function installFileUsingManager(args) {
         resolve();
       } else {
         vscode.window.showInformationMessage("Failed to install RR. Try again or another method");
-        reject(`Failed with code ${code}`);
+        reject({type: InstallerExceptions.PackageManagerError, message: `${code}`});
       }
     });
   });
 }
 
 async function installRRFromRepository() {
-  try {
-    // we can ignore deps. dpkg / apt will do that for us here.
-    // eslint-disable-next-line no-unused-vars
-    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
-    let result = await run_install(pkg_manager, ["rr"], cancellable);
-    getAPI().write_rr({ path: "rr", version: "", managed: false});
-    vscode.window.showInformationMessage(result);
-  } catch (err) {
-    vscode.window.showErrorMessage(`Failed to install RR: ${err}`);
-  }
+  // we can ignore deps. dpkg / apt will do that for us here.
+  // eslint-disable-next-line no-unused-vars
+  const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+  let result = await run_install(pkg_manager, ["rr"], cancellable);
+  getAPI().write_rr({ path: "rr", version: "", managed: false});
+  vscode.window.showInformationMessage(result);
 }
 
 async function installRRFromDownload() {
   // eslint-disable-next-line no-unused-vars
-  try {
-    const { name, pkg_manager, deps } = await guessInstaller();
-    const uname = await which("uname");
-    const arch = execSync(`${uname} -m`).toString().trim();
-    if (name == "apt") {
-      const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
-      const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
-      if (status == "success") {
-        return await installFileUsingManager(["apt-get", "install", "-y", path])
-          .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
-      }
-    } else if (name == "dnf") {
-      const { version, url } = await resolveLatestVersion(arch);
-      const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
-      if (status == "success") {
-        return await installFileUsingManager(["dnf", "-y", "localinstall", path])
-          .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
-      }
+  const { name, pkg_manager, deps } = await guessInstaller();
+  const uname = await which("uname");
+  const arch = execSync(`${uname} -m`).toString().trim();
+  if (name == "apt") {
+    const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
+    const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
+    if (status == "success") {
+      return await installFileUsingManager(["apt-get", "install", "-y", path])
+        .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
     }
-  } catch(err) {
-    vscode.window.showErrorMessage(`Failed to install RR: ${err}`)
+  } else if (name == "dnf") {
+    const { version, url } = await resolveLatestVersion(arch);
+    const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
+    if (status == "success") {
+      return await installFileUsingManager(["dnf", "-y", "localinstall", path])
+        .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
+    }
   }
 }
 
@@ -694,7 +683,28 @@ async function getRR() {
       { placeHolder: "Choose method of installing rr" }
     );
     if(result) {
-      await result.method();
+      try {
+        await result.method();
+      } catch(err) {
+        console.log(`[Exception ${err.type}]: ${err.message}`);
+        if(err.type == InstallerExceptions.PackageManagerNotFound) {
+          vscode.window.showErrorMessage(`Could not determine package manager on your system.`);
+        } else if(err.type == InstallerExceptions.ModuleImportFailed) {
+          vscode.window.showErrorMessage(`${err.message}`);
+        } else if(err.type == InstallerExceptions.HTTPDownloadError) {
+          vscode.window.showErrorMessage(`Failed to download ${err.url}. ${err.message}`);
+        } else if(err.type == InstallerExceptions.FileWriteError) {
+          vscode.window.showErrorMessage(`Failed to write file ${err.file}. Error: ${err.messsage}`);
+        } else if(err.type == InstallerExceptions.InstallServiceFailed) {
+          vscode.window.showErrorMessage(`Installer service exception: ${err.message}`);
+        } else if(err.type == InstallerExceptions.UserCancelled) {
+          vscode.window.showInformationMessage(`${err.message}`);
+        } else if(err.type == InstallerExceptions.PackageManagerError) {
+          vscode.window.showErrorMessage(`Package manager reported failure during install. Exit code: ${err.message}`);
+        } else {
+          vscode.window.showErrorMessage(`Failed to install RR: ${err.message}`)
+        }
+      }
     } else {
       console.log(`no choice picked`);
     }
@@ -713,7 +723,7 @@ function resolveLatestVersion(arch) {
     try {
       require("https").get(latest_url, (response) => {
         if (response.statusCode !== 302) {
-          throw new Error("Could not resolve latest version...");
+          throw { type: InstallerExceptions.CouldNotDetermineRRVersion, message: "Could not resolve latest version of RR" };
         } else {
           let redirected = response.headers.location;
           const idx = redirected.lastIndexOf(tag);
@@ -724,12 +734,12 @@ function resolveLatestVersion(arch) {
               url: `https://github.com/rr-debugger/rr/releases/download/${version}/rr-${version}-Linux-${arch}`,
             });
           } else {
-            throw new Error("Could not resolve latest version...");
+            throw { type: InstallerExceptions.CouldNotDetermineRRVersion, message: "Could not resolve latest version of RR" };
           }
         }
       });
     } catch (err) {
-      vscode.window.showInformationMessage(`${err} falling back on version 5.6`);
+      vscode.window.showInformationMessage(`${err.message} falling back on version 5.6`);
       resolve({ version: "5.6.0", url: "https://github.com/rr-debugger/rr/releases/download/5.6.0/" });
     }
   });
@@ -755,11 +765,11 @@ async function http_download(url, file_name) {
     (progress, token) =>
       new Promise((resolve, reject) => {
         const output_stream = fs.createWriteStream(path, { flags: "wx" });
-        const cleanup = (err) => {
-          vscode.window.showErrorMessage(err);
+        const cleanup = (err, exception) => {
+          console.log(`Exception: ${err}`);
           output_stream.close();
           fs.unlinkSync(path);
-          reject(err);
+          return reject(exception);
         };
 
         const controller = new AbortController();
@@ -771,9 +781,8 @@ async function http_download(url, file_name) {
         });
         const handle_response = (request, response) => {
           if (response.statusCode != 200) {
-            throw new Error(
-              `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`
-            );
+            // eslint-disable-next-line max-len
+            throw { type: InstallerExceptions.HTTPDownloadError, message: `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`, url };
           }
           response.pipe(output_stream);
           const file_size = response.headers["content-length"] ?? 0;
@@ -786,9 +795,11 @@ async function http_download(url, file_name) {
             controller.abort();
           });
           request.on("error", (err) => {
-            cleanup(err.message);
+            cleanup(err, { type: InstallerExceptions.HTTPDownloadError, message: err.message, url });
           });
-          output_stream.on("error", cleanup);
+          output_stream.on("error", (err) => {
+            cleanup(err, { type: InstallerExceptions.FileWriteError, message: err.message, file: path });
+          });
           output_stream.on("close", () => {
             resolve({ path: path, status: "success" });
           });
@@ -802,7 +813,12 @@ async function http_download(url, file_name) {
           } else if (response.statusCode == 200) {
             handle_response(request, response);
           } else {
-            cleanup(`Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`);
+            cleanup("Could not resolve redirection for rr source zip",
+              { // exception thrown:
+                type: InstallerExceptions.HTTPDownloadError,
+                message: `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`,
+                url
+              });
           }
         });
       })

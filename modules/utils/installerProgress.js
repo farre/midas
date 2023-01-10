@@ -1,9 +1,20 @@
 const vscode = require("vscode");
 var net = require("net");
 const EventEmitter = require("events");
-const { sudo, which, whereis } = require("./sysutils");
+const { sudo, which } = require("./sysutils");
 const os = require("os");
 const { existsSync, unlinkSync } = require("fs");
+
+const InstallerExceptions = {
+  PackageManagerNotFound: "PkgManNotFound",
+  ModuleImportFailed: "ModuleImportFailed",
+  CouldNotDetermineRRVersion: "CouldNotDetermineRRVersion",
+  HTTPDownloadError: "HTTPDownloadError",
+  FileWriteError: "FileWriteError",
+  InstallServiceFailed: "InstallServiceFailed",
+  UserCancelled: "UserCancelled",
+  PackageManagerError: "PackageManagerError"
+};
 
 const comms_address = "/tmp/rr-build-progress";
 
@@ -110,7 +121,7 @@ function run_install(repo_type, pkgs, cancellable) {
     };
     server.on("error", (err) => {
       unlink_unix_socket();
-      ireject(`Installer services failed with error ${err}`);
+      ireject({ type: InstallerExceptions.InstallServiceFailed, message: `Installer service failed: ${err}` })
     });
     server.on("close", unlink_unix_socket);
     server.on("drop", unlink_unix_socket);
@@ -151,7 +162,7 @@ function run_install(repo_type, pkgs, cancellable) {
                   logger.appendLine("Could not close InstallingManager connection.");
                 }
               });
-              ireject("Cancelled installing");
+              ireject({ type: InstallerExceptions.UserCancelled, message: "Cancelled installing" });
             });
 
             listeners.download.on("done", ({ done }) => {
@@ -205,7 +216,7 @@ function run_install(repo_type, pkgs, cancellable) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
                 }
               });
-              ireject("Cancelled installing"); // reject the installer
+              ireject({ type: InstallerExceptions.UserCancelled, message: "Cancelled installing" }); // reject the installer
               resolve(); // resolve the progress window promise
             });
 
@@ -223,4 +234,5 @@ function run_install(repo_type, pkgs, cancellable) {
 
 module.exports = {
   run_install,
+  InstallerExceptions
 };
