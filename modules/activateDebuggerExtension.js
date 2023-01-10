@@ -50,6 +50,16 @@ class MidasAPI {
     }
   }
 
+  /** @param { MidasConfig } cfg */
+  #write_config(cfg) {
+    try {
+      const data = JSON.stringify(cfg, null, 2);
+      fs.writeFileSync(this.get_storage_path_of(this.#CFG_NAME), data);
+      console.log(`Wrote configuration ${data}`);
+    } catch(err) {
+      console.log(`Failed to write configuration. Error: ${err}`);
+    }
+  }
 
   /** @returns {MidasConfig} */
   get_config() {
@@ -89,13 +99,7 @@ class MidasAPI {
   write_rr(rr) {
     let cfg = this.get_config();
     cfg.toolchain.rr = rr;
-    let data = JSON.stringify(cfg);
-    try {
-      fs.writeFileSync(this.get_storage_path_of(this.#CFG_NAME), data);
-      console.log(`Wrote configuration ${JSON.stringify(cfg, null, 2)}`);
-    } catch(err) {
-      console.log(`Failed to write configuration ${JSON.stringify(cfg, null, 2)}. Error: ${err}`);
-    }
+    this.#write_config(cfg);
   }
 
   /**
@@ -105,12 +109,7 @@ class MidasAPI {
   write_gdb(gdb) {
     let cfg = this.get_config();
     cfg.toolchain.gdb = gdb;
-    try {
-      fs.writeFileSync(this.get_storage_path_of(this.#CFG_NAME), JSON.stringify(cfg));
-      console.log(`Wrote configuration ${JSON.stringify(cfg, null, 2)}`);
-    } catch(err) {
-      console.log(`Failed to write configuration ${JSON.stringify(cfg, null, 2)}. Error: ${err}`);
-    }
+    this.#write_config(cfg);
   }
 
   /**
@@ -119,12 +118,7 @@ class MidasAPI {
   write_midas_version() {
     let cfg = this.get_config();
     cfg.midas_version = this.#context.extension.packageJSON["version"];
-    try {
-      fs.writeFileSync(this.get_storage_path_of(this.#CFG_NAME), JSON.stringify(cfg));
-      console.log(`Wrote configuration ${JSON.stringify(cfg, null, 2)}`);
-    } catch (err) {
-      console.log(`Failed to write configuration ${JSON.stringify(cfg, null, 2)}. Error: ${err}`);
-    }
+    this.#write_config(cfg);
   }
 
   /**
