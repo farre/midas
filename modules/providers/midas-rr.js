@@ -14,6 +14,7 @@ const {
 } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
+const { which } = require("../utils/sysutils");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -34,15 +35,15 @@ const initializer = async (config) => {
     config.gdbPath = "gdb";
   }
   if (!config.hasOwnProperty("rrPath")) {
-    try {
-      const rr_path = vscode.workspace.getConfiguration("midas").get("rr");
-      if (strEmpty(rr_path))
-        throw new Error("No RR setting set. Fallback on cache");
-    } catch (err) {
+    if(!strEmpty(vscode.workspace.getConfiguration("midas").get("rr"))) {
+      config.rrPath = vscode.workspace.getConfiguration("midas").get("rr");
+    } else if(!strEmpty(getAPI().get_toolchain().rr.path)) {
       const { rr } = getAPI().get_toolchain();
       config.rrPath = rr.path;
-      if(strEmpty(config.rrPath)) {
-        config.rrPath = "rr"; // fallback on trying to find it in $PATH
+    } else {
+      config.rrPath = "rr"; // fall back on (hopefully) being on $PATH
+      if(await which("rr").then(r => r == "")) {
+        throw new Error("RR not found in $PATH and no user setting found. Use Midas:getRR command or install RR on your system");
       }
     }
   }
