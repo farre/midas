@@ -494,8 +494,6 @@
             "name": "Launch replay session",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
-            "rrPath": "rr",
-            "gdbPath": "gdb",
             "serverAddress": "localhost:50505",
             "setupCommands": []
           }
