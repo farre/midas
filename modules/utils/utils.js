@@ -37,7 +37,7 @@ function strEmpty(str) {
  * @returns
  */
 function strValueOr(str, other_str) {
-  if(strEmpty(str)) return other_str.or;
+  if(strEmpty(str)) return other_str;
   else return str;
 }
 

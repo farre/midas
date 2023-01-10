@@ -406,10 +406,10 @@ class GDB extends GDBMixin(GDBBase) {
       try {
         let r = await this.execMI(`-thread-info ${t.id}`);
         if (r.threads.length > 0) {
-          const thread_name = strValueOr(
-            r.threads[0].name,
-            r.threads[0]["target-id"]
-          );
+          // this is terrible. But sometimes it returns a ".name", some times it's ".details"
+          // lastly it's "target-id". Fallback is name => details => target-id
+          let thread_name = strValueOr(r.threads[0].name, r.threads[0].details);
+          thread_name = strValueOr(thread_name, r.threads[0]["target-id"]);
           const name = `[${t.id}]: ${thread_name}`;
           this.#threads.get(t.id).name = name;
           this.#uninitializedThread.delete(t.id);
