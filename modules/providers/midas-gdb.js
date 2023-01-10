@@ -1,7 +1,7 @@
 const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
-const { ConfigurationProviderInitializer } = require("./initializer");
+const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
@@ -50,17 +50,21 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      showErrorPopup("Incompatible GDB version", err.message, [
-        {
-          title: "Download GDB source",
-          action: async () => {
-            await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+      if(err.type == InitExceptionTypes.NullConfig)
+        return null;
+      else if(err.type == InitExceptionTypes.GdbVersionUnknown) {
+        showErrorPopup("Incompatible GDB version", err.message, [
+          {
+            title: "Download GDB source",
+            action: async () => {
+              await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+            },
           },
-        },
-      ]).then((choice) => {
-        if (choice) choice.action();
-      });
-      return null;
+        ]).then((choice) => {
+          if (choice) choice.action();
+        });
+        return null;
+      }
     }
 
     if (config.request == "attach") {

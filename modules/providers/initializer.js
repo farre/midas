@@ -1,26 +1,27 @@
-const { isNothing, getVersion, requiresMinimum, showErrorPopup } = require("../utils/utils");
+const { isNothing, getVersion, requiresMinimum } = require("../utils/utils");
+
+const InitExceptionTypes = {
+  GdbVersionUnknown: "GdbVersionUnknown",
+  NullConfig: "NullConfig"
+};
+
 class ConfigurationProviderInitializer {
   /**
    * @param {any} config
    * @param {any} initializer
+   * @throws {{ type: string, message: string }}
    */
   async defaultInitialize(config, initializer) {
     // if launch.json is missing or empty
     if (isNothing(config) || isNothing(config.type)) {
-      throw new Error("Cannot start debugging because no launch configuration has been provided");
+      throw { type: InitExceptionTypes.NullConfig, message: "No launch.json found" };
     }
     await initializer(config);
     let version;
     try {
       version = await getVersion(config.gdbPath);
     } catch (e) {
-      await showErrorPopup("Midas might not work properly", e.message, [
-        {
-          title: "Could not determine GDB version",
-          action: async () => {},
-        },
-      ]);
-      return;
+      throw { type: InitExceptionTypes.GdbVersionUnknown, message: `GDB Version could not be determined. ${e}` };
     }
     requiresMinimum(version, { major: 9, minor: 1, patch: 0 });
   }
@@ -28,4 +29,5 @@ class ConfigurationProviderInitializer {
 
 module.exports = {
   ConfigurationProviderInitializer,
+  InitExceptionTypes
 };

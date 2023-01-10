@@ -4,7 +4,7 @@ const fs = require("fs");
 
 const { getFreeRandomPort } = require("../utils/netutils");
 const { tracePicked, getTraces, parseProgram } = require("../utils/rrutils");
-const { ConfigurationProviderInitializer } = require("./initializer");
+const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const {
   spawnExternalRrConsole,
   showErrorPopup,
@@ -119,16 +119,21 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      showErrorPopup("Incompatible GDB version", err.message, [
-        {
-          title: "Download GDB source",
-          action: async () => {
-            await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+      if(err.type == InitExceptionTypes.NullConfig)
+        return null;
+      else if(err.type == InitExceptionTypes.GdbVersionUnknown) {
+        showErrorPopup("Incompatible GDB version", err.message, [
+          {
+            title: "Download GDB source",
+            action: async () => {
+              await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+            },
           },
-        },
-      ]).then((choice) => {
-        if (choice) choice.action();
-      });
+        ]).then((choice) => {
+          if (choice) choice.action();
+        });
+        return null;
+      }
       return null;
     }
     return await this.resolveReplayConfig(folder, config, token);
