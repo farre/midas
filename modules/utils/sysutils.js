@@ -87,7 +87,7 @@ async function sudo(command, pass) {
     });
     return sudo;
   } catch (e) {
-    vscode.window.showErrorMessage("Failed to run install command");
+    vscode.window.showErrorMessage(`Failed to run sudo command ${command}`);
   }
 }
 
