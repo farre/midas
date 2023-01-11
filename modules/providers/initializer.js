@@ -1,7 +1,9 @@
 const { isNothing, getVersion, requiresMinimum } = require("../utils/utils");
 
 const InitExceptionTypes = {
+  GdbNotFound: "GdbNotFound",
   GdbVersionUnknown: "GdbVersionUnknown",
+  RRNotFound: "RRNotFound",
   NullConfig: "NullConfig"
 };
 
