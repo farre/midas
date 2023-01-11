@@ -32,19 +32,15 @@ const initializer = async (config) => {
     config.trace = "off";
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = "gdb";
+    config.gdbPath = await getAPI().resolve_tool_path("gdb");
+    if(config.gdbPath == undefined) {
+      throw { type: InitExceptionTypes.GdbNotFound };
+    }
   }
   if (!config.hasOwnProperty("rrPath")) {
-    if(!strEmpty(vscode.workspace.getConfiguration("midas").get("rr"))) {
-      config.rrPath = vscode.workspace.getConfiguration("midas").get("rr");
-    } else if(!strEmpty(getAPI().get_toolchain().rr.path)) {
-      const { rr } = getAPI().get_toolchain();
-      config.rrPath = rr.path;
-    } else {
-      config.rrPath = "rr"; // fall back on (hopefully) being on $PATH
-      if(await which("rr").then(r => r == "")) {
-        throw new Error("RR not found in $PATH and no user setting found. Use Midas:getRR command or install RR on your system");
-      }
+    config.rrPath = await getAPI().resolve_tool_path("rr");
+    if(config.rrPath == undefined) {
+      throw { type: InitExceptionTypes.RRNotFound }
     }
   }
   if (!config.hasOwnProperty("setupCommands")) {
@@ -119,20 +115,28 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      if(err.type == InitExceptionTypes.NullConfig)
-        return null;
-      else if(err.type == InitExceptionTypes.GdbVersionUnknown) {
-        showErrorPopup("Incompatible GDB version", err.message, [
-          {
-            title: "Download GDB source",
-            action: async () => {
-              await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+      switch(err.type) {
+        case InitExceptionTypes.GdbNotFound:
+          vscode.window.showErrorMessage("GDB not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb).");
+          break;
+        case InitExceptionTypes.RRNotFound:
+          // eslint-disable-next-line max-len
+          vscode.window.showErrorMessage("RR not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb). Use Midas:getRR command or install RR on your system");
+          break;
+        case InitExceptionTypes.GdbVersionUnknown:
+          showErrorPopup("Incompatible GDB version", err.message, [
+            {
+              title: "Download GDB source",
+              action: async () => {
+                await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+              },
             },
-          },
-        ]).then((choice) => {
-          if (choice) choice.action();
-        });
-        return null;
+          ]).then((choice) => {
+            if (choice) choice.action();
+          });
+          break;
+        default:
+          break;
       }
       return null;
     }

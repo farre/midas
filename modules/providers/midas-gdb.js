@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty } = require("../utils/utils");
+const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 
 const initializer = (config) => {
@@ -16,7 +16,10 @@ const initializer = (config) => {
     config.allStopMode = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = resolveCommand("gdb");
+    config.gdbPath = getAPI().resolve_tool_path("gdb");
+    if(config.gdbPath == undefined) {
+      throw { type: InitExceptionTypes.GdbNotFound };
+    }
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
@@ -50,21 +53,26 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      if(err.type == InitExceptionTypes.NullConfig)
-        return null;
-      else if(err.type == InitExceptionTypes.GdbVersionUnknown) {
-        showErrorPopup("Incompatible GDB version", err.message, [
-          {
-            title: "Download GDB source",
-            action: async () => {
-              await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+      switch(err.type) {
+        case InitExceptionTypes.GdbVersionUnknown:
+          showErrorPopup("Incompatible GDB version", err.message, [
+            {
+              title: "Download GDB source",
+              action: async () => {
+                await vscode.env.openExternal(vscode.Uri.parse("https://www.sourceware.org/gdb/current/"));
+              },
             },
-          },
-        ]).then((choice) => {
-          if (choice) choice.action();
-        });
-        return null;
+          ]).then((choice) => {
+            if (choice) choice.action();
+          });
+          break;
+        case InitExceptionTypes.GdbNotFound:
+          vscode.window.showErrorMessage(`Gdb could not be found on your system`);
+          break;
+        default:
+          break;
       }
+      return null;
     }
 
     if (config.request == "attach") {
