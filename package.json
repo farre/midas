@@ -29,13 +29,18 @@
   "contributes": {
 		"configuration":[
 			{
-				"title": "Midas",
+				"title": "Midas toolchains",
 				"properties": {
 					"midas.rr": {
 						"type": "string",
 						"default": null,
-						"description": "Path to RR. If you set this it will override the rr path that can be set in launch.json"
-					}
+						"description": "Path to RR. This setting is not required, as Midas will look for RR in $PATH if not set."
+					},
+          "midas.gdb": {
+            "type": "string",
+            "default": null,
+            "description": "Path to GDB. This setting is not required, as Midas will look for GDB in $PATH if not set."
+          }
 				}
 			}
 		],
