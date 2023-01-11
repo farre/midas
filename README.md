@@ -33,7 +33,8 @@ to either:
 - Build from source
 
 Currently, all three ways require that you run a Linux system that uses either `dnf` or `apt` as package managers to resolve dependencies. The first two options installs RR system wide, while the 3rd option (Build from source)
-downloads the latest master from github and builds it locally and places it in the Midas extension folder. Typically, VSCode extension folder lives somewhere under `/home/user/.vscode/extensions`.
+downloads the latest master from github and builds it locally and places it in the Midas extension folder. Typically found in `$HOME/.config/Code/User/globalStorage/farrese-midas/...`. For this to work
+you must not be running a virtual environment like `virtualenv`. If you are, open a VSCode window in a folder where it's not active.
 
 N.B! You will be required to input your sudo password for all three of these to work. A message box will ask you if this is OK. Midas does not store your password nor any other information about you.
 
