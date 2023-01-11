@@ -10,6 +10,8 @@ const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils"
 const process = require("process");
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
+
+/** @returns { import("../activateDebuggerExtension").MidasAPI } */
 function getAPI() {
   return global.API;
 }
@@ -687,22 +689,31 @@ async function getRR() {
         await result.method();
       } catch(err) {
         console.log(`[Exception ${err.type}]: ${err.message}`);
-        if(err.type == InstallerExceptions.PackageManagerNotFound) {
-          vscode.window.showErrorMessage(`Could not determine package manager on your system.`);
-        } else if(err.type == InstallerExceptions.ModuleImportFailed) {
-          vscode.window.showErrorMessage(`${err.message}`);
-        } else if(err.type == InstallerExceptions.HTTPDownloadError) {
-          vscode.window.showErrorMessage(`Failed to download ${err.url}. ${err.message}`);
-        } else if(err.type == InstallerExceptions.FileWriteError) {
-          vscode.window.showErrorMessage(`Failed to write file ${err.file}. Error: ${err.messsage}`);
-        } else if(err.type == InstallerExceptions.InstallServiceFailed) {
-          vscode.window.showErrorMessage(`Installer service exception: ${err.message}`);
-        } else if(err.type == InstallerExceptions.UserCancelled) {
-          vscode.window.showInformationMessage(`${err.message}`);
-        } else if(err.type == InstallerExceptions.PackageManagerError) {
-          vscode.window.showErrorMessage(`Package manager reported failure during install. Exit code: ${err.message}`);
-        } else {
-          vscode.window.showErrorMessage(`Failed to install RR: ${err.message}`)
+        switch(err.type) {
+          case InstallerExceptions.PackageManagerNotFound:
+            vscode.window.showErrorMessage(`Could not determine package manager on your system.`);
+            break;
+          case InstallerExceptions.ModuleImportFailed:
+            vscode.window.showErrorMessage(`${err.message}`);
+            break;
+          case InstallerExceptions.HTTPDownloadError:
+            vscode.window.showErrorMessage(`Failed to download ${err.url}. ${err.message}`);
+            break;
+          case InstallerExceptions.FileWriteError:
+            vscode.window.showErrorMessage(`Failed to write file ${err.file}. Error: ${err.messsage}`);
+            break;
+          case InstallerExceptions.InstallServiceFailed:
+            vscode.window.showErrorMessage(`Installer service exception: ${err.message}`);
+            break;
+          case InstallerExceptions.UserCancelled:
+            vscode.window.showInformationMessage(`${err.message}`);
+            break;
+          case InstallerExceptions.PackageManagerError:
+            vscode.window.showErrorMessage(`Package manager reported failure during install. Exit code: ${err.message}`);
+            break;
+          default:
+            vscode.window.showErrorMessage(`Failed to install RR: ${err.message}`)
+            break;
         }
       }
     } else {
