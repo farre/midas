@@ -542,113 +542,108 @@ async function installRRFromDownload() {
 async function installRRFromSource() {
   return new Promise(async (resolve, reject) => {
     // eslint-disable-next-line no-unused-vars
-    try {
-      const { name, pkg_manager, deps, cancellable } = await guessInstaller();
-      const { path, status } = await http_download(
-        "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
-        "rr-master.zip"
-      );
-      if (status == "success") {
-        let result = await run_install(pkg_manager, deps, true);
-        vscode.window.showInformationMessage(`${result} dependencies`);
-        // eslint-disable-next-line no-unused-vars
-        const { version, url } = await resolveLatestVersion("we-don't-care-about-arch-here");
-        vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
-          (progress, token) => {
-            return new Promise(async (progress_resolve) => {
-              const build_path = getAPI().get_storage_path_of(`rr-${version}`);
-              const logger = vscode.window.createOutputChannel("Building RR");
-              logger.show();
-              logger.appendLine(`creating dir ${build_path}`);
-              fs.mkdirSync(build_path);
+    const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+    const { path, status } = await http_download(
+      "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
+      "rr-master.zip"
+    );
+    if (status == "success") {
+      let result = await run_install(pkg_manager, deps, true);
+      vscode.window.showInformationMessage(`${result} dependencies`);
+      // eslint-disable-next-line no-unused-vars
+      const { version, url } = await resolveLatestVersion("we-don't-care-about-arch-here");
+      vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
+        (progress, token) => {
+          return new Promise(async (progress_resolve) => {
+            const build_path = getAPI().get_storage_path_of(`rr-${version}`);
+            const logger = vscode.window.createOutputChannel("Building RR");
+            logger.show();
+            logger.appendLine(`creating dir ${build_path}`);
+            fs.mkdirSync(build_path);
 
-              const has_ninja = !strEmpty((await which("ninja")));
-              const unzip = await which("unzip");
-              const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
-              logger.appendLine(unzip_cmd);
-              execSync(unzip_cmd);
-              const cmake_cfg = _spawn(
-                "cmake",
-                [
-                  "-S",
-                  `${build_path}/rr-master`,
-                  "-B",
-                  build_path,
-                  "-DCMAKE_BUILD_TYPE=Release",
-                  has_ninja ? "-G Ninja" : "",
-                ],
-                { shell: true, stdio: "pipe", cwd: build_path }
-              );
-              cmake_cfg.stdout.on("data", (data) => {
+            const has_ninja = !strEmpty((await which("ninja")));
+            const unzip = await which("unzip");
+            const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
+            logger.appendLine(unzip_cmd);
+            execSync(unzip_cmd);
+            const cmake_cfg = _spawn(
+              "cmake",
+              [
+                "-S",
+                `${build_path}/rr-master`,
+                "-B",
+                build_path,
+                "-DCMAKE_BUILD_TYPE=Release",
+                has_ninja ? "-G Ninja" : "",
+              ],
+              { shell: true, stdio: "pipe", cwd: build_path }
+            );
+            cmake_cfg.stdout.on("data", (data) => {
+              logger.append(data.toString());
+            });
+
+            cmake_cfg.stderr.on("data", (data) => {
+              logger.append(data.toString());
+            });
+
+            let last = 0;
+            const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
+
+            cmake_cfg.on("exit", () => {
+              const cmake_build = _spawn("cmake", ["--build", build_path, "-j"], {
+                stdio: "pipe",
+                detached: true,
+                cwd: build_path,
+              });
+              cmake_build.stdout.on("data", (data) => {
+                const str = data.toString();
+                const matches = str.matchAll(matcher);
+                for (const res of matches) {
+                  const { current, total } = res.groups;
+                  const inc = ((+current - last) / +total) * 100.0;
+                  last = +current;
+                  progress.report({ message: "Building...", increment: inc });
+                }
+                logger.append(str);
+              });
+              cmake_build.stderr.on("data", (data) => {
                 logger.append(data.toString());
               });
-
-              cmake_cfg.stderr.on("data", (data) => {
-                logger.append(data.toString());
-              });
-
-              let last = 0;
-              const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
-
-              cmake_cfg.on("exit", () => {
-                const cmake_build = _spawn("cmake", ["--build", build_path, "-j"], {
-                  stdio: "pipe",
-                  detached: true,
-                  cwd: build_path,
-                });
-                cmake_build.stdout.on("data", (data) => {
-                  const str = data.toString();
-                  const matches = str.matchAll(matcher);
-                  for (const res of matches) {
-                    const { current, total } = res.groups;
-                    const inc = ((+current - last) / +total) * 100.0;
-                    last = +current;
-                    progress.report({ message: "Building...", increment: inc });
-                  }
-                  logger.append(str);
-                });
-                cmake_build.stderr.on("data", (data) => {
-                  logger.append(data.toString());
-                });
-                cmake_build.on("exit", async (code) => {
-                  if (code == 0) {
-                    logger.appendLine(
-                      // eslint-disable-next-line max-len
-                      `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
-                    );
-                    getAPI().write_rr({ path: `${build_path}/bin/rr`, version, managed: true });
-                    progress_resolve();
-                    resolve("Build completed successfully");
-                  } else {
-                    logger.appendLine(`Build failed - finished with exit code ${code}`);
-                    progress_resolve();
-                    reject(`Build failed - finished with exit code ${code}`);
-                  }
-                });
-                cmake_build.on("error", (err) => {
+              cmake_build.on("exit", async (code) => {
+                if (code == 0) {
+                  logger.appendLine(
+                    // eslint-disable-next-line max-len
+                    `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
+                  );
+                  getAPI().write_rr({ path: `${build_path}/bin/rr`, version, managed: true });
                   progress_resolve();
-                  reject(`Build failed: ${err}`);
-                });
+                  resolve("Build completed successfully");
+                } else {
+                  logger.appendLine(`Build failed - finished with exit code ${code}`);
+                  progress_resolve();
+                  reject(`Build failed - finished with exit code ${code}`);
+                }
+              });
+              cmake_build.on("error", (err) => {
+                progress_resolve();
+                reject(`Build failed: ${err}`);
+              });
 
-                token.onCancellationRequested(() => {
-                  // -pid kills the process tree. We are a vengeful, hateful, spiteful god of the linux universe
-                  // (we do this, because "cmake --build" spawns new processes)
-                  process.kill(-cmake_build.pid, "SIGTERM");
-                  // controller.abort();
-                  progress_resolve("Cancelled");
-                  resolve("Cancelled");
-                });
+              token.onCancellationRequested(() => {
+                // -pid kills the process tree. We are a vengeful, hateful, spiteful god of the linux universe
+                // (we do this, because "cmake --build" spawns new processes)
+                process.kill(-cmake_build.pid, "SIGTERM");
+                // controller.abort();
+                progress_resolve("Cancelled");
+                resolve("Cancelled");
               });
             });
-          }
-        );
-      } else {
-        resolve("Download cancelled");
-      }
-    } catch (err) {
-      vscode.window.showErrorMessage(`Failed to build RR from source: ${err}`);
-      resolve();
+          });
+        }
+      );
+    } else {
+      resolve("Download cancelled");
     }
   });
 }
