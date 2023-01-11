@@ -8,7 +8,7 @@
     "midas",
     "debug"
   ],
-  "version": "0.5.4",
+  "version": "0.7.0",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -27,23 +27,23 @@
     "url": "https://github.com/farre/midas"
   },
   "contributes": {
-		"configuration":[
-			{
-				"title": "Midas toolchains",
-				"properties": {
-					"midas.rr": {
-						"type": "string",
-						"default": null,
-						"description": "Path to RR. This setting is not required, as Midas will look for RR in $PATH if not set."
-					},
+    "configuration": [
+      {
+        "title": "Midas toolchains",
+        "properties": {
+          "midas.rr": {
+            "type": "string",
+            "default": null,
+            "description": "Path to RR. This setting is not required, as Midas will look for RR in $PATH if not set."
+          },
           "midas.gdb": {
             "type": "string",
             "default": null,
             "description": "Path to GDB. This setting is not required, as Midas will look for GDB in $PATH if not set."
           }
-				}
-			}
-		],
+        }
+      }
+    ],
     "views": {
       "debug": [
         {
