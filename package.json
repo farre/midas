@@ -10,7 +10,7 @@
   ],
   "version": "0.5.4",
   "engines": {
-    "vscode": "^1.66.0"
+    "vscode": "^1.74.0"
   },
   "categories": [
     "Debuggers"
