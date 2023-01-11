@@ -137,22 +137,27 @@ class MidasAPI {
   }
 
   /**
-   * Get path of RR, with multiple fallbacks. First checks global setting in preferences,
-   * then config file, then $PATH and then finally failure (empty).
+   * Get path of `tool`, with multiple fallbacks. Order of resolving of `tool` path:
+   * 1. VSCode Midas.\<rr | gdb\> Settings
+   * 2. Midas managed toolchain (when built or installed via Midas command)
+   * 3. $PATH
+   * 4. null|undefined if not found in path
+   * @param { "rr" | "gdb" } tool
+   * @returns { Promise<string?> }
    */
-  async maybe_rr_path() {
+  async resolve_tool_path(tool) {
     const cfg = vscode.workspace.getConfiguration("midas");
-    if(!strEmpty(cfg.get("rr")))
-      return cfg.get("rr");
+    if(!strEmpty(cfg.get(tool)))
+      return cfg.get(tool);
 
-    const { rr } = this.get_toolchain();
-    if(!strEmpty(rr.path))
-      return rr.path;
+    const toolchain = this.get_toolchain();
 
-    const rrInPath = await which("rr");
-    if(!strEmpty(rrInPath))
-      return rrInPath;
+    if(!strEmpty(toolchain[tool].path))
+      return toolchain[tool].path;
 
+    const tool_in_path = await which(tool);
+    if(!strEmpty(tool_in_path))
+      return tool_in_path;
     return undefined;
   }
 
