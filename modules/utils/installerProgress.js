@@ -86,6 +86,8 @@ function create_ipc_server(pkgs, listeners) {
  */
 function run_install(repo_type, pkgs, cancellable) {
   return new Promise(async (iresolve, ireject) => {
+    // if some server logic fails, we don't want to actually run the python code
+    let error_or_finished = false;
     let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
     logger.show();
     // eslint-disable-next-line max-len
@@ -93,6 +95,10 @@ function run_install(repo_type, pkgs, cancellable) {
     // f*** me extension development for VSCode is buggy. I don't want to have to do this.
     if (!pass) {
       pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+    }
+    if(!pass) {
+      ireject({type: InstallerExceptions.UserCancelled });
+      return;
     }
     const cancel = async (pid) => {
       let kill = await which("kill");
@@ -111,6 +117,7 @@ function run_install(repo_type, pkgs, cancellable) {
     }
     server.listen(comms_address);
     const unlink_unix_socket = () => {
+      error_or_finished = true;
       try {
         if (require("fs").existsSync(comms_address)) {
           require("fs").unlinkSync(comms_address);
@@ -228,7 +235,8 @@ function run_install(repo_type, pkgs, cancellable) {
         }
       );
     });
-    await run_installer_services();
+    if(!error_or_finished)
+      await run_installer_services();
   });
 }
 
