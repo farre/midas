@@ -688,30 +688,40 @@ async function getRR() {
         await result.method();
       } catch(err) {
         console.log(`[Exception ${err.type}]: ${err.message}`);
+        const show_modal_error = (msg) => {
+          vscode.window.showErrorMessage(msg, {modal: true});
+        };
         switch(err.type) {
           case InstallerExceptions.PackageManagerNotFound:
-            vscode.window.showErrorMessage(`Could not determine package manager on your system.`);
+            show_modal_error(`Could not determine package manager on your system.`);
             break;
           case InstallerExceptions.ModuleImportFailed:
-            vscode.window.showErrorMessage(`${err.message}`);
+            // eslint-disable-next-line max-len
+            if(process.env.hasOwnProperty("VIRTUAL_ENV")) {
+              // eslint-disable-next-line max-len
+              show_modal_error(`${err.message}. VIRTUAL_ENV was found: if you are running vscode in a python virtual environment this command will not work. Open VSCode in another folder without it and try this command again.`);
+            } else {
+              // eslint-disable-next-line max-len
+              show_modal_error(`${err.message}. You might be running a python virtual environment? Open VSCode without it and run this command again.`);
+            }
             break;
           case InstallerExceptions.HTTPDownloadError:
-            vscode.window.showErrorMessage(`Failed to download ${err.url}. ${err.message}`);
+            show_modal_error(`Failed to download ${err.url}. ${err.message}`);
             break;
           case InstallerExceptions.FileWriteError:
-            vscode.window.showErrorMessage(`Failed to write file ${err.file}. Error: ${err.messsage}`);
+            show_modal_error(`Failed to write file ${err.file}. Error: ${err.messsage}`);
             break;
           case InstallerExceptions.InstallServiceFailed:
-            vscode.window.showErrorMessage(`Installer service exception: ${err.message}`);
+            show_modal_error(`Installer service exception: ${err.message}`);
             break;
           case InstallerExceptions.UserCancelled:
-            vscode.window.showInformationMessage(`${err.message}`);
+            vscode.window.showInformationMessage(`You cancelled.`);
             break;
           case InstallerExceptions.PackageManagerError:
-            vscode.window.showErrorMessage(`Package manager reported failure during install. Exit code: ${err.message}`);
+            show_modal_error(`Package manager reported failure during install. Exit code: ${err.message}`);
             break;
           default:
-            vscode.window.showErrorMessage(`Failed to install RR: ${err.message}`)
+            show_modal_error(`Failed to install RR: ${err.message}`);
             break;
         }
       }
