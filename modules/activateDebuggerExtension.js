@@ -8,6 +8,7 @@ const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which } = require("./utils/sysutils");
 const { getRR, strEmpty } = require("./utils/utils");
 const fs = require("fs");
+const Path = require("path")
 
 /** @typedef { { path: string, version: string, managed: boolean } } Tool */
 /** @typedef { { rr: Tool, gdb: Tool } } Toolchain */
@@ -37,6 +38,8 @@ class MidasAPI {
   /** @type {import("vscode").ExtensionContext} */
   #context;
 
+  #toolchainAddedToEnv = false
+
   /** @param {import("vscode").ExtensionContext} ctx */
   constructor(ctx) {
     this.#context = ctx;
@@ -47,6 +50,18 @@ class MidasAPI {
     let cfg_path = this.get_storage_path_of(this.#CFG_NAME);
     if(!fs.existsSync(cfg_path)) {
       fs.writeFileSync(cfg_path, JSON.stringify(default_config_contents()));
+    }
+  }
+
+  setup_env_vars() {
+    const cfg = this.get_config();
+    if(!this.#toolchainAddedToEnv) {
+      if(!strEmpty(cfg.toolchain.rr.path)) {
+        const path = Path.dirname(cfg.toolchain.rr.path);
+        this.#context.environmentVariableCollection.append("PATH", path)
+        console.log(`appended ${path} to $PATH`)
+        this.#toolchainAddedToEnv = true;
+      }
     }
   }
 
@@ -192,6 +207,7 @@ async function init_midas(api) {
       }
     }
   }
+  api.setup_env_vars()
   api.write_midas_version()
 }
 
