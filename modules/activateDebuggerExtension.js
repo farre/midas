@@ -58,7 +58,7 @@ class MidasAPI {
     if(!this.#toolchainAddedToEnv) {
       if(!strEmpty(cfg.toolchain.rr.path)) {
         const path = Path.dirname(cfg.toolchain.rr.path);
-        this.#context.environmentVariableCollection.append("PATH", path)
+        this.#context.environmentVariableCollection.append("PATH", `:${path}`)
         console.log(`appended ${path} to $PATH`)
         this.#toolchainAddedToEnv = true;
       }
