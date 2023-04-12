@@ -16,6 +16,7 @@
     "Debuggers"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onDebug",
     "onCommand:midas.issue-report",
     "onCommand:midas.get-rr"
