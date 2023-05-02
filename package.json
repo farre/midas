@@ -3,9 +3,6 @@
   "displayName": "midas",
   "icon": "docs/index.png",
   "description": "Midas: A GDB/MI Visual Studio Code Debug Adapter",
-  "os": [
-    "linux"
-  ],
   "keywords": [
     "gdb",
     "midas",
