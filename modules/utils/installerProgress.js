@@ -13,7 +13,8 @@ const InstallerExceptions = {
   FileWriteError: "FileWriteError",
   InstallServiceFailed: "InstallServiceFailed",
   UserCancelled: "UserCancelled",
-  PackageManagerError: "PackageManagerError"
+  PackageManagerError: "PackageManagerError",
+  TerminalCommandNotFound: "TerminalCommandNotFound"
 };
 
 const comms_address = "/tmp/rr-build-progress";
@@ -80,11 +81,12 @@ function create_ipc_server(pkgs, listeners) {
 
 /**
  * Run depedency/package installer
+ * @param {string} python - path to python
  * @param {string} repo_type - whether we're using apt or dnf
  * @param {string[]} pkgs - list of depedencies to install
  * @param {boolean} cancellable - Whether or not the install operation can be cancelled
  */
-function run_install(repo_type, pkgs, cancellable) {
+function run_install(python, repo_type, pkgs, cancellable) {
   return new Promise(async (iresolve, ireject) => {
     // if some server logic fails, we don't want to actually run the python code
     let error_or_finished = false;
@@ -108,7 +110,7 @@ function run_install(repo_type, pkgs, cancellable) {
 
     // starts python installer services application
     const run_installer_services = () => {
-      return which("python").then((python) => sudo([python, repo_type], pass))
+      return sudo([python, repo_type], pass)
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(pkgs, listeners);

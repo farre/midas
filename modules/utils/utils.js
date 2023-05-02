@@ -9,6 +9,78 @@ const { run_install, InstallerExceptions } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 const process = require("process");
 
+
+const ToolList = {
+  cmake : { variants: ["cmake"] },
+  python : { variants: ["python", "python3", "py"] },
+  unzip : { variants: ["unzip"], },
+  ninja: { variants: ["ninja"] }
+}
+
+class Tool {
+  /**
+   * 
+   * @param {string} name
+   * @param {string} path
+   * @param {{ variant: string, err: import("child_process").ExecException }[]} error
+   */
+  constructor(name, path, error = null) {
+    /** @type {string} */
+    this.name = name;
+
+    /** @type {string} */
+    this.path = path;
+
+    /** @type {{ variant: string, err: import("child_process").ExecException }[]} */
+    this.error = error;
+  }
+
+  /** @returns {boolean} */
+  found() { return this.error === null; }
+
+  /** @returns {{ variant: string, err: import("child_process").ExecException }[]} */
+  errors() { return this.error; }
+
+  errorMessage() { return `could not find any of '${this.error.map(v => v.variant).join(", ")}' on $PATH. One of these are required to be installed on your system` }
+}
+
+/**
+ *
+ * @param {string} name
+ * @param {string[]} variants
+ * @returns
+ */
+function ToolBuilder(name, variants) {
+  const errors = [];
+  for(const variant of variants) {
+    try {
+      const path = execSync(`which ${variant}`)
+      if(!strEmpty(path)) {
+        return new Tool(name, path.toString().trim(), null);
+      }
+    } catch(err) {
+      errors.push(err);
+    }
+  }
+  return new Tool(name, null, errors);
+}
+
+/**
+ * @param {string[]} tools - what tools to check if they exist on system. `ToolList` contains all tools, but are not
+ * required for all tool chain management functions.
+ * @return { Object.<string, Tool> }
+ */
+function verifyPreRequistesExists(tools = ["cmake", "python", "unzip"]) {
+  let result = {};
+  for(const tool_name of tools) {
+    let tool = ToolBuilder(tool_name, ToolList[tool_name].variants);
+    result[tool_name] = tool;
+  }
+
+  // @ts-ignore
+  return result;
+}
+
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 /** @returns { import("../activateDebuggerExtension").MidasAPI } */
@@ -436,16 +508,15 @@ const UBUNTU_DEPS =
     " "
   );
 
-async function guessInstaller() {
+async function guessInstaller(python) {
   const verify_py_imports = async (args) => {
-    const py = await which("python");
     return new Promise(resolve => {
-      _spawn(py, args).on("exit", (code) => {
+      _spawn(python, args).on("exit", (code) => {
         if(code == 0) {
-          console.log(`${py} ${args.join(" ")} succeeded!`);
+          console.log(`${python} ${args.join(" ")} succeeded!`);
           resolve(true);
         } else {
-          console.log(`${py} ${args.join(" ")} failed!`);
+          console.log(`${python} ${args.join(" ")} failed!`);
           resolve(false);
         }
       });
@@ -508,18 +579,18 @@ async function installFileUsingManager(args) {
   });
 }
 
-async function installRRFromRepository() {
+async function installRRFromRepository({python}) {
   // we can ignore deps. dpkg / apt will do that for us here.
   // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps, cancellable } = await guessInstaller();
-  let result = await run_install(pkg_manager, ["rr"], cancellable);
+  const { name, pkg_manager, deps, cancellable } = await guessInstaller(python);
+  let result = await run_install(python, pkg_manager, ["rr"], cancellable);
   getAPI().write_rr({ path: "rr", version: "", managed: false});
   vscode.window.showInformationMessage(result);
 }
 
-async function installRRFromDownload() {
+async function installRRFromDownload({python}) {
   // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps } = await guessInstaller();
+  const { name, pkg_manager, deps } = await guessInstaller(python);
   const uname = await which("uname");
   const arch = execSync(`${uname} -m`).toString().trim();
   if (name == "apt") {
@@ -539,25 +610,24 @@ async function installRRFromDownload() {
   }
 }
 
-function spawn_cmake_cfg(build_path, has_ninja) {
-  return _spawn("cmake",
+function spawn_cmake_cfg(cmake, build_path, has_ninja) {
+  return _spawn(cmake,
     ["-S", `${build_path}/rr-master`, "-B", build_path, "-DCMAKE_BUILD_TYPE=Release", has_ninja ? "-G Ninja" : "",],
     { shell: true, stdio: "pipe", cwd: build_path }
   );
 }
 
-async function installRRFromSource() {
-  const { name, pkg_manager, deps, cancellable } = await guessInstaller();
+async function installRRFromSource({ python, cmake, unzip }) {
+  const { pkg_manager, deps } = await guessInstaller(python);
   const { path, status } = await http_download(
     "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
     "rr-master.zip"
   );
   if (status == "success") {
-    let result = await run_install(pkg_manager, deps, true);
+    let result = await run_install(python, pkg_manager, deps, true);
     vscode.window.showInformationMessage(`${result} dependencies`);
-    const { version, url } = await resolveLatestVersion("we-don't-care-about-arch-here");
+    const { version } = await resolveLatestVersion("we-don't-care-about-arch-here");
     const has_ninja = !strEmpty((await which("ninja")));
-    const unzip = await which("unzip");
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
       (progress, token) => {
@@ -570,7 +640,7 @@ async function installRRFromSource() {
           const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
           logger.appendLine(unzip_cmd);
           execSync(unzip_cmd);
-          const cmake_cfg = spawn_cmake_cfg(build_path, has_ninja);
+          const cmake_cfg = spawn_cmake_cfg(cmake, build_path, has_ninja);
           cmake_cfg.stdout.on("data", (data) => { logger.append(data.toString()); });
           cmake_cfg.stderr.on("data", (data) => { logger.append(data.toString()); });
 
@@ -578,7 +648,7 @@ async function installRRFromSource() {
           const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
 
           cmake_cfg.on("exit", () => {
-            const cmake_build = _spawn("cmake", ["--build", build_path, "-j"], {
+            const cmake_build = _spawn(cmake, ["--build", build_path, "-j"], {
               stdio: "pipe",
               detached: true,
               cwd: build_path,
@@ -646,23 +716,49 @@ async function getRR() {
           label: "Install from repository",
           description: "Install rr from the OS package repository",
           method: installRRFromRepository,
+          op: "repo",
         },
         {
           label: "Install from download",
           description: "Download the latest release and install it",
           method: installRRFromDownload,
+          op: "download"
         },
         {
           label: "Install from source",
           description: "Download, build, and install from source",
           method: installRRFromSource,
+          op: "build"
         },
       ],
       { placeHolder: "Choose method of installing rr" }
     );
     if(result) {
       try {
-        let res = await result.method();
+        let requiredTools = [];
+        if(result.op == "build") {
+          requiredTools = ["python", "cmake", "unzip"];
+        } else if(result.op == "download" || result.op == "repo") {
+          requiredTools = ["python"]
+        } else {
+          throw { type: InstallerExceptions.Panic, message: "Toolchain management operation failed. A possible VSCode bug" };
+        }
+        const verifyPrerequisites = verifyPreRequistesExists(requiredTools);
+        for(const tool of requiredTools) {
+          if(!verifyPrerequisites.hasOwnProperty(tool)) {
+            // eslint-disable-next-line max-len
+            throw { type: InstallerExceptions.TerminalCommandNotFound, message: `Could not determine if you have one of the required tools installed on your system: ${requiredTools.join(", ")}` };
+          }
+          if(!verifyPrerequisites[tool].found()) {
+            throw { type: InstallerExceptions.TerminalCommandNotFound, message: verifyPrerequisites[tool].errorMessage() }
+          }
+        }
+        let args = {};
+        for(const tool of requiredTools) {
+          args[tool] = verifyPrerequisites[tool].path;
+        }
+        // @ts-ignore
+        let res = await result.method(args);
         if(res)
           vscode.window.showInformationMessage(res);
       } catch(err) {
@@ -699,6 +795,8 @@ async function getRR() {
           case InstallerExceptions.PackageManagerError:
             show_modal_error(`Package manager reported failure during install. Exit code: ${err.message}`);
             break;
+          case InstallerExceptions.TerminalCommandNotFound:
+            show_modal_error(`Pre-requisites not installed on system: ${err.message}`);
           default:
             show_modal_error(`Failed to install RR: ${err.message}`);
             break;
