@@ -2,6 +2,10 @@
 
 Midas is a debug adapter that utilizes the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications and as such uses GDB's great Python integration to be faster than some debug adapters, where possible.
 
+## Q & A
+
+Join the matrix room [https://chat.mozilla.org/#/room/#midas:mozilla.org](https://chat.mozilla.org/#/room/#midas:mozilla.org) for questions. Office hours are every waking moment of the day ;)
+
 ## Requirements
 
 Midas is developed exclusively for GDB with Python integration in mind. If you are running a GDB which does not support it, or hasn't been built with Python functionality, Midas will not work, at all.
