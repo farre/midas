@@ -9,12 +9,10 @@ const {
   spawnExternalRrConsole,
   showErrorPopup,
   ContextKeys,
-  strEmpty,
   getAPI
 } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig } = require("../spawn");
-const { which } = require("../utils/sysutils");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
