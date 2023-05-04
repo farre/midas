@@ -2,6 +2,7 @@ const vscode = require("vscode");
 const { MidasRunMode } = require("./buildMode");
 const { spawn } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
+const { ImmediateExecuteCommand, CommandList } = require("./gdbCommand");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -9,12 +10,12 @@ const { getExtensionPathOf } = require("./utils/sysutils");
  * @returns
  */
 function midas_setup_settings(traceSettings) {
-  return [
-    ["-iex", "set pagination off"],
-    ["-iex", `source ${getExtensionPathOf("/modules/python/setup.py")}`],
-    traceSettings.getCommandParameters(),
-    ["-iex", `source ${getExtensionPathOf("/modules/python/midas.py")}`],
-  ];
+  return new CommandList("Midas Setup Settings", [
+    new ImmediateExecuteCommand("set pagination off"),
+    new ImmediateExecuteCommand(`source ${getExtensionPathOf("/modules/python/setup.py")}`),
+    ...traceSettings.getCommandParameters(),
+    new ImmediateExecuteCommand(`source ${getExtensionPathOf("/modules/python/midas.py")}`),
+  ])
 }
 
 /**
@@ -57,17 +58,17 @@ class SpawnConfig {
   }
 
   build() {
+    const commandList = new CommandList("General Settings");
+    commandList.addOption("-i", "mi3");
+    commandList.addOption("--cd", this.cwd);
+    commandList.addCommand(`set cwd ${this.cwd}`);
+    commandList.addImmediateCommand("set mi-async on");
     return {
       path: this.path,
       parameters: [
-        "-i=mi3",
-        `--cd=${this.cwd}`,
-        "-ex",
-        `set cwd ${this.cwd}`,
-        "-iex",
-        "set mi-async on",
+        ...commandList.build(),
         ...this.options,
-        ...midas_setup_settings(this.traceSettings),
+        ...midas_setup_settings(this.traceSettings).build(),
         ...this.setupCommands.flatMap((cmd) => ["-iex", `${cmd}`]),
         // @ts-ignore - provided by interface implementation
         ...this.typeSpecificParameters(),
@@ -126,6 +127,37 @@ class AttachSpawnConfig extends SpawnConfig {
   get type() {
     return "midas-gdb";
   }
+
+  spawnType() { return "attach"; }
+}
+
+class RemoteLaunchSpawnConfig extends SpawnConfig {
+  port;
+  address;
+
+  constructor(launchJson) {
+    super(launchJson);
+    const [address, port] = launchJson.remoteTarget.address.split(":");
+    if(!Number.isSafeInteger(parseInt(port))) {
+      throw new Error(`Could not parse port number from ${port} (parsed from remote target setting: ${JSON.stringify(launchJson.remoteTarget)})`);
+    }
+    this.port = parseInt(port);
+    this.address = address;
+    this.substitutePath = launchJson["remoteTarget"]["substitute-path"];
+  }
+  typeSpecificParameters() {
+    const commandList = new CommandList("Remote settings");
+    commandList.addOption("-l", "10000");
+    commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
+    commandList.addImmediateCommand("set debuginfod enabled on");
+    commandList.addImmediateCommand("set tcp connect-timeout 180");
+    commandList.addCommand("set sysroot /");
+    commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
+
+    return [...commandList.build()];
+  }
+
+  spawnType() { return "remote"; }
 }
 
 class RRSpawnConfig extends SpawnConfig {
@@ -136,17 +168,15 @@ class RRSpawnConfig extends SpawnConfig {
   }
 
   typeSpecificParameters() {
+    const commandList = new CommandList("RR Settings");
+    commandList.addImmediateCommand("set tcp connect-timeout 180");
+    commandList.addImmediateCommand("set non-stop off");
+    commandList.addCommand("set sysroot /");
+    commandList.addCommand(`target extended-remote ${this.serverAddress}`);
     return [
       "-l",
       "10000",
-      "-iex",
-      "set tcp connect-timeout 180", // if rr is taking time to start up, we want to wait. We set it to 3 minutes.
-      "-iex",
-      "set non-stop off",
-      "-ex",
-      "set sysroot /",
-      `-ex`,
-      `target extended-remote ${this.serverAddress}`,
+      ...commandList.build(),
       this.binary,
     ];
   }
@@ -158,6 +188,8 @@ class RRSpawnConfig extends SpawnConfig {
   isRRSession() {
     return true;
   }
+
+  spawnType() { return "rr"; }
 }
 
 /**
@@ -176,6 +208,7 @@ module.exports = {
   SpawnConfig,
   LaunchSpawnConfig,
   AttachSpawnConfig,
+  RemoteAttachSpawnConfig: RemoteLaunchSpawnConfig,
   RRSpawnConfig,
   // spawn command
   spawnGdb,
