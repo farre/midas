@@ -6,4 +6,4 @@ add_executable(simple_input ./src/main.cpp ./src/todo.cpp)
 target_include_directories(simple_input PUBLIC ../include)
 target_link_libraries(simple_input pthread)
 
-target_compile_options(simple_input PUBLIC $<$<CONFIG:DEBUG>:${DWARF5_64}>)
+target_compile_options(simple_input PUBLIC $<$<CONFIG:DEBUG>:${DEBUG_SETTINGS}>)
