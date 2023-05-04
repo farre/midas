@@ -271,6 +271,32 @@
                     "description": "End debug session if external console exits"
                   }
                 }
+              },
+              "remoteTarget": {
+                "type": "object",
+                "description": "Launch session on a running remote target",
+                "default": {
+                  "address": null,
+                  "substitute-path": {
+                    "local": "/",
+                    "remote": "/"
+                  }
+                },
+                "properties": {
+                  "description": "string",
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the remote target to connect to",
+                    "default": null
+                  },
+                  "substitute-path": {
+                    "type": "object",
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
+                    "default": { "local": "/", "remote": "/" },
+                    "required": [ "local", "remote" ]
+                  }
+                },
+                "required": [ "address", "substitute-path" ]
               }
             }
           },
@@ -325,6 +351,32 @@
               "attachOnFork": {
                 "type": "boolean",
                 "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
+              },
+              "remoteTarget": {
+                "type": "object",
+                "description": "Launch session on a running remote target",
+                "default": {
+                  "address": null,
+                  "substitute-path": {
+                    "local": "/",
+                    "remote": "/"
+                  }
+                },
+                "properties": {
+                  "description": "string",
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the remote target to connect to",
+                    "default": null
+                  },
+                  "substitute-path": {
+                    "type": "object",
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
+                    "default": { "local": "/", "remote": "/" },
+                    "required": [ "local", "remote" ]
+                  }
+                },
+                "required": [ "address", "substitute-path" ]
               }
             }
           }

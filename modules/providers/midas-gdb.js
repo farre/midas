@@ -3,9 +3,9 @@ const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
-const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
+const { LaunchSpawnConfig, AttachSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 
-const initializer = (config) => {
+const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
     config.stopOnEntry = false;
   }
@@ -16,13 +16,16 @@ const initializer = (config) => {
     config.allStopMode = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = getAPI().resolve_tool_path("gdb");
+    config.gdbPath = await getAPI().resolve_tool_path("gdb");
     if(config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };
     }
   }
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
+  }
+  if(!config.hasOwnProperty("remoteTarget")) {
+    config.remoteTarget = null;
   }
   if (!config.hasOwnProperty("externalConsole")) {
     config.externalConsole = null;
@@ -38,7 +41,7 @@ const initializer = (config) => {
       }
     }
   }
-  if (!config.program) {
+  if (!config.program && config.remoteTarget == null) {
     throw new Error("Inferior to debug was not set in configuration (program field in launch.json)");
   }
 };
@@ -70,6 +73,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
           vscode.window.showErrorMessage(`Gdb could not be found on your system`);
           break;
         default:
+          console.log(`Unexpected exception: ${err}`);
           break;
       }
       return null;
@@ -111,6 +115,9 @@ class DebugAdapterFactory {
     if (config.request == "attach") {
       return new AttachSpawnConfig(config);
     } else if (config.request == "launch") {
+      if(config.remoteTarget != null) {
+        return new RemoteAttachSpawnConfig(config);
+      }
       return new LaunchSpawnConfig(config);
     } else {
       throw new Error("Unknown request type");

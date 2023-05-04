@@ -1,3 +1,4 @@
+const { ImmediateExecuteCommand } = require("./gdbCommand");
 const { getExtensionPathOf } = require("./utils/sysutils");
 
 const DebugLogging = {
@@ -55,7 +56,10 @@ class MidasRunMode {
   getCommandParameters() {
     const traceparam = this.#trace ? "True" : "False";
     const debugparam = this.#debug ? "True" : "False";
-    return ["-iex", `py config.setTrace = ${traceparam}`, "-iex", `py config.isDevelopmentBuild = ${debugparam}`];
+    return  [
+      new ImmediateExecuteCommand(`py config.setTrace = ${traceparam}`),
+      new ImmediateExecuteCommand(`py config.isDevelopmentBuild = ${debugparam}`)
+    ];
   }
 
   async reloadStdLib(gdb) {
