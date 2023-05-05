@@ -592,7 +592,7 @@
             "trace": "Off",
             "cwd": "${workspaceFolder}",
             "serverAddress": "localhost:50505",
-            "setupCommands": []
+            "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
           }
         ],
         "configurationSnippets": [
@@ -608,7 +608,7 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "setupCommands": []
+              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
             }
           }
         ]
