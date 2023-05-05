@@ -604,10 +604,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         response.success = false;
         this.sendResponse(response);
       }
+      this.sendEvent(new DebugAdapter.InvalidatedEvent(["all"]));
     }
-    this.sendEvent(new DebugAdapter.InvalidatedEvent(["all"]));
   }
-
   stepInTargetsRequest(...args) {
     return this.virtualDispatch(...args);
   }
