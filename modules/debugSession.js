@@ -27,10 +27,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   useInvalidetedEvent;
   /** @type {import("./terminalInterface").TerminalInterface} */
   #terminal;
-
   fnBkptChain = Promise.resolve();
 
-  #buildSettings;
+  // loggers of Name -> Fn
+  #loggers = new Map();
+  #defaultLogger = (output) => console.log(output);
 
   /**
    * @type {import("./spawn").SpawnConfig}
@@ -47,9 +48,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
+    this.setupLogging(spawnConfig.traceSettings.debug);
 
     this.on("error", (event) => {
-      console.log(event.body);
+      this.log("Midas", event.body);
     });
     this.#checkpointsUI = checkpointsUI;
     this.#terminal = terminal;
@@ -60,6 +62,33 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
    */
   get buildSettings() {
     return this.#spawnConfig.traceSettings;
+  }
+
+  setupLogging(debug) {
+    const midasOutputChannel = vscode.window.createOutputChannel("Midas");
+    this.midasOutputChannel = midasOutputChannel;
+
+    this.#loggers.set("Midas", (output) => {
+      midasOutputChannel.appendLine(output);
+    });
+
+
+    if(debug) {
+      const debugOutputChannel = vscode.window.createOutputChannel("Midas-Debug");
+      this.debugOutputChannel = debugOutputChannel;
+      this.#loggers.set("debug", (output) => {
+        debugOutputChannel.appendLine(output);
+      });
+    }
+  }
+
+  log(where, output) {
+    const logger = this.#loggers.get(where);
+    if(logger == undefined) {
+      this.#defaultLogger(output);
+    } else {
+      logger(output);
+    }
   }
 
   /**

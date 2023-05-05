@@ -85,13 +85,12 @@ function create_ipc_server(pkgs, listeners) {
  * @param {string} repo_type - whether we're using apt or dnf
  * @param {string[]} pkgs - list of depedencies to install
  * @param {boolean} cancellable - Whether or not the install operation can be cancelled
+ * @param {import("vscode").OutputChannel} logger
  */
-function run_install(python, repo_type, pkgs, cancellable) {
+function run_install(python, repo_type, pkgs, cancellable, logger) {
   return new Promise(async (iresolve, ireject) => {
     // if some server logic fails, we don't want to actually run the python code
     let error_or_finished = false;
-    let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
-    logger.show();
     // eslint-disable-next-line max-len
     let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
     // f*** me extension development for VSCode is buggy. I don't want to have to do this.
@@ -125,7 +124,7 @@ function run_install(python, repo_type, pkgs, cancellable) {
           require("fs").unlinkSync(comms_address);
         }
       } catch (err) {
-        console.log(`Exception: ${err}`);
+        logger.appendLine(`Exception: ${err}`);
       }
     };
     server.on("error", (err) => {
@@ -147,7 +146,7 @@ function run_install(python, repo_type, pkgs, cancellable) {
     });
     // eslint-disable-next-line no-unused-vars
     listeners.download.on("start", async ({ packages, bytes }) => {
-      console.log(`Download started for ${packages}`);
+      logger.appendLine(`Download started for ${packages}`);
       remaining_download = packages;
       await vscode.window.withProgress(
         {
@@ -164,9 +163,9 @@ function run_install(python, repo_type, pkgs, cancellable) {
             });
 
             listeners.download.on("cancel", () => {
-              console.log(`Download cancelled`);
+              logger.appendLine(`Download cancelled`);
               server.close((err) => {
-                console.log("server closed.");
+                logger.appendLine("server closed.");
                 if (err) {
                   logger.appendLine("Could not close InstallingManager connection.");
                 }
@@ -195,7 +194,7 @@ function run_install(python, repo_type, pkgs, cancellable) {
     });
 
     listeners.install.on("start", async () => {
-      console.log(`Install started`);
+      logger.appendLine(`Install started`);
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -205,7 +204,7 @@ function run_install(python, repo_type, pkgs, cancellable) {
         (reporter, canceller) => {
           return new Promise((resolve) => {
             listeners.install.on("finish", () => {
-              console.log(`Install finished`);
+              logger.appendLine(`Install finished`);
               server.close((err) => {
                 if (err) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
@@ -219,7 +218,7 @@ function run_install(python, repo_type, pkgs, cancellable) {
             });
 
             listeners.install.on("cancel", () => {
-              console.log(`Install cancelled`);
+              logger.appendLine(`Install cancelled`);
               server.close((err) => {
                 if (err) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
