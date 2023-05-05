@@ -154,6 +154,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     super.configurationDoneRequest(response, args);
     // notify the launchRequest that configuration has finished
     this.configIsDone.notify();
+    this.sendResponse(response);
   }
 
   // eslint-disable-next-line no-unused-vars
