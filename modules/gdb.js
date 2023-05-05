@@ -189,12 +189,14 @@ class GDB extends GDBMixin(GDBBase) {
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
     await this.execCLI("set breakpoint pending on");
+    await this.config.performGdbSetup(this);
   }
 
   /**
    * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args
+   * @param { import("./spawn").SpawnConfig } config
    */
-  async start(args) {
+  async start(args, config) {
     const { program, stopOnEntry, allStopMode, externalConsole } = args;
     if (externalConsole != null) {
       const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
@@ -233,6 +235,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (this.#target.getSpawnConfig().attachOnFork) {
       await this.attachOnFork();
     }
+    config.performGdbSetup(this);
     if (stopOnEntry) {
       await this.execMI("-exec-run --start");
     } else {
@@ -1112,6 +1115,15 @@ class GDB extends GDBMixin(GDBBase) {
     let item = this.threadExceptionInfos.get(threadId);
     this.threadExceptionInfos.delete(threadId);
     return item;
+  }
+
+  /**
+   * 
+   * @returns { Promise<{ pid: number, user: string, label: string }[]> }
+   */
+  async getOsProcesses() {
+    const { processes } = await this.execCMD("get-all-pids");
+    return processes;
   }
 }
 

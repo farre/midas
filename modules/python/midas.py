@@ -74,6 +74,9 @@ resetRequestCommand = reset_request.ResetStateRequest(executionContexts, config.
 import data_breakpoint_info_request
 dataBreakpointInfoRequest = data_breakpoint_info_request.DataBreakpointInfoRequest(executionContexts)
 
+import get_os_pids
+getPids = get_os_pids.GetAllPids()
+
 import rr_commands
 
 setCheckpointRequestCommand = rr_commands.SetCheckpointRequest()

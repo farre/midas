@@ -6,12 +6,12 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Run Extension -- non-threads",
+			"name": "Test extension in cppworkspace",
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"${workspaceFolder}/test/cppworkspace/test"
+				"${workspaceFolder}/test/cppworkspace/"
 			]
 		},
 		{
@@ -39,15 +39,6 @@
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
 				"/home/cx/dev/opensource/mozilla-central"
-			]
-		},
-		{
-			"name": "Debug extension - test attach",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"${workspaceFolder}/test/cppworkspace/attach"
 			]
 		},
 		{
