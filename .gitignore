@@ -26,3 +26,4 @@ exception-logger.log
 .vscode/launch.json
 test/cppworkspace/rr/.vscode/
 rr-*
+test/cppworkspace/bin/*

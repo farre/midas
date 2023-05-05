@@ -47,7 +47,7 @@ class SpawnConfig {
    */
   constructor(launchJson) {
     this.path = launchJson.gdbPath;
-    const cwd = launchJson.cwd ? launchJson.cwd : vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const cwd = launchJson.cwd ? launchJson.cwd : null;
     this.cwd = cwd;
     this.options = launchJson.gdbOptions ?? [];
     this.setupCommands = launchJson.setupCommands;
@@ -60,8 +60,10 @@ class SpawnConfig {
   build() {
     const commandList = new CommandList("General Settings");
     commandList.addOption("-i", "mi3");
-    commandList.addOption("--cd", this.cwd);
-    commandList.addCommand(`set cwd ${this.cwd}`);
+    if(this.cwd != null) {
+      commandList.addOption("--cd", this.cwd);
+      commandList.addCommand(`set cwd ${this.cwd}`);
+    }
     commandList.addImmediateCommand("set mi-async on");
     return {
       path: this.path,
@@ -87,6 +89,12 @@ class SpawnConfig {
   disposeOnExit() {
     return (this.externalConsole ?? { closeTerminalOnEndOfSession: true }).closeTerminalOnEndOfSession;
   }
+
+  /**
+   * Performs additional gdb setup - "abstract" method
+   * @param {import("./gdb").GDB} gdb
+   */
+  async performGdbSetup(gdb) { }
 }
 
 class LaunchSpawnConfig extends SpawnConfig {
@@ -137,27 +145,82 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
 
   constructor(launchJson) {
     super(launchJson);
-    const [address, port] = launchJson.remoteTarget.address.split(":");
+    const [address, port] = launchJson.remoteTargetConfig.address.split(":");
     if(!Number.isSafeInteger(parseInt(port))) {
       throw new Error(`Could not parse port number from ${port} (parsed from remote target setting: ${JSON.stringify(launchJson.remoteTarget)})`);
     }
     this.port = parseInt(port);
     this.address = address;
-    this.substitutePath = launchJson["remoteTarget"]["substitute-path"];
+    this.substitutePath = launchJson["remoteTargetConfig"]["substitute-path"];
+    this.program = launchJson["program"];
   }
+
   typeSpecificParameters() {
     const commandList = new CommandList("Remote settings");
     commandList.addOption("-l", "10000");
     commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
     commandList.addImmediateCommand("set debuginfod enabled on");
     commandList.addImmediateCommand("set tcp connect-timeout 180");
-    commandList.addCommand("set sysroot /");
-    commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
-
+    if(this.substitutePath.remote != null && this.substitutePath.local != null) {
+      commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
+    }
     return [...commandList.build()];
   }
 
-  spawnType() { return "remote"; }
+  spawnType() { return "remote-launch"; }
+
+  /**
+   *
+   * @param {import("./gdb").GDB} gdb
+   */
+  async performGdbSetup(gdb) {
+    if(this.program != null && this.program != undefined) {
+      gdb.execCLI(`set remote exec-file ${this.program}`);
+    }
+  }
+}
+
+class RemoteAttachSpawnConfig extends SpawnConfig {
+  port;
+  address;
+
+  constructor(launchJson) {
+    super(launchJson);
+    const [address, port] = launchJson.remoteTargetConfig.address.split(":");
+    if(!Number.isSafeInteger(parseInt(port))) {
+      throw new Error(`Could not parse port number from ${port} (parsed from remote target setting: ${JSON.stringify(launchJson.remoteTarget)})`);
+    }
+    this.port = parseInt(port);
+    this.address = address;
+    this.substitutePath = launchJson["remoteTargetConfig"]["substitute-path"];
+  }
+
+  typeSpecificParameters() {
+    const commandList = new CommandList("Remote settings");
+    commandList.addOption("-l", "10000");
+    commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
+    commandList.addImmediateCommand("set debuginfod enabled on");
+    commandList.addImmediateCommand("set tcp connect-timeout 180");
+    if(this.substitutePath.remote != null && this.substitutePath.local != null) {
+      commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
+    }
+    return [...commandList.build()];
+  }
+
+  spawnType() { return "remote-attach"; }
+
+  /**
+   *
+   * @param {import("./gdb").GDB} gdb
+   */
+  async performGdbSetup(gdb) {
+    const choice = await vscode.window.showQuickPick(gdb.getOsProcesses());
+    if(choice == null || choice == undefined) {
+      throw new Error("Did not pick a process to attach to.")
+    }
+    const cmd = `attach ${choice.pid}`;
+    gdb.execCLI(cmd);
+  }
 }
 
 class RRSpawnConfig extends SpawnConfig {
@@ -171,7 +234,6 @@ class RRSpawnConfig extends SpawnConfig {
     const commandList = new CommandList("RR Settings");
     commandList.addImmediateCommand("set tcp connect-timeout 180");
     commandList.addImmediateCommand("set non-stop off");
-    commandList.addCommand("set sysroot /");
     commandList.addCommand(`target extended-remote ${this.serverAddress}`);
     return [
       "-l",
@@ -208,7 +270,8 @@ module.exports = {
   SpawnConfig,
   LaunchSpawnConfig,
   AttachSpawnConfig,
-  RemoteAttachSpawnConfig: RemoteLaunchSpawnConfig,
+  RemoteLaunchSpawnConfig,
+  RemoteAttachSpawnConfig,
   RRSpawnConfig,
   // spawn command
   spawnGdb,

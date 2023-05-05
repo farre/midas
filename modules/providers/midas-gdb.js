@@ -3,7 +3,7 @@ const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
-const { LaunchSpawnConfig, AttachSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
+const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 
 const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -24,8 +24,8 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-  if(!config.hasOwnProperty("remoteTarget")) {
-    config.remoteTarget = null;
+  if(!config.hasOwnProperty("remoteTargetConfig")) {
+    config.remoteTargetConfig = null;
   }
   if (!config.hasOwnProperty("externalConsole")) {
     config.externalConsole = null;
@@ -41,8 +41,8 @@ const initializer = async (config) => {
       }
     }
   }
-  if (!config.program && config.remoteTarget == null) {
-    throw new Error("Inferior to debug was not set in configuration (program field in launch.json)");
+  if (!config.program && config.remoteTargetConfig == null) {
+    throw new Error("Program or remoteTargetConfig was not set. One of these fields has to be set in launch.json");
   }
 };
 
@@ -79,7 +79,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
       return null;
     }
 
-    if (config.request == "attach") {
+    if (config.request == "attach" && config.remoteTargetConfig == null) {
       if (!config.pid) {
         const pid = await getPid();
         if (isNothing(pid)) {
@@ -112,15 +112,20 @@ class DebugAdapterFactory {
   }
 
   spawnConfig(config) {
-    if (config.request == "attach") {
-      return new AttachSpawnConfig(config);
-    } else if (config.request == "launch") {
-      if(config.remoteTarget != null) {
-        return new RemoteAttachSpawnConfig(config);
-      }
-      return new LaunchSpawnConfig(config);
-    } else {
-      throw new Error("Unknown request type");
+    switch(config.request) {
+      case "attach":
+        if(config.remoteTargetConfig != null) {
+          return new RemoteAttachSpawnConfig(config);
+        } else {
+          return new AttachSpawnConfig(config);
+        }
+      case "launch":
+        if(config.remoteTargetConfig != null) {
+          return new RemoteLaunchSpawnConfig(config);
+        }
+        return new LaunchSpawnConfig(config);
+      default:
+        throw new Error("Unknown request type");
     }
   }
 }

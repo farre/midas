@@ -32,6 +32,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   #buildSettings;
 
+  /**
+   * @type {import("./spawn").SpawnConfig}
+   */
   #spawnConfig;
   /** @type {import("./ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
   #checkpointsUI;
@@ -164,14 +167,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
     if (args.type == "midas-rr") {
       vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
-
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
       await this.gdb.startWithRR(args.program, args.stopOnEntry);
     } else {
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
-      await this.gdb.start(args);
+      await this.gdb.start(args, this.#spawnConfig);
     }
   }
 
@@ -201,9 +203,15 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       this.sendErrorResponse(response, Message);
       return;
     }
-    this.gdb = new GDB(this, this.#spawnConfig);
+    this.gdb = new GDB(this, this.#spawnConfig)
     this.gdb.setupEventHandlers(false);
-    await this.gdb.attach_start(args.program);
+    const program = args.hasOwnProperty("program") ? args.program : "";
+    try {
+      await this.gdb.attach_start(program);
+      this.sendResponse(response);
+    } catch(err) {
+      // this.sendEvent(new DebugAdapter.TerminatedEvent());
+    }
     this.sendResponse(response);
   }
 
@@ -567,6 +575,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         this.sendResponse(response);
       }
     }
+    this.sendEvent(new DebugAdapter.InvalidatedEvent(["all"]));
   }
 
   stepInTargetsRequest(...args) {

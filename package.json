@@ -176,9 +176,6 @@
         ],
         "configurationAttributes": {
           "launch": {
-            "required": [
-              "program"
-            ],
             "properties": {
               "program": {
                 "type": "string",
@@ -272,14 +269,14 @@
                   }
                 }
               },
-              "remoteTarget": {
+              "remoteTargetConfig": {
                 "type": "object",
                 "description": "Launch session on a running remote target",
                 "default": {
                   "address": null,
                   "substitute-path": {
-                    "local": "/",
-                    "remote": "/"
+                    "local": null,
+                    "remote": null
                   }
                 },
                 "properties": {
@@ -292,8 +289,7 @@
                   "substitute-path": {
                     "type": "object",
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
-                    "default": { "local": "/", "remote": "/" },
-                    "required": [ "local", "remote" ]
+                    "default": { "local": null, "remote": null }
                   }
                 },
                 "required": [ "address", "substitute-path" ]
@@ -352,14 +348,14 @@
                 "type": "boolean",
                 "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
               },
-              "remoteTarget": {
+              "remoteTargetConfig": {
                 "type": "object",
                 "description": "Launch session on a running remote target",
                 "default": {
                   "address": null,
                   "substitute-path": {
-                    "local": "/",
-                    "remote": "/"
+                    "local": null,
+                    "remote": null
                   }
                 },
                 "properties": {
@@ -371,9 +367,8 @@
                   },
                   "substitute-path": {
                     "type": "object",
-                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
-                    "default": { "local": "/", "remote": "/" },
-                    "required": [ "local", "remote" ]
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute as GDB will find the source files on your local machine.",
+                    "default": { "local": null, "remote": null }
                   }
                 },
                 "required": [ "address", "substitute-path" ]
@@ -431,13 +426,56 @@
               "type": "midas-gdb",
               "request": "attach",
               "name": "${1:Attach to process}",
-              "program": "^\"\\${workspaceFolder}\"",
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${4:Off}",
               "pid": "^\"\\${command:getPid}\"",
               "gdbPath": "${5:gdb}",
               "setupCommands": [],
               "attachOnFork": false
+            }
+          },
+          {
+            "name": "midas-gdb",
+            "label": "Midas GDB: Connect to remote session & Attach to process",
+            "description": "Attach GDB to a running process",
+            "body": {
+              "type": "midas-gdb",
+              "request": "attach",
+              "name": "Connect and run remote target",
+              "cwd": "^\"\\${workspaceFolder}\"",
+              "trace": "${4:Off}",
+              "gdbPath": "${5:gdb}",
+              "setupCommands": [],
+              "attachOnFork": false,
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
+            }
+          },
+          {
+            "name": "midas-gdb",
+            "label": "Midas GDB: Launch in remote session",
+            "description": "Attach GDB to Target and launch <program>",
+            "body": {
+              "type": "midas-gdb",
+              "request": "launch",
+              "program": "/path/in/remote/target/to/program",
+              "name": "Connect and run remote target",
+              "trace": "${4:Off}",
+              "gdbPath": "${5:gdb}",
+              "setupCommands": [],
+              "attachOnFork": false,
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
             }
           }
         ],
