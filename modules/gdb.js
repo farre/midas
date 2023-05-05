@@ -3,7 +3,7 @@
 const gdbjs = require("gdb-js");
 require("regenerator-runtime");
 const vscode = require("vscode");
-const { Source, ContinuedEvent } = require("@vscode/debugadapter");
+const { Source, ContinuedEvent, OutputEvent } = require("@vscode/debugadapter");
 const path = require("path");
 const {
   InitializedEvent,
@@ -237,7 +237,13 @@ class GDB extends GDBMixin(GDBBase) {
     }
     config.performGdbSetup(this);
     if (stopOnEntry) {
-      await this.execMI("-exec-run --start");
+      try {
+        await this.execMI("-exec-run --start");
+      } catch(ex) {
+        this.debugConsole(`Couldn't set breakpoint at main; ${ex}. Setting pending breakpoint`);
+        this.execCLI("b main");
+        this.run();
+      }
     } else {
       await this.run();
     }
@@ -256,6 +262,15 @@ class GDB extends GDBMixin(GDBBase) {
         await this.run();
       }
     }
+  }
+
+  /**
+   * Send output to the Session's debug console
+   * @param {string} output - the string contents to be displayed in the Debug Console of user
+   */
+  debugConsole(output) {
+    const evt = new OutputEvent(output, "console");
+    this.sendEvent(evt);
   }
 
   sendEvent(event) {
