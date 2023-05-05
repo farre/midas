@@ -2,7 +2,7 @@ const vscode = require("vscode");
 const { MidasRunMode } = require("./buildMode");
 const { spawn } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
-const { ImmediateExecuteCommand, CommandList } = require("./gdbCommand");
+const { ImmediateExecuteCommand, CommandList, ExecuteCommand } = require("./gdbCommand");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -57,7 +57,12 @@ class SpawnConfig {
     this.externalConsole = launchJson.externalConsole;
   }
 
-  build() {
+  /**
+   * 
+   * @param { import("./debugSession").MidasDebugSession } session
+   * @returns
+   */
+  build(session) {
     const commandList = new CommandList("General Settings");
     commandList.addOption("-i", "mi3");
     if(this.cwd != null) {
@@ -65,15 +70,17 @@ class SpawnConfig {
       commandList.addCommand(`set cwd ${this.cwd}`);
     }
     commandList.addImmediateCommand("set mi-async on");
+
+    const setupCommands = new CommandList("Setup Commands", this.setupCommands.map(cmd => new ExecuteCommand(cmd)));
     return {
       path: this.path,
       parameters: [
-        ...commandList.build(),
+        ...commandList.build(session),
         ...this.options,
-        ...midas_setup_settings(this.traceSettings).build(),
-        ...this.setupCommands.flatMap((cmd) => ["-iex", `${cmd}`]),
+        ...midas_setup_settings(this.traceSettings).build(session),
+        ...setupCommands.build(session),
         // @ts-ignore - provided by interface implementation
-        ...this.typeSpecificParameters(),
+        ...this.typeSpecificParameters(session),
       ].flatMap((e) => e),
     };
   }
@@ -91,9 +98,9 @@ class SpawnConfig {
   }
 
   /**
-   * Performs additional gdb setup - "abstract" method
    * @param {import("./gdb").GDB} gdb
    */
+  // eslint-disable-next-line no-unused-vars
   async performGdbSetup(gdb) { }
 }
 
@@ -109,7 +116,8 @@ class LaunchSpawnConfig extends SpawnConfig {
     this.inferiorArgs = launchJson.args ?? [];
   }
 
-  typeSpecificParameters() {
+  // eslint-disable-next-line no-unused-vars
+  typeSpecificParameters(session) {
     return ["--args", this.binary, ...this.inferiorArgs].flatMap((e) => e);
   }
 
@@ -155,7 +163,7 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
     this.program = launchJson["program"];
   }
 
-  typeSpecificParameters() {
+  typeSpecificParameters(session) {
     const commandList = new CommandList("Remote settings");
     commandList.addOption("-l", "10000");
     commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
@@ -164,7 +172,7 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
     if(this.substitutePath.remote != null && this.substitutePath.local != null) {
       commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
     }
-    return [...commandList.build()];
+    return [...commandList.build(session)];
   }
 
   spawnType() { return "remote-launch"; }
@@ -195,7 +203,7 @@ class RemoteAttachSpawnConfig extends SpawnConfig {
     this.substitutePath = launchJson["remoteTargetConfig"]["substitute-path"];
   }
 
-  typeSpecificParameters() {
+  typeSpecificParameters(session) {
     const commandList = new CommandList("Remote settings");
     commandList.addOption("-l", "10000");
     commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
@@ -204,7 +212,7 @@ class RemoteAttachSpawnConfig extends SpawnConfig {
     if(this.substitutePath.remote != null && this.substitutePath.local != null) {
       commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
     }
-    return [...commandList.build()];
+    return [...commandList.build(session)];
   }
 
   spawnType() { return "remote-attach"; }
@@ -230,7 +238,7 @@ class RRSpawnConfig extends SpawnConfig {
     this.serverAddress = launchJson.serverAddress;
   }
 
-  typeSpecificParameters() {
+  typeSpecificParameters(session) {
     const commandList = new CommandList("RR Settings");
     commandList.addImmediateCommand("set tcp connect-timeout 180");
     commandList.addImmediateCommand("set non-stop off");
@@ -238,7 +246,7 @@ class RRSpawnConfig extends SpawnConfig {
     return [
       "-l",
       "10000",
-      ...commandList.build(),
+      ...commandList.build(session),
       this.binary,
     ];
   }
@@ -257,10 +265,11 @@ class RRSpawnConfig extends SpawnConfig {
 /**
  * Spawns a GDB instance with the settings provided by `spawnConfig`
  * @param { SpawnConfig } spawnConfig
+ * @param { import("./debugSession").MidasDebugSession } session
  * @return { any } returns a NodeJS Child Process.
  */
-function spawnGdb(spawnConfig) {
-  const { path, parameters } = spawnConfig.build();
+function spawnGdb(spawnConfig, session) {
+  const { path, parameters } = spawnConfig.build(session);
   let gdb = spawn(path, parameters);
   return gdb;
 }

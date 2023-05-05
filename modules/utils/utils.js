@@ -1,3 +1,4 @@
+// @ts-check
 "use strict";
 
 const { exec, spawn: _spawn, execSync } = require("child_process");
@@ -41,7 +42,9 @@ class Tool {
   /** @returns {{ variant: string, err: import("child_process").ExecException }[]} */
   errors() { return this.error; }
 
-  errorMessage() { return `could not find any of '${this.error.map(v => v.variant).join(", ")}' on $PATH. One of these are required to be installed on your system` }
+  errorMessage() {
+    return `could not find any of '${this.error.map(v => v.variant).join(", ")}' on $PATH. One of these are required to be installed on your system`
+  }
 }
 
 /**
@@ -508,15 +511,15 @@ const UBUNTU_DEPS =
     " "
   );
 
-async function guessInstaller(python) {
+async function guessInstaller(python, logger) {
   const verify_py_imports = async (args) => {
     return new Promise(resolve => {
       _spawn(python, args).on("exit", (code) => {
         if(code == 0) {
-          console.log(`${python} ${args.join(" ")} succeeded!`);
+          logger.appendLine(`${python} ${args.join(" ")} succeeded!`);
           resolve(true);
         } else {
-          console.log(`${python} ${args.join(" ")} failed!`);
+          logger.appendLine(`${python} ${args.join(" ")} failed!`);
           resolve(false);
         }
       });
@@ -549,14 +552,13 @@ async function guessInstaller(python) {
   throw { type: InstallerExceptions.PackageManagerNotFound, message: "Could not resolve what package manager is used on your system"};
 }
 
-async function installFileUsingManager(args) {
+async function installFileUsingManager(args, logger) {
   let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
   // f*** me extension development for VSCode is buggy. I don't want to have to do this.
   if (!pass) {
     pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
   }
   const pkg_manager = await sudo(args, pass);
-  const logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
   logger.show();
   pkg_manager.stdout.on("data", (data) => {
     logger.append(data.toString());
@@ -579,25 +581,25 @@ async function installFileUsingManager(args) {
   });
 }
 
-async function installRRFromRepository({python}) {
+async function installRRFromRepository({python}, logger) {
   // we can ignore deps. dpkg / apt will do that for us here.
   // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps, cancellable } = await guessInstaller(python);
-  let result = await run_install(python, pkg_manager, ["rr"], cancellable);
+  const { name, pkg_manager, deps, cancellable } = await guessInstaller(python, logger);
+  let result = await run_install(python, pkg_manager, ["rr"], cancellable, logger);
   getAPI().write_rr({ path: "rr", version: "", managed: false});
   vscode.window.showInformationMessage(result);
 }
 
-async function installRRFromDownload({python}) {
+async function installRRFromDownload({python}, logger) {
   // eslint-disable-next-line no-unused-vars
-  const { name, pkg_manager, deps } = await guessInstaller(python);
+  const { name, pkg_manager, deps } = await guessInstaller(python, logger);
   const uname = await which("uname");
   const arch = execSync(`${uname} -m`).toString().trim();
   if (name == "apt") {
     const { version, url: url_without_fileext } = await resolveLatestVersion(arch);
     const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
     if (status == "success") {
-      return await installFileUsingManager(["apt-get", "install", "-y", path])
+      return await installFileUsingManager(["apt-get", "install", "-y", path], logger)
         .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
     }
   } else if (name == "dnf") {
@@ -617,14 +619,15 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   );
 }
 
-async function installRRFromSource({ python, cmake, unzip }) {
-  const { pkg_manager, deps } = await guessInstaller(python);
+async function installRRFromSource(requiredTools, logger) {
+  const { python, cmake, unzip } = requiredTools;
+  const { pkg_manager, deps } = await guessInstaller(python, logger);
   const { path, status } = await http_download(
     "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
     "rr-master.zip"
   );
   if (status == "success") {
-    let result = await run_install(python, pkg_manager, deps, true);
+    let result = await run_install(python, pkg_manager, deps, true, logger);
     vscode.window.showInformationMessage(`${result} dependencies`);
     const { version } = await resolveLatestVersion("we-don't-care-about-arch-here");
     const has_ninja = !strEmpty((await which("ninja")));
@@ -633,7 +636,6 @@ async function installRRFromSource({ python, cmake, unzip }) {
       (progress, token) => {
         return new Promise((progress_resolve, reject) => {
           const build_path = getAPI().get_storage_path_of(`rr-${version}`);
-          const logger = vscode.window.createOutputChannel("Building RR");
           logger.show();
           logger.appendLine(`creating dir ${build_path}`);
           fs.mkdirSync(build_path);
@@ -758,7 +760,9 @@ async function getRR() {
           args[tool] = verifyPrerequisites[tool].path;
         }
         // @ts-ignore
-        let res = await result.method(args);
+        let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
+        logger.show();
+        let res = await result.method(args, logger);
         if(res)
           vscode.window.showInformationMessage(res);
       } catch(err) {

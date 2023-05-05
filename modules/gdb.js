@@ -69,12 +69,6 @@ const { CustomRequests } = require("./debugSessionCustomRequests");
 const { getExtensionPathOf } = require("./utils/sysutils");
 let trace = false;
 let LOG_ID = 0;
-function log(location, payload) {
-  if (!trace) {
-    return;
-  }
-  console.log(`[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
-}
 
 /** @typedef { { addr: string, disp: string, enabled: string, file: string, fullname: string, func: string, line: string, number: string, "original-location": string, "thread-groups": string[], times: string, type: string } } GDBBreakpoint */
 /**
@@ -126,14 +120,13 @@ class GDB extends GDBMixin(GDBBase) {
   threadExceptionInfos = new Map();
 
   /**
-   *
-   * @param {*} target
-   * @param {import("./spawn").SpawnConfig} config
+   * @param { import("./debugSession").MidasDebugSession } target
+   * @param { import("./spawn").SpawnConfig } config
    */
   constructor(target, config) {
     super(
       (() => {
-        const gdb = spawnGdb(config);
+        const gdb = spawnGdb(config, target);
         gdbProcess = gdb;
         return gdb;
       })()
@@ -172,6 +165,8 @@ class GDB extends GDBMixin(GDBBase) {
     }
     // re-define restart according to how rr does it.
     this.execCLI(`source ${getExtensionPathOf("/modules/.gdb_rrinit")}`);
+    const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
+    await this.setPrintOptions(printOptions);
     if (stopOnEntry) {
       // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
       await this.execMI("-exec-run --start");
@@ -275,7 +270,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   sendEvent(event) {
     if (trace) {
-      console.log(`Sending event ${JSON.stringify(event)}`);
+      this.#target.log("debug", `Sending event ${JSON.stringify(event)}`)
     }
     this.#target.sendEvent(event);
   }
@@ -516,7 +511,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onStatus(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   #onSignalNotifyVsCode(signalPayload) {
@@ -587,7 +582,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onExec(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
     if (this.config.isRRSession()) {
       if (payload.data.reason == "signal-received") {
         this.#onSignal(payload);
@@ -630,7 +625,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onStopped(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
     vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
     let reason;
     try {
@@ -687,7 +682,7 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onRunning(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
     this.userRequestedInterrupt = false;
   }
 
@@ -711,15 +706,15 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   #onThreadGroupStarted(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   #onThreadGroupExited(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   #onNewObjfile(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   // Raw GDB handlers for #onNotify
@@ -761,7 +756,7 @@ class GDB extends GDBMixin(GDBBase) {
    *           core: number? }} payload
    */
   #onNotifyStopped(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -770,7 +765,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupAdded(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -779,7 +774,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id: number}} payload
    */
   #onNotifyThreadGroupRemoved(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -788,7 +783,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id:number, pid: number}} payload
    */
   #onNotifyThreadGroupStarted(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -797,7 +792,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id: number, exitCode: number}} payload
    */
   #onNotifyThreadGroupExited(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -816,7 +811,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id: number, groupId: number}} payload
    */
   #onNotifyThreadExited(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -825,7 +820,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{id: number}} payload
    */
   #onNotifyThreadSelected(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -834,7 +829,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {*} payload
    */
   #onNotifyLibraryLoaded(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -843,7 +838,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {*} payload
    */
   #onNotifyLibraryUnloaded(payload) {
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -907,7 +902,7 @@ class GDB extends GDBMixin(GDBBase) {
               this.sendEvent(new BreakpointEvent("new", newBreakpoint));
               this.#lineBreakpoints.add_to(file, newBreakpoint);
             } catch (e) {
-              console.log(`Setting breakpoint at ${loc.addr} failed. Exception: ${e}`);
+              this.sendEvent(new OutputEvent(`Setting breakpoint at ${loc.addr} failed. Exception: ${e}`, "console"));
             }
           }
         }
@@ -954,7 +949,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
 
     this.sendEvent(new BreakpointEvent("changed", bp));
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   /**
@@ -964,7 +959,7 @@ class GDB extends GDBMixin(GDBBase) {
     const { id } = payload;
     const bp = { id: +id, verified: true };
     this.sendEvent(new BreakpointEvent("removed", bp));
-    log(getFunctionName(), payload);
+    this.log(getFunctionName(), payload);
   }
 
   #onBreakpointHit(thread) {
@@ -1028,7 +1023,7 @@ class GDB extends GDBMixin(GDBBase) {
         line: line ?? requestedLine,
       };
     } catch (err) {
-      console.log(`failed to execute set breakpoint command: ${command}:\n\t: ${err}`);
+      this.sendEvent(new OutputEvent(`failed to execute set breakpoint command: ${command}:\n\t: ${err}`, "console"))
       return null;
     }
   }
@@ -1139,6 +1134,12 @@ class GDB extends GDBMixin(GDBBase) {
   async getOsProcesses() {
     const { processes } = await this.execCMD("get-all-pids");
     return processes;
+  }
+  log(location, payload) {
+    if (!trace) {
+      return;
+    }
+    this.#target.log("debug", `[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
   }
 }
 

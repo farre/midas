@@ -1,3 +1,5 @@
+const { OutputEvent } = require("@vscode/debugadapter");
+
 class Command {
   constructor(cmd) {
     this.cmd = cmd;
@@ -56,15 +58,22 @@ class CommandList {
     this.commands.push(new ExecuteCommand(cmd));
   }
 
-  build() {
+  /**
+   * @param { import("./debugSession").MidasDebugSession } session
+   * @returns
+   */
+  build(session) {
+    if(this.commands.length == 0) return [];
+    const logBuffer = [];
     const parameterList = [];
-    const logTitle = (this.name == "") ? `:::GDB Commands:::` : `:::${this.name} GDB Commands:::`
-    console.log(logTitle);
+    logBuffer.push((this.name == "") ? `:::::: GDB Commands ::::::` : `:::::: ${this.name} ::::::`);
     for(const cmd of this.commands) {
       const built = cmd.build();
-      console.log(`${built[0]} ${built[1]}`);
+      logBuffer.push(`${built[0]} ${built[1]}`);
       parameterList.push(...built);
     }
+    logBuffer.push("\n");
+    session.sendEvent(new OutputEvent(logBuffer.join("\n"), "console"));
     return parameterList;
   }
 }
