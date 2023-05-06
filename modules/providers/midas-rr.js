@@ -12,7 +12,7 @@ const {
   getAPI
 } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
-const { RRSpawnConfig } = require("../spawn");
+const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -44,6 +44,9 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
+  if(!config.hasOwnProperty("remoteTargetConfig")) {
+    config.remoteTargetConfig = null;
+  }
   const perf_event_paranoid = krnl.readPerfEventParanoid();
   if (perf_event_paranoid > 1) {
     let choice = await showErrorPopup(
@@ -56,6 +59,16 @@ const initializer = async (config) => {
   }
 };
 
+async function setServerAddress() {
+  try {
+    const port = await getFreeRandomPort();
+    const serverAddress = `127.0.0.1:${port}`;
+    return serverAddress;
+  } catch (err) {
+    throw new Error("No port available for rr to listen on");
+  }
+}
+
 class RRConfigurationProvider extends ConfigurationProviderInitializer {
   get type() {
     return "midas-rr";
@@ -66,14 +79,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     if (!fs.existsSync(config.rrPath)) {
       throw new Error(`No RR found at ${config.rrPath}`);
     }
-    if (!config.serverAddress) {
-      try {
-        let port = await getFreeRandomPort();
-        config.serverAddress = `127.0.0.1:${port}`;
-      } catch (err) {
-        throw new Error("No port available for rr to listen on");
-      }
-    }
+    config.serverAddress = await setServerAddress();
 
     if (config.traceWorkspace && !config.replay.pid) {
       config = await tracePicked(config.rrPath, config.traceWorkspace).then((replay_parameters) => {
@@ -110,6 +116,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveDebugConfiguration(folder, config, token) {
+    getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
@@ -138,7 +145,11 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
       }
       return null;
     }
-    return await this.resolveReplayConfig(folder, config, token);
+    if(config.remoteTargetConfig != null) {
+      return config;
+    } else {
+      return await this.resolveReplayConfig(folder, config, token);
+    }
   }
 
   // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
@@ -158,13 +169,24 @@ class RRDebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
+    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
+    if(config.remoteTargetConfig != null) {
+      let dbg_session = new MidasDebugSession(
+        true,
+        false,
+        fs,
+        new RemoteRRSpawnConfig(config),
+        null,
+        this.#checkpointsUI
+      );
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
+    }
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
     let [addr, port] = config.serverAddress.split(":");
     // turns out, gdb doesn't recognize "localhost" as a parameter, at least on my machine.
     addr = addr == "localhost" ? "127.0.0.1" : addr;
     const cmd_str = `${config.rrPath} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
-    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if (config.externalConsole) {
       const rrArgs = { path: config.rrPath, addr, port, pid, traceWorkspace };
       try {

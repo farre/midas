@@ -38,7 +38,16 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/opensource/mozilla-central"
+				"/home/cx/dev/foss/cx/mozilla-unified"
+			]
+		},
+    {
+			"name": "rr",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"/home/cx/dev/foss/cx/rr"
 			]
 		},
 		{

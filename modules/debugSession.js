@@ -8,7 +8,7 @@ const { GDB } = require("./gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
-const { isNothing, ContextKeys, toHexString } = require("./utils/utils");
+const { isNothing, ContextKeys, toHexString, getAPI } = require("./utils/utils");
 const nixkernel = require("./utils/kernelsettings");
 const { CustomRequests } = require("./debugSessionCustomRequests");
 let server;
@@ -29,9 +29,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   #terminal;
   fnBkptChain = Promise.resolve();
 
-  // loggers of Name -> Fn
-  #loggers = new Map();
-  #defaultLogger = (output) => console.log(output);
+  #defaultLogger = (output) => { console.log(output); };
 
   /**
    * @type {import("./spawn").SpawnConfig}
@@ -65,25 +63,14 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   setupLogging(debug) {
-    const midasOutputChannel = vscode.window.createOutputChannel("Midas");
-    this.midasOutputChannel = midasOutputChannel;
-
-    this.#loggers.set("Midas", (output) => {
-      midasOutputChannel.appendLine(output);
-    });
-
-
+    getAPI().createLogger("Midas");
     if(debug) {
-      const debugOutputChannel = vscode.window.createOutputChannel("Midas-Debug");
-      this.debugOutputChannel = debugOutputChannel;
-      this.#loggers.set("debug", (output) => {
-        debugOutputChannel.appendLine(output);
-      });
+      getAPI().createLogger("Midas-Debug");
     }
   }
 
   log(where, output) {
-    const logger = this.#loggers.get(where);
+    const logger = getAPI().getLogger(where)
     if(logger == undefined) {
       this.#defaultLogger(output);
     } else {
@@ -199,7 +186,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
-      await this.gdb.startWithRR(args.program, args.stopOnEntry);
+      await this.gdb.startWithRR(args.program, args.stopOnEntry, this.#spawnConfig.isSpawnType("remote-rr"));
     } else {
       this.gdb = new GDB(this, this.#spawnConfig);
       this.gdb.setupEventHandlers(args.stopOnEntry);
@@ -410,14 +397,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   runInTerminalRequest(...args) {
     return this.virtualDispatch(...args);
   }
-
-  // Super's implementation is fine.
-  // dispatchRequest(...args) {
-  //   if (args && args.length > 0 && args[0].command.includes("exception")) {
-  //     console.log(`Exception related request fired: ${JSON.stringify(args[0])}`);
-  //   }
-  //   return super.dispatchRequest(args[0]);
-  // }
 
   // eslint-disable-next-line no-unused-vars
   async disconnectRequest(response, args) {

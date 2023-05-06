@@ -493,15 +493,8 @@
           "rust"
         ],
         "configurationAttributes": {
-          "required": [
-            "serverAddress"
-          ],
           "launch": {
             "properties": {
-              "program": {
-                "type": "string",
-                "description": "Binary to debug. Only required for 'gdb' mode."
-              },
               "trace": {
                 "type": [
                   "string"
@@ -537,17 +530,12 @@
               },
               "rrPath": {
                 "type": "string",
-                "description": "Path to rr. Defaults to trying to execute rr in $PATH",
+                "description": "Path to rr. Defaults to trying to execute rr in $PATH (if managed by Midas this field is unnecessary)",
                 "default": "rr"
               },
               "traceWorkspace": {
                 "type": "string",
                 "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
-              },
-              "serverAddress": {
-                "type": "string",
-                "description": "Connection string to GDB server that rr spawns. Format is host:port",
-                "default": "127.0.0.1:50505"
               },
               "setupCommands": {
                 "type": "array",
@@ -580,6 +568,31 @@
                     "description": "Attempt to close terminal at the end of debug session"
                   }
                 }
+              },
+              "remoteTargetConfig": {
+                "type": "object",
+                "description": "Launch session on a running remote target",
+                "default": {
+                  "address": null,
+                  "substitute-path": {
+                    "local": null,
+                    "remote": null
+                  }
+                },
+                "properties": {
+                  "description": "string",
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the remote target to connect to",
+                    "default": null
+                  },
+                  "substitute-path": {
+                    "type": "object",
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
+                    "default": { "local": null, "remote": null }
+                  }
+                },
+                "required": [ "address", "substitute-path" ]
               }
             }
           }
@@ -591,7 +604,6 @@
             "name": "Launch replay session",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
-            "serverAddress": "localhost:50505",
             "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
           }
         ],
@@ -608,7 +620,36 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
+              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"],
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
+            }
+          },
+          {
+            "name": "midas-rr",
+            "label": "Midas rr remote session",
+            "description": "Launches an RR debugging session",
+            "body": {
+              "type": "midas-rr",
+              "request": "launch",
+              "name": "${1:Launch replay debug session}",
+              "cwd": "^\"\\${workspaceFolder}\"",
+              "trace": "${3:Off}",
+              "gdbPath": "${4:gdb}",
+              "rrPath": "rr",
+              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"],
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
             }
           }
         ]
