@@ -3,6 +3,7 @@ const { MidasRunMode } = require("./buildMode");
 const { spawn } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
 const { ImmediateExecuteCommand, CommandList, ExecuteCommand } = require("./gdbCommand");
+const { OutputEvent } = require("@vscode/debugadapter");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -58,9 +59,8 @@ class SpawnConfig {
   }
 
   /**
-   * 
    * @param { import("./debugSession").MidasDebugSession } session
-   * @returns
+   * @returns { { path: string, parameters: string[] } }
    */
   build(session) {
     const commandList = new CommandList("General Settings");
@@ -96,6 +96,16 @@ class SpawnConfig {
   disposeOnExit() {
     return (this.externalConsole ?? { closeTerminalOnEndOfSession: true }).closeTerminalOnEndOfSession;
   }
+
+  /**
+   * @param { "launch"  | "attach" | "remote-attach" | "remote-launch" | "rr" | "remote-rr" } spawnType
+   * @returns
+   */
+  isSpawnType(spawnType) {
+    return spawnType == this.spawnType;
+  }
+
+  get spawnType() { return null; }
 
   /**
    * @param {import("./gdb").GDB} gdb
@@ -144,7 +154,9 @@ class AttachSpawnConfig extends SpawnConfig {
     return "midas-gdb";
   }
 
-  spawnType() { return "attach"; }
+  get spawnType() {
+    return "attach";
+  }
 }
 
 class RemoteLaunchSpawnConfig extends SpawnConfig {
@@ -175,12 +187,9 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
     return [...commandList.build(session)];
   }
 
-  spawnType() { return "remote-launch"; }
+  get spawnType() { return "remote-launch"; }
 
-  /**
-   *
-   * @param {import("./gdb").GDB} gdb
-   */
+  /** @param {import("./gdb").GDB} gdb */
   async performGdbSetup(gdb) {
     if(this.program != null && this.program != undefined) {
       gdb.execCLI(`set remote exec-file ${this.program}`);
@@ -215,18 +224,16 @@ class RemoteAttachSpawnConfig extends SpawnConfig {
     return [...commandList.build(session)];
   }
 
-  spawnType() { return "remote-attach"; }
+  get spawnType() { return "remote-attach"; }
 
-  /**
-   *
-   * @param {import("./gdb").GDB} gdb
-   */
+  /** @param {import("./gdb").GDB} gdb */
   async performGdbSetup(gdb) {
     const choice = await vscode.window.showQuickPick(gdb.getOsProcesses());
     if(choice == null || choice == undefined) {
       throw new Error("Did not pick a process to attach to.")
     }
     const cmd = `attach ${choice.pid}`;
+    gdb.sendEvent(new OutputEvent(`Attaching to ${JSON.stringify(choice)}`, "console"))
     gdb.execCLI(cmd);
   }
 }
@@ -259,7 +266,46 @@ class RRSpawnConfig extends SpawnConfig {
     return true;
   }
 
-  spawnType() { return "rr"; }
+  get spawnType() { return "rr"; }
+}
+
+class RemoteRRSpawnConfig extends SpawnConfig {
+  port;
+  address;
+
+  constructor(launchJson) {
+    super(launchJson);
+    const [address, port] = launchJson.remoteTargetConfig.address.split(":");
+    this.address = address;
+    this.port = port;
+    this.substitutePath = launchJson["remoteTargetConfig"]["substitute-path"];
+  }
+
+  typeSpecificParameters(session) {
+    const commandList = new CommandList("RR Settings");
+    commandList.addImmediateCommand("set tcp connect-timeout 180");
+    commandList.addImmediateCommand("set non-stop off");
+    commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
+    if(this.substitutePath.remote != null && this.substitutePath.local != null) {
+      commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
+    }
+    return [
+      "-l",
+      "10000",
+      ...commandList.build(session),
+      this.binary,
+    ];
+  }
+
+  get type() {
+    return "midas-rr";
+  }
+
+  isRRSession() {
+    return true;
+  }
+
+  get spawnType() { return "remote-rr"; }
 }
 
 /**
@@ -282,6 +328,7 @@ module.exports = {
   RemoteLaunchSpawnConfig,
   RemoteAttachSpawnConfig,
   RRSpawnConfig,
+  RemoteRRSpawnConfig,
   // spawn command
   spawnGdb,
 };

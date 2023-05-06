@@ -53,6 +53,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
 
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
+    getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {

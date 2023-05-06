@@ -40,6 +40,12 @@ class MidasAPI {
 
   #toolchainAddedToEnv = false
 
+  // loggers of Name -> Fn
+  #loggers = new Map();
+
+  /** @type {Map<String, vscode.OutputChannel>} */
+  #channels = new Map();
+
   /** @param {import("vscode").ExtensionContext} ctx */
   constructor(ctx) {
     this.#context = ctx;
@@ -179,6 +185,35 @@ class MidasAPI {
   log() {
     let cfg = this.get_config();
     console.log(`Current settings: ${JSON.stringify(cfg, null, 2)}`)
+  }
+
+  createLogger(name) {
+    let logger = this.#loggers.get(name);
+    if(logger == null) {
+      let channel = vscode.window.createOutputChannel(name, "Log");
+      this.#channels.set(name, channel);
+      this.#loggers.set(name, (output) => {
+        channel.appendLine(output);
+      });
+    }
+  }
+
+  getLogger(name) {
+    return this.#loggers.get(name);
+  }
+
+  closeOutputChannels() {
+    this.#loggers.clear();
+    for(let channel of this.#channels.values()) {
+      channel.dispose();
+    }
+    this.#channels.clear();
+  }
+
+  clearChannelOutputs() {
+    for(let channel of this.#channels.values()) {
+      channel.clear();
+    }
   }
 }
 

@@ -146,8 +146,13 @@ class GDB extends GDBMixin(GDBBase) {
     await runModeSettings.reloadStdLib(this);
   }
 
-  async startWithRR(program, stopOnEntry) {
-    this.#program = path.basename(program);
+  async startWithRR(program, stopOnEntry, isRemote) {
+    try {
+      this.#program = path.basename(program);
+    } catch(ex) {
+      this.#program = "unknown";
+    }
+
     trace = this.#target.buildSettings.trace;
     await this.init();
     this.#target.customRequest(CustomRequests.ClearCheckpoints);
@@ -167,11 +172,12 @@ class GDB extends GDBMixin(GDBBase) {
     this.execCLI(`source ${getExtensionPathOf("/modules/.gdb_rrinit")}`);
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
-    if (stopOnEntry) {
-      // this recording might begin any time after main. But in that case, this breakpoint will just do nothing.
-      await this.execMI("-exec-run --start");
-    } else {
-      await this.run();
+    if(!isRemote) {
+      if (stopOnEntry) {
+        await this.execMI("-exec-run --start");
+      } else {
+        await this.run();
+      }
     }
   }
 
@@ -270,7 +276,7 @@ class GDB extends GDBMixin(GDBBase) {
 
   sendEvent(event) {
     if (trace) {
-      this.#target.log("debug", `Sending event ${JSON.stringify(event)}`)
+      this.#target.log("Midas-Debug", `Sending event ${JSON.stringify(event)}`)
     }
     this.#target.sendEvent(event);
   }
@@ -1139,7 +1145,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (!trace) {
       return;
     }
-    this.#target.log("debug", `[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
+    this.#target.log("Midas-Debug", `[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
   }
 }
 
