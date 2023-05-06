@@ -6,7 +6,6 @@ const { activateExtension, deactivateExtension } = require("./modules/activateDe
 
 /**
  * @param {vscode.ExtensionContext} context
- * @returns { Promise<import("./modules/activateDebuggerExtension").MidasAPI> }
  */
 async function activate(context) {
   return activateExtension(context);
