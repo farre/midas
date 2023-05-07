@@ -172,16 +172,9 @@ Configuration example, for a rr debug session of for example a `firefox` test:
   "trace": "Off",
   "gdbPath": "gdb",
   "rrPath": "rr",
-  "serverAddress": "localhost:50505",
   "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```
-
-`serverAddress` defines the host and port that rr will listen on, which we connect to with GDB. If this field is not set
-Midas will use `127.0.0.1:RandomFreePort` which just checks for free ports in the range `50505 : uint16 MAX`. For every day work,
-this should not have to be set.
-
-rrPath behaves just like the gdbPath field and defaults to trying to find `rr` in `$PATH` if not set. Only useful if these applications are not in `$PATH` or, you are running multiple versions of them. You can set a global rr path in `File->Preferences->Settings->Midas` and then set the rr property, which will be the fallback setting after `launch.json` setting.
 
 However, you shouldn't have to fill out a placeholder for yourself, VSCode should be able to provide auto-completion like it normally does (default trigger usually is `ctrl` + `space`), shown below.
 
