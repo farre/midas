@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.9.1",
+  "version": "0.11.0",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -289,10 +289,16 @@
                   "substitute-path": {
                     "type": "object",
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
-                    "default": { "local": null, "remote": null }
+                    "default": {
+                      "local": null,
+                      "remote": null
+                    }
                   }
                 },
-                "required": [ "address", "substitute-path" ]
+                "required": [
+                  "address",
+                  "substitute-path"
+                ]
               }
             }
           },
@@ -368,10 +374,16 @@
                   "substitute-path": {
                     "type": "object",
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute as GDB will find the source files on your local machine.",
-                    "default": { "local": null, "remote": null }
+                    "default": {
+                      "local": null,
+                      "remote": null
+                    }
                   }
                 },
-                "required": [ "address", "substitute-path" ]
+                "required": [
+                  "address",
+                  "substitute-path"
+                ]
               }
             }
           }
@@ -588,10 +600,16 @@
                   "substitute-path": {
                     "type": "object",
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
-                    "default": { "local": null, "remote": null }
+                    "default": {
+                      "local": null,
+                      "remote": null
+                    }
                   }
                 },
-                "required": [ "address", "substitute-path" ]
+                "required": [
+                  "address",
+                  "substitute-path"
+                ]
               }
             }
           }
@@ -603,7 +621,11 @@
             "name": "Launch replay session",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
-            "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
+            "setupCommands": [
+              "set sysroot /",
+              "set debuginfod enabled off",
+              "set auto-load safe-path /"
+            ]
           }
         ],
         "configurationSnippets": [
@@ -619,7 +641,11 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
+              "setupCommands": [
+                "set sysroot /",
+                "set debuginfod enabled off",
+                "set auto-load safe-path /"
+              ]
             }
           },
           {
@@ -634,7 +660,11 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"],
+              "setupCommands": [
+                "set sysroot /",
+                "set debuginfod enabled off",
+                "set auto-load safe-path /"
+              ],
               "remoteTargetConfig": {
                 "address": null,
                 "substitute-path": {
