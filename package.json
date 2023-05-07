@@ -403,7 +403,7 @@
           {
             "name": "midas-gdb",
             "label": "Midas GDB: Launch",
-            "description": "Launch midas debugging session for binary selected by user",
+            "description": "Launch normal debugging session for binary selected by user",
             "body": {
               "type": "midas-gdb",
               "request": "launch",
@@ -436,13 +436,12 @@
           },
           {
             "name": "midas-gdb",
-            "label": "Midas GDB: Connect to remote session & Attach to process",
-            "description": "Attach GDB to a running process",
+            "label": "Midas GDB: Attach in remote session",
+            "description": "Connect to remote instance of GDBServer and instruct it to attach to a running process. You will be given a list of available processes to attach to.",
             "body": {
               "type": "midas-gdb",
               "request": "attach",
               "name": "Connect and run remote target",
-              "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${4:Off}",
               "gdbPath": "${5:gdb}",
               "setupCommands": [],
@@ -459,7 +458,7 @@
           {
             "name": "midas-gdb",
             "label": "Midas GDB: Launch in remote session",
-            "description": "Attach GDB to Target and launch <program>",
+            "description": "Connect to remote GDBServer and instruct it to launch <program>",
             "body": {
               "type": "midas-gdb",
               "request": "launch",
@@ -620,14 +619,7 @@
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
               "rrPath": "rr",
-              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"],
-              "remoteTargetConfig": {
-                "address": null,
-                "substitute-path": {
-                  "local": null,
-                  "remote": null
-                }
-              }
+              "setupCommands": ["set sysroot /", "set debuginfod enabled off", "set auto-load safe-path /"]
             }
           },
           {
