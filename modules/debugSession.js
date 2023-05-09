@@ -46,10 +46,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.setupLogging(spawnConfig.traceSettings.debug);
 
     this.on("error", (event) => {
-      this.log("Midas", event.body);
+      this.sendEvent(new DebugAdapter.OutputEvent(event.body, "console", event));
     });
     this.#checkpointsUI = checkpointsUI;
     this.#terminal = terminal;
@@ -62,19 +61,12 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.#spawnConfig.traceSettings;
   }
 
-  setupLogging(debug) {
-    getAPI().createLogger("Midas");
-    if(debug) {
-      getAPI().createLogger("Midas-Debug");
-    }
-  }
-
   log(where, output) {
     const logger = getAPI().getLogger(where)
     if(logger == undefined) {
       this.#defaultLogger(output);
     } else {
-      logger(output);
+      logger.appendLine(output);
     }
   }
 

@@ -275,9 +275,6 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   sendEvent(event) {
-    if (trace) {
-      this.#target.log("Midas-Debug", `Sending event ${JSON.stringify(event)}`)
-    }
     this.#target.sendEvent(event);
   }
 
@@ -707,18 +704,12 @@ class GDB extends GDBMixin(GDBBase) {
     this.#uninitializedThread.set(thread.id, thread);
     this.#threads.set(thread.id, thread);
     this.sendEvent(new ThreadEvent("started", thread.id));
-    console.log(`Thread ${thread.id} started`);
   }
 
   #onThreadExited(thread) {
     this.#threads.delete(thread.id);
     this.#uninitializedThread.delete(thread.id);
     this.sendEvent(new ThreadEvent("exited", thread.id));
-    // unfortunately, thread exited event does not exist in GDB's Python. Until
-    // we've added that functionality to it, we have this workaround
-    // setImmediate(() => {
-    //   this.execCMD(`thread-died ${thread.id}`);
-    // });
   }
 
   #onThreadGroupStarted(payload) {
@@ -1155,7 +1146,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (!trace) {
       return;
     }
-    this.#target.log("Midas-Debug", `[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
+    this.#target.log("Midas", `[LOG #${LOG_ID++}] - Caught GDB ${location}. Payload: ${JSON.stringify(payload, null, " ")}`);
   }
 }
 

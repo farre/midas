@@ -6,9 +6,10 @@ const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/mida
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which } = require("./utils/sysutils");
-const { getRR, strEmpty } = require("./utils/utils");
+const { getRR, strEmpty, getAPI } = require("./utils/utils");
 const fs = require("fs");
-const Path = require("path")
+const Path = require("path");
+const { debugLogging } = require("./buildMode");
 
 /** @typedef { { path: string, version: string, managed: boolean } } Tool */
 /** @typedef { { rr: Tool, gdb: Tool } } Toolchain */
@@ -28,6 +29,85 @@ const default_config_contents = () => {
 };
 
 global.API = null;
+
+/**
+ * A Debug Adapter Tracker is a means to track the communication between the editor and a Debug Adapter.
+ */
+class MidasDebugAdapterTracker {
+  session;
+  logger;
+
+  /**
+   * @param {import("./debugSession").MidasDebugSession } session
+   * @param {import("vscode").OutputChannel} logger
+   */
+  constructor(session, logger) {
+    this.session = session;
+    this.logger = logger;
+  }
+  /**
+   * A session with the debug adapter is about to be started.
+   */
+  onWillStartSession() {}
+  /**
+   * The debug adapter is about to receive a Debug Adapter Protocol message from the editor.
+   */
+  onWillReceiveMessage(message) {}
+  /**
+   * The debug adapter has sent a Debug Adapter Protocol message to the editor.
+   */
+  onDidSendMessage(message) {
+    this.logger.appendLine(`Sent message: ${JSON.stringify(message)}`);
+  }
+  /**
+   * The debug adapter session is about to be stopped.
+   */
+  onWillStopSession() {}
+
+  /**
+   * An error with the debug adapter has occurred.
+   */
+  async onError(error) {
+    this.logger.appendLine(`Debug Adapter Error: ${JSON.stringify(error)}`);
+    vscode.window.showErrorMessage("A Midas error was encountered. Show log?", ...["yes", "no"]).then(choice => {
+      if(choice == "yes") {
+        this.logger.show();
+      }
+    })
+  }
+  /**
+   * The debug adapter has exited with the given exit code or signal.
+   */
+  onExit(code, signal) {
+    console.log(`The debug adapter exited with code: ${code} and signal: ${signal}`);
+  }
+}
+
+class MidasDebugAdapterTrackerFactory {
+  constructor() {
+    this.outputChannel = null;
+  }
+
+  /**
+ * The method 'createDebugAdapterTracker' is called at the start of a debug session in order
+ * to return a "tracker" object that provides read-access to the communication between the editor and a debug adapter.
+ *
+ * @param session The {@link DebugSession debug session} for which the debug adapter tracker will be used.
+ * @return A {@link DebugAdapterTracker debug adapter tracker} or undefined.
+ */
+  createDebugAdapterTracker(session) {
+    const config = session.configuration;
+    const { trace } = debugLogging(config.trace);
+    if(!trace)
+      return null;
+
+    if(this.outputChannel == null) {
+      this.outputChannel = getAPI().createLogger("Midas");
+    }
+    this.outputChannel.clear();
+    return new MidasDebugAdapterTracker(session, this.outputChannel);
+  }
+}
 
 /**
  * Public "API" returned by activate function
@@ -188,16 +268,19 @@ class MidasAPI {
   }
 
   createLogger(name) {
-    let logger = this.#loggers.get(name);
+    let logger = this.#channels.get(name);
     if(logger == null) {
-      let channel = vscode.window.createOutputChannel(name, "Log");
-      this.#channels.set(name, channel);
-      this.#loggers.set(name, (output) => {
-        channel.appendLine(output);
-      });
+      logger = vscode.window.createOutputChannel(name, "Log");
+      this.#channels.set(name, logger);
     }
+    return logger
   }
 
+  /**
+   * 
+   * @param {string} name
+   * @returns {import("vscode").OutputChannel}
+   */
   getLogger(name) {
     return this.#loggers.get(name);
   }
@@ -250,6 +333,7 @@ async function init_midas(api) {
  * @param {vscode.ExtensionContext} context
  */
 async function activateExtension(context) {
+  vscode.debug.registerDebugAdapterTrackerFactory("*", new MidasDebugAdapterTrackerFactory());
   const cp_provider = new CheckpointsViewProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider, {
