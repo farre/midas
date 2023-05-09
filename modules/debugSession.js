@@ -274,6 +274,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       allThreadsContinued: this.gdb.allStopMode,
     };
     this.gdb.interrupt_operations();
+    this.gdb.paused = false;
     await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, false);
 
     vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
@@ -296,6 +297,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async pauseRequest(response, args) {
+    this.gdb.paused = true;
     await this.gdb.pauseExecution(args.threadId);
     vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
     this.sendResponse(response);
