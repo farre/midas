@@ -10,6 +10,38 @@ const { run_install, InstallerExceptions } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
 const process = require("process");
 
+const RR_GITHUB_URL = "https://api.github.com/repos/rr-debugger/rr/commits/master";
+
+/** @returns { Promise<import("../activateDebuggerExtension").GitMetadata> } */
+async function queryGit() {
+  const options = {
+    headers: {
+      "Accept" : "application/vnd.github+json",
+      "X-GitHub-Api-Version" : "2022-11-28",
+      'User-Agent' : 'Midas-Debug-Adapter'
+    }
+  };
+  return new Promise((resolve, rej) => {
+    const request = require("https").get(RR_GITHUB_URL, options, (res) => {
+      const buf = [];
+      res.on("data", data => {
+        buf.push(data);
+      });
+      res.on("close", () => {
+        const processed = buf.flatMap(chunk => chunk.toString()).join("");
+        const json = JSON.parse(processed);
+        const sha = json.sha;
+        const { date } = json.commit.author;
+        resolve({ sha, date });
+      });
+    });
+
+    request.on("error", (err) => {
+      console.log(`Error: ${err}`);
+      rej(`Error ${err}`);
+    });
+  });
+}
 
 const ToolList = {
   cmake : { variants: ["cmake"] },
@@ -581,15 +613,17 @@ async function installFileUsingManager(args, logger) {
   });
 }
 
+/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
 async function installRRFromRepository({python}, logger) {
   // we can ignore deps. dpkg / apt will do that for us here.
   // eslint-disable-next-line no-unused-vars
   const { name, pkg_manager, deps, cancellable } = await guessInstaller(python, logger);
   let result = await run_install(python, pkg_manager, ["rr"], cancellable, logger);
-  getAPI().write_rr({ path: "rr", version: "", managed: false});
   vscode.window.showInformationMessage(result);
+  return { root_dir: "", path: "rr", version: "", managed: false, git: null };
 }
 
+/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
 async function installRRFromDownload({python}, logger) {
   // eslint-disable-next-line no-unused-vars
   const { name, pkg_manager, deps } = await guessInstaller(python, logger);
@@ -600,14 +634,14 @@ async function installRRFromDownload({python}, logger) {
     const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
     if (status == "success") {
       return await installFileUsingManager(["apt-get", "install", "-y", path], logger)
-        .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
+        .then(() => { return { root_dir:"", path: "rr", version: version, managed: false, git: null } });
     }
   } else if (name == "dnf") {
     const { version, url } = await resolveLatestVersion(arch);
     const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
     if (status == "success") {
       return await installFileUsingManager(["dnf", "-y", "localinstall", path])
-        .then(() => getAPI().write_rr({ path: "rr", version: version, managed: true }));
+        .then(() => { return { root_dir:"", path: "rr", version: version, managed: false, git: null } });
     }
   }
 }
@@ -619,7 +653,8 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   );
 }
 
-async function installRRFromSource(requiredTools, logger) {
+/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
+async function installRRFromSource(requiredTools, logger, build_path = null) {
   const { python, cmake, unzip } = requiredTools;
   const { pkg_manager, deps } = await guessInstaller(python, logger);
   const { path, status } = await http_download(
@@ -635,7 +670,8 @@ async function installRRFromSource(requiredTools, logger) {
       { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
       (progress, token) => {
         return new Promise((progress_resolve, reject) => {
-          const build_path = getAPI().get_storage_path_of(`rr-${version}`);
+          if(build_path == null)
+            build_path = getAPI().get_storage_path_of(`rr-${version}`);
           logger.show();
           logger.appendLine(`creating dir ${build_path}`);
           fs.mkdirSync(build_path);
@@ -675,8 +711,8 @@ async function installRRFromSource(requiredTools, logger) {
                   // eslint-disable-next-line max-len
                   `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
                 );
-                getAPI().write_rr({ path: `${build_path}/bin/rr`, version, managed: true });
-                progress_resolve("Build completed successfully");
+                const { sha, date } = await queryGit();
+                progress_resolve({ root_dir: build_path, path: `${build_path}/bin/rr`, version, managed: true, git: { sha, date }})
               } else {
                 logger.appendLine(`Build failed - finished with exit code ${code}`);
                 reject(`Build failed - finished with exit code ${code}`);
@@ -690,14 +726,14 @@ async function installRRFromSource(requiredTools, logger) {
               // -pid kills the process tree. We are a vengeful, hateful, spiteful god of the linux universe
               // (we do this, because "cmake --build" spawns new processes)
               process.kill(-cmake_build.pid, "SIGTERM");
-              progress_resolve("Cancelled");
+              progress_resolve(null);
             });
           });
         });
       }
     );
   } else {
-    return "Cancelled";
+    return null;
   }
 }
 
@@ -763,8 +799,12 @@ async function getRR() {
         let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
         logger.show();
         let res = await result.method(args, logger);
-        if(res)
-          vscode.window.showInformationMessage(res);
+        if(res == null)
+          vscode.window.showInformationMessage("Cancelled");
+        else {
+          vscode.window.showInformationMessage("Installation succeeded");
+          getAPI().write_rr(res);
+        }
       } catch(err) {
         console.log(`[Exception ${err.type}]: ${err.message}`);
         const show_modal_error = (msg) => {
@@ -948,5 +988,9 @@ module.exports = {
   getRR,
   strEmpty,
   strValueOr,
-  getAPI
+  getAPI,
+  queryGit,
+  installRRFromSource,
+  verifyPreRequistesExists,
+  resolveLatestVersion
 };

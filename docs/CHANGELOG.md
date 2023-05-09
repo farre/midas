@@ -4,6 +4,14 @@ All notable changes to the "midas" extension will be documented in this file. Ch
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.11.1]
+Toolchain versioning management added
+Added auto complete for debug console for gdb commands
+Re-factored logging yet again
+
+## [0.11.0]
+Added remote target support. Configurable via `remoteTargetConfig` on the debug session config in launch.json
+
 ## [0.5.5] - 2022-12-12
 - Added ability to install RR, or build it from source and install it locally in the extension folder. Resolving dependencies are performed by dnf or apt and requries sudo.
 
