@@ -104,7 +104,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // make VS Code support data breakpoints
     response.body.supportsDataBreakpoints = true;
     // make VS Code support completion in REPL
-    response.body.supportsCompletionsRequest = false;
+    response.body.supportsCompletionsRequest = true;
     response.body.completionTriggerCharacters = [".", "["];
     // make VS Code send cancel request
     response.body.supportsCancelRequest = false;
@@ -594,8 +594,16 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  completionsRequest(...args) {
-    return this.virtualDispatch(...args);
+  async completionsRequest(response, {frameId, text, column, line}, ) {
+    const cmd = `-complete "${text}"`;
+    const results = (await this.gdb.execMI(cmd)).matches ?? [];
+
+    response.body = {
+      targets: results.map((match) => {
+        return { label: match, type: "function", length: text.length };
+      })
+    };
+    this.sendResponse(response);
   }
 
   exceptionInfoRequest(response, args) {
