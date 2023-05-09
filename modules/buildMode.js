@@ -8,6 +8,10 @@ const DebugLogging = {
   Full: "full",
 };
 
+/**
+ * @param { string } setting
+ * @returns { { trace: boolean, pythonLogging: boolean } }
+ */
 function debugLogging(setting) {
   switch (setting.toLowerCase()) {
     case DebugLogging.Off:
@@ -78,4 +82,5 @@ class MidasRunMode {
 
 module.exports = {
   MidasRunMode,
+  debugLogging
 };
