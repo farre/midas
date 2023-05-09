@@ -567,12 +567,22 @@ class GDB extends GDBMixin(GDBBase) {
         }
         break;
       case "0": {
-        if (this.config.isRRSession()) {
+        if (this.config.isRRSession() && !this.paused) {
           // replayable binary has executed to it's start; we're now in rr-land
           let evt = new StoppedEvent("entry", 1);
           let body = {
             reason: "entry",
             description: "rr trampoline code",
+            threadId: 1,
+            allThreadsStopped: true,
+          };
+          evt.body = body;
+          this.sendEvent(evt);
+        } else if(this.paused) {
+          let evt = new StoppedEvent("entry", 1);
+          let body = {
+            reason: "stopped",
+            description: "Interrupted",
             threadId: 1,
             allThreadsStopped: true,
           };
