@@ -4,7 +4,7 @@ const assert = require("assert");
 const { DebugClient } = require("@vscode/debugadapter-testsupport");
 const { MidasDebugSession } = require("../../modules/debugSession");
 const path = require("path");
-const { buildTestFiles } = require("../../modules/utils");
+const { buildTestFiles } = require("../../modules/utils/utils");
 
 const PROJECT_ROOT = path.normalize(path.join(__dirname, "..", ".."));
 const TEST_PROJECT = path.join(PROJECT_ROOT, "test", "cppworkspace", "test");

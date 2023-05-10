@@ -13,7 +13,7 @@ const { debugLogging } = require("./buildMode");
 const { InstallerExceptions } = require("./utils/installerProgress");
 
 /** @typedef { { sha: string, date: Date } } GitMetadata */
-/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata | null } } Tool */
+/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } Tool */
 /** @typedef { { rr: Tool, gdb: Tool } } Toolchain */
 /** @typedef { { midas_version: string, toolchain: Toolchain } } MidasConfig */
 
@@ -22,11 +22,26 @@ const default_config_contents = () => {
   return {
     midas_version: "",
     toolchain: {
-      rr:  { root_dir: "", path: "", version: "", managed: false, git: null },
-      gdb: { root_dir: "", path: "", version: "", managed: false, git: null },
+      rr:  { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
+      gdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
     },
   }
 };
+
+function cloneNonExistingSubProperties(obj) {
+  return (key, value) => {
+    if (key === "" || !obj || !value || typeof value !== "object") {
+      return value;
+    }
+    return JSON.parse(JSON.stringify({...obj[key], ...value}, cloneNonExistingSubProperties(obj[key])));
+  }
+}
+
+const sanitize_config = (cfg) => {
+  return JSON.parse(JSON.stringify(cfg, cloneNonExistingSubProperties(default_config_contents())));
+}
+
+// JSON.stringify(sanitize_config(foo))
 
 global.API = null;
 
@@ -177,25 +192,13 @@ class MidasAPI {
 
   /** @returns { Toolchain } */
   get_toolchain() {
-    const midas_config_file = this.get_storage_path_of(this.#CFG_NAME);
-    try {
-      const data = fs.readFileSync(midas_config_file).toString();
-      if(data) {
-        const parsed = JSON.parse(data);
-        console.assert(parsed.toolchain != undefined, "Toolchain has not been recorded in configuration file");
-        console.log(`Toolchain settings: ${JSON.stringify(parsed.toolchain, null, 2)}`);
-        return parsed.toolchain;
-      } else {
-        console.log("Configuration file could not be read");
-      }
-    } catch(err) {
-      console.log(`Midas Configuration read failed: ${err}`);
-    }
+    const cfg = this.get_config();
+    return cfg.toolchain;
   }
 
   /**
    * Write RR settings to config file
-   * @param {Tool} rr
+   * @param { Tool } rr
    */
   write_rr(rr) {
     let cfg = this.get_config();
@@ -205,7 +208,7 @@ class MidasAPI {
 
   /**
    * Write GDB settings to config file
-   * @param {Tool} gdb
+   * @param { Tool } gdb
    */
   write_gdb(gdb) {
     let cfg = this.get_config();
@@ -217,7 +220,7 @@ class MidasAPI {
    * Write Midas version to config file
    */
   write_midas_version() {
-    let cfg = this.get_config();
+    let cfg = sanitize_config(this.get_config());
     cfg.midas_version = this.#context.extension.packageJSON["version"];
     this.#write_config(cfg);
   }
@@ -434,5 +437,6 @@ function deactivateExtension() {}
 module.exports = {
   activateExtension,
   deactivateExtension,
-  MidasAPI
+  MidasAPI,
+  sanitize_config
 };
