@@ -304,7 +304,7 @@ class MidasAPI {
     if(rr.managed) {
       try {
         const {sha, date} = await queryGit();
-        const configDate = new Date(rr.git.date);
+        const configDate = new Date(rr.git.date ?? null);
         const queryDate = new Date(date);
         if(rr.git.sha != sha && configDate < queryDate) {
           vscode.window.showInformationMessage("A newer version of RR can be built. Do you want to build it?", ...["yes", "no"]).then(async res => {
