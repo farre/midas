@@ -6,7 +6,7 @@ const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/mida
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which } = require("./utils/sysutils");
-const { getRR, strEmpty, getAPI, queryGit, installRRFromSource, verifyPreRequistesExists } = require("./utils/utils");
+const { getRR, strEmpty, getAPI, queryGit, installRRFromSource, verifyPreRequistesExists, guessInstaller } = require("./utils/utils");
 const fs = require("fs");
 const Path = require("path");
 const { debugLogging } = require("./buildMode");
@@ -325,7 +325,7 @@ class MidasAPI {
   async updateRR() {
     let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
     logger.show();
-    const cfg = this.get_toolchain();
+    let cfg = this.get_toolchain();
     logger.appendLine(`Current toolchain: ${JSON.stringify(cfg)}`);
     const requiredTools = ["cmake", "python", "unzip"];
     const requirements = verifyPreRequistesExists(requiredTools);
@@ -345,20 +345,32 @@ class MidasAPI {
     const tmp_build_path = this.get_storage_path_of("rr-tmp-update");
     logger.appendLine(`Temporary RR build directory: ${tmp_build_path}`);
     try {
-      let rr = await installRRFromSource(args, logger, tmp_build_path);
+      await guessInstaller(args["python"], logger);
+    } catch(ex) {
+      logger.appendLine(`Couldn't update RR: ${JSON.stringify(ex)}. If you're running in a virtual environement updating will not work.`);
+      return;
+    }
+
+    try {
+      const { install_dir: install_directory, build_dir, path, managed, git, version} = await installRRFromSource(args, logger, tmp_build_path);
       logger.appendLine("Building of RR succeeded. Removing old build...");
       if(fs.existsSync(cfg.rr.root_dir)) {
         fs.rmSync(cfg.rr.root_dir, {force: true, recursive: true})
       }
-      fs.renameSync(tmp_build_path, cfg.rr.root_dir);
-      rr.path = cfg.rr.path;
-      rr.root_dir = cfg.rr.root_dir;
-      this.write_rr(rr);
+      // for not-yet-migrated configs, we don't have root path; we need to determine
+      // path from binary path; which is, pop /bin/rr off of it
+      if(cfg.rr.root_dir == "" && fs.existsSync(cfg.rr.path)) {
+        const binary_dir = Path.dirname(cfg.rr.path);
+        const rr_dir = Path.dirname(binary_dir);
+        fs.rmSync(rr_dir, {force: true, recursive: true})
+      }
+      fs.renameSync(build_dir, install_directory);
+      cfg.rr = { root_dir: install_directory, version, git, managed, path: `${install_directory}/bin/rr` };
+      this.write_rr(cfg.rr);
     } catch(ex) {
       logger.appendLine(`Couldn't update RR: ${ex}`);
       fs.rmSync(cfg.rr.root_dir, {force: true, recursive: true})
     }
-    logger.dispose();
   }
 }
 
@@ -387,6 +399,7 @@ async function init_midas(api) {
       }
     }
   } else {
+
   }
   api.setup_env_vars()
   api.write_midas_version()

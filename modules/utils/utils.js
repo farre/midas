@@ -613,17 +613,17 @@ async function installFileUsingManager(args, logger) {
   });
 }
 
-/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
+/** @returns { Promise<BuildMetadata | null> } */
 async function installRRFromRepository({python}, logger) {
   // we can ignore deps. dpkg / apt will do that for us here.
   // eslint-disable-next-line no-unused-vars
   const { name, pkg_manager, deps, cancellable } = await guessInstaller(python, logger);
   let result = await run_install(python, pkg_manager, ["rr"], cancellable, logger);
   vscode.window.showInformationMessage(result);
-  return { root_dir: "", path: "rr", version: "", managed: false, git: null };
+  return { install_dir: "", build_dir: "", path: "rr", version: "", managed: false, git: null };
 }
 
-/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
+/** @returns { Promise<BuildMetadata | null> } */
 async function installRRFromDownload({python}, logger) {
   // eslint-disable-next-line no-unused-vars
   const { name, pkg_manager, deps } = await guessInstaller(python, logger);
@@ -634,14 +634,14 @@ async function installRRFromDownload({python}, logger) {
     const { path, status } = await http_download(`${url_without_fileext}.deb`, `rr-${version}-Linux-${arch}.deb`);
     if (status == "success") {
       return await installFileUsingManager(["apt-get", "install", "-y", path], logger)
-        .then(() => { return { root_dir:"", path: "rr", version: version, managed: false, git: null } });
+        .then(() => { return { install_dir: "", build_dir:"", path: "rr", version: version, managed: false, git: null } });
     }
   } else if (name == "dnf") {
     const { version, url } = await resolveLatestVersion(arch);
     const { path, status } = await http_download(`${url}.rpm`, `rr-${version}-Linux-${arch}.rpm`);
     if (status == "success") {
       return await installFileUsingManager(["dnf", "-y", "localinstall", path])
-        .then(() => { return { root_dir:"", path: "rr", version: version, managed: false, git: null } });
+        .then(() => { return { install_dir: "", build_dir:"", path: "rr", version: version, managed: false, git: null } });
     }
   }
 }
@@ -653,7 +653,17 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   );
 }
 
-/** @returns { Promise<import("../activateDebuggerExtension").Tool | null> } */
+/** @typedef { {
+    install_dir: string,
+    build_dir: string,
+    path: string,
+    version: string,
+    managed: boolean,
+    git: { sha: string, date: Date }
+  } } BuildMetadata
+*/
+
+/** @returns { Promise<BuildMetadata | null> } */
 async function installRRFromSource(requiredTools, logger, build_path = null) {
   const { python, cmake, unzip } = requiredTools;
   const { pkg_manager, deps } = await guessInstaller(python, logger);
@@ -709,10 +719,17 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
               if (code == 0) {
                 logger.appendLine(
                   // eslint-disable-next-line max-len
-                  `Build completed successfully... Adding path ${build_path}/bin/rr to MidasCache. Unless you specify a different RR path in launch.json, Midas will first attempt to use this.`
+                  `Build completed successfully...`
                 );
                 const { sha, date } = await queryGit();
-                progress_resolve({ root_dir: build_path, path: `${build_path}/bin/rr`, version, managed: true, git: { sha, date }})
+                // eslint-disable-next-line max-len
+                progress_resolve({
+                  install_dir: getAPI().get_storage_path_of(`rr-${version}`),
+                  build_dir: build_path,
+                  path: `${build_path}/bin/rr`,
+                  version,
+                  managed: true,
+                  git: { sha, date }})
               } else {
                 logger.appendLine(`Build failed - finished with exit code ${code}`);
                 reject(`Build failed - finished with exit code ${code}`);
@@ -738,6 +755,10 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
 }
 
 async function getRR() {
+  const rr = getAPI().get_toolchain().rr;
+  // We let midas figure this shit out at boot up instead. double installing requires extra error handling as it will fail due to dirs
+  // existing etc;
+  if(rr.managed) return;
   const answers = [
     { title: "No", isCloseAffordance: true },
     { title: "Yes", isCloseAffordance: false },
@@ -798,12 +819,13 @@ async function getRR() {
         // @ts-ignore
         let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
         logger.show();
-        let res = await result.method(args, logger);
+        const res = await result.method(args, logger);
         if(res == null)
           vscode.window.showInformationMessage("Cancelled");
         else {
           vscode.window.showInformationMessage("Installation succeeded");
-          getAPI().write_rr(res);
+          const { git, install_dir, managed,path, version } = res;
+          getAPI().write_rr({root_dir: install_dir, git, managed, path, version});
         }
       } catch(err) {
         console.log(`[Exception ${err.type}]: ${err.message}`);
@@ -992,5 +1014,6 @@ module.exports = {
   queryGit,
   installRRFromSource,
   verifyPreRequistesExists,
-  resolveLatestVersion
+  resolveLatestVersion,
+  guessInstaller
 };

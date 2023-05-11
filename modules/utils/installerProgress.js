@@ -92,10 +92,10 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
     // if some server logic fails, we don't want to actually run the python code
     let error_or_finished = false;
     // eslint-disable-next-line max-len
-    let pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+    let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
     // f*** me extension development for VSCode is buggy. I don't want to have to do this.
     if (!pass) {
-      pass = await vscode.window.showInputBox({ prompt: "sudo password", password: true });
+      pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
     }
     if(!pass) {
       ireject({type: InstallerExceptions.UserCancelled });

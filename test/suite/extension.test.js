@@ -7,6 +7,26 @@ const { sanitize_config } = require("../../modules/activateDebuggerExtension");
 
 
 suite("Persistent configuration test", () => {
+  const shouldEqual = {
+    "midas_version": "0.11.1",
+    "toolchain": {
+      "rr": {
+        "root_dir": "",
+        "path": "/home/cx/.config/Code/User/globalStorage/farrese.midas/rr-5.6.0/bin/rr",
+        "version": "5.6.0",
+        "managed": true,
+        "git": { sha: null, date: null }
+      },
+      "gdb": {
+        "root_dir": "",
+        "path": "",
+        "version": "",
+        "managed": false,
+        "git": { sha: null, date: null }
+      }
+    }
+  };
+
   vscode.window.showInformationMessage("Start all tests.");
 
   test("Migrate configuration, root_dir property", () => {
@@ -27,25 +47,7 @@ suite("Persistent configuration test", () => {
     };
     const sanitized = sanitize_config(cfg);
     assert(sanitized.toolchain.rr.hasOwnProperty("root_dir"), "Migration failed for `root_dir`")
-    const shouldEqual = {
-      "midas_version": "0.11.1",
-      "toolchain": {
-        "rr": {
-          "root_dir": "",
-          "path": "/home/cx/.config/Code/User/globalStorage/farrese.midas/rr-5.6.0/bin/rr",
-          "version": "5.6.0",
-          "managed": true,
-          "git": { sha: null, date: null }
-        },
-        "gdb": {
-          "root_dir": "",
-          "path": "",
-          "version": "",
-          "managed": false,
-          "git": { sha: null, date: null }
-        }
-      }
-    };
+
 
     assert.deepStrictEqual(shouldEqual, sanitized, "Written values were faulty");
   });
@@ -68,27 +70,6 @@ suite("Persistent configuration test", () => {
     };
     const sanitized = sanitize_config(cfg);
     assert(sanitized.toolchain.rr.hasOwnProperty("git"), "Migration failed for `git`")
-
-    const shouldEqual = {
-      "midas_version": "0.11.1",
-      "toolchain": {
-        "rr": {
-          "root_dir": "",
-          "path": "/home/cx/.config/Code/User/globalStorage/farrese.midas/rr-5.6.0/bin/rr",
-          "version": "5.6.0",
-          "managed": true,
-          "git": { sha: null, date: null }
-        },
-        "gdb": {
-          "root_dir": "",
-          "path": "",
-          "version": "",
-          "managed": false,
-          "git": { sha: null, date: null }
-        }
-      }
-    };
-
     assert.deepStrictEqual(shouldEqual, sanitized, "Written values were faulty");
   });
 });
