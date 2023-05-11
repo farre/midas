@@ -1,5 +1,5 @@
 const vscode = require("vscode");
-const { exec, spawn: _spawn, execSync } = require("child_process");
+const { exec, spawn: _spawn, execSync, spawnSync } = require("child_process");
 const fs = require("fs");
 const Path = require("path");
 
@@ -79,7 +79,7 @@ async function sudo(command, pass) {
   try {
     let _sudo = await which("sudo");
     const args = ["-S", ...command];
-    let sudo = _spawn(_sudo, args, { stdio: "pipe", shell: true });
+    let sudo = _spawn(_sudo, args, { stdio: "pipe", shell: true, env: sanitizeEnvVariables() });
     sudo.stderr.on("data", (data) => {
       if (data.includes("[sudo]")) {
         sudo.stdin.write(pass + "\n");
@@ -113,10 +113,19 @@ function resolveCommand(cmd) {
   throw new Error(`${cmd} could not properly be resolved. Try providing a fully qualified path`);
 }
 
+function sanitizeEnvVariables() {
+  let ENV_VARS = { ...process.env };
+  if(ENV_VARS.VIRTUAL_ENV != null) {
+    ENV_VARS.PATH = ENV_VARS.PATH.replaceAll(ENV_VARS.VIRTUAL_ENV.toString(), "")
+  }
+  return ENV_VARS;
+}
+
 module.exports = {
   getExtensionPathOf,
   which,
   whereis,
   sudo,
   resolveCommand,
+  sanitizeEnvVariables,
 };
