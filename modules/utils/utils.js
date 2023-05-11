@@ -7,7 +7,7 @@ const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
 const { run_install, InstallerExceptions } = require("./installerProgress");
-const { which, resolveCommand, getExtensionPathOf, sudo } = require("./sysutils");
+const { which, resolveCommand, getExtensionPathOf, sudo, sanitizeEnvVariables } = require("./sysutils");
 const process = require("process");
 
 const RR_GITHUB_URL = "https://api.github.com/repos/rr-debugger/rr/commits/master";
@@ -89,7 +89,7 @@ function ToolBuilder(name, variants) {
   const errors = [];
   for(const variant of variants) {
     try {
-      const path = execSync(`which ${variant}`)
+      const path = execSync(`which ${variant}`, { env: sanitizeEnvVariables() })
       if(!strEmpty(path)) {
         return new Tool(name, path.toString().trim(), null);
       }
@@ -546,7 +546,7 @@ const UBUNTU_DEPS =
 async function guessInstaller(python, logger) {
   const verify_py_imports = async (args) => {
     return new Promise(resolve => {
-      _spawn(python, args).on("exit", (code) => {
+      _spawn(python, args, { env: sanitizeEnvVariables() }).on("exit", (code) => {
         if(code == 0) {
           logger.appendLine(`${python} ${args.join(" ")} succeeded!`);
           resolve(true);
@@ -649,7 +649,7 @@ async function installRRFromDownload({python}, logger) {
 function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   return _spawn(cmake,
     ["-S", `${build_path}/rr-master`, "-B", build_path, "-DCMAKE_BUILD_TYPE=Release", has_ninja ? "-G Ninja" : "",],
-    { shell: true, stdio: "pipe", cwd: build_path }
+    { shell: true, stdio: "pipe", cwd: build_path, detached: true, env: sanitizeEnvVariables() }
   );
 }
 
@@ -663,66 +663,84 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   } } BuildMetadata
 */
 
+function unzipTodir(unzipPath, file, toPath, logger) {
+  logger.appendLine(`creating dir ${toPath}`);
+  fs.mkdirSync(toPath);
+  const unzip_cmd = `${unzipPath} ${file} -d ${toPath}`;
+  logger.appendLine(unzip_cmd);
+  execSync(unzip_cmd);
+}
+
+function cmakeConfigure(cmakePath, buildPath, hasNinja, logger) {
+  return new Promise((resolve, reject) => {
+    const cmake_cfg = spawn_cmake_cfg(cmakePath, buildPath, hasNinja);
+    cmake_cfg.stdout.on("data", (data) => { logger.appendLine(data.toString().trim()); });
+    cmake_cfg.stderr.on("data", (data) => { logger.appendLine(data.toString().trim()); });
+    cmake_cfg.on("exit", (code) => {
+      if(code == 0) {
+        resolve();
+      } else {
+        reject();
+      }
+    })
+  });
+}
+
+function cmakeProgress(data, last, logger) {
+  const str = data.toString();
+  const matches = str.matchAll(matcher);
+  let incremented = 0;
+  let current_last = last;
+  for (const res of matches) {
+    const { current, total } = res.groups;
+    const current_percent = ((+current) / (+total) * 100.0);
+    incremented += current_percent - current_last;
+    current_last += incremented;
+  }
+  logger.append(str);
+  return incremented;
+}
+
+const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
+
 /** @returns { Promise<BuildMetadata | null> } */
 async function installRRFromSource(requiredTools, logger, build_path = null) {
-  const { python, cmake, unzip } = requiredTools;
-  const { pkg_manager, deps } = await guessInstaller(python, logger);
+  const { cmake, unzip } = requiredTools;
   const { path, status } = await http_download(
     "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
     "rr-master.zip"
   );
+  const { sha, date } = await queryGit();
   if (status == "success") {
-    let result = await run_install(python, pkg_manager, deps, true, logger);
-    vscode.window.showInformationMessage(`${result} dependencies`);
     const { version } = await resolveLatestVersion("we-don't-care-about-arch-here");
     const has_ninja = !strEmpty((await which("ninja")));
-    return vscode.window.withProgress(
+    return await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, cancellable: true, title: "Building RR" },
-      (progress, token) => {
-        return new Promise((progress_resolve, reject) => {
+      async (progressReporter, token) => {
+        return new Promise(async (progress_resolve, reject) => {
           if(build_path == null)
             build_path = getAPI().get_storage_path_of(`rr-${version}`);
-          logger.show();
-          logger.appendLine(`creating dir ${build_path}`);
-          fs.mkdirSync(build_path);
-          const unzip_cmd = `${unzip} ${path} -d ${build_path}`;
-          logger.appendLine(unzip_cmd);
-          execSync(unzip_cmd);
-          const cmake_cfg = spawn_cmake_cfg(cmake, build_path, has_ninja);
-          cmake_cfg.stdout.on("data", (data) => { logger.append(data.toString()); });
-          cmake_cfg.stderr.on("data", (data) => { logger.append(data.toString()); });
-
-          let last = 0;
-          const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
-
-          cmake_cfg.on("exit", () => {
+          unzipTodir(unzip, path, build_path, logger);
+          await cmakeConfigure(cmake, build_path, has_ninja, logger).then(() => {
             const cmake_build = _spawn(cmake, ["--build", build_path, "-j"], {
               stdio: "pipe",
+              shell: true,
               detached: true,
               cwd: build_path,
+              env: sanitizeEnvVariables()
             });
+            let last = 0;
             cmake_build.stdout.on("data", (data) => {
-              const str = data.toString();
-              const matches = str.matchAll(matcher);
-              for (const res of matches) {
-                const { current, total } = res.groups;
-                const inc = ((+current - last) / +total) * 100.0;
-                last = +current;
-                progress.report({ message: "Building...", increment: inc });
-              }
-              logger.append(str);
+              const inc = cmakeProgress(data, last, logger);
+              last += inc;
+              progressReporter.report({ message: "Building...", increment: inc });
             });
             cmake_build.stderr.on("data", (data) => {
               logger.append(data.toString());
             });
             cmake_build.on("exit", async (code) => {
               if (code == 0) {
-                logger.appendLine(
-                  // eslint-disable-next-line max-len
-                  `Build completed successfully...`
-                );
-                const { sha, date } = await queryGit();
-                // eslint-disable-next-line max-len
+                logger.appendLine(`Build completed successfully...`);
                 progress_resolve({
                   install_dir: getAPI().get_storage_path_of(`rr-${version}`),
                   build_dir: build_path,
@@ -740,12 +758,14 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
             });
 
             token.onCancellationRequested(() => {
-              // -pid kills the process tree. We are a vengeful, hateful, spiteful god of the linux universe
-              // (we do this, because "cmake --build" spawns new processes)
+              // kill all spawned processed by cmake including cmake
               process.kill(-cmake_build.pid, "SIGTERM");
-              progress_resolve(null);
+              fs.rmSync(build_path, {force: true, recursive: true})
+              reject("Cancelled");
             });
-          });
+          }).catch(() => {
+            reject("CMake Configured failed");
+          })
         });
       }
     );
@@ -786,7 +806,14 @@ async function getRR() {
         {
           label: "Install from source",
           description: "Download, build, and install from source",
-          method: installRRFromSource,
+          method: (requiredTools, logger) => {
+            const { python } = requiredTools;
+            return guessInstaller(python, logger).then(({pkg_manager, deps}) => {
+              return run_install(python, pkg_manager, deps, true, logger).then(() => {
+                return installRRFromSource(requiredTools, logger)
+              })
+            })
+          },
           op: "build"
         },
       ],
