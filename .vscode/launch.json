@@ -29,7 +29,7 @@
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/opensource/binutils-gdb"
+				"/home/cx/dev/foss/binutils-gdb"
 			]
 		},
 		{
