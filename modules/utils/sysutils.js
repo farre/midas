@@ -1,5 +1,6 @@
 const vscode = require("vscode");
-const { exec, spawn: _spawn, execSync, spawnSync } = require("child_process");
+const { exec, spawn: _spawn, execSync } = require("child_process");
+const fsp = require("fs/promises");
 const fs = require("fs");
 const Path = require("path");
 
@@ -121,6 +122,35 @@ function sanitizeEnvVariables() {
   return ENV_VARS;
 }
 
+/**
+ * @returns {Promise<{detail: string, label: string, alwaysShow: boolean, pid: string}[]>}
+ */
+async function getAllPidsForQuickPick() {
+  const res = (await fsp.readdir("/proc", { withFileTypes: true }))
+    .filter(dirent => {
+      try {
+        if(!dirent.isDirectory()) return false;
+        const number = Number.parseInt(dirent.name);
+        return number.toString() == dirent.name;
+      } catch(ex) {
+        return false;
+      }
+    })
+    .map(async dirent => {
+      return await fsp.readFile(`/proc/${dirent.name}/cmdline`).then(buf => {
+        const label = buf.toString().replace("\u0000", " ");
+
+        return {
+          detail: dirent.name,
+          label: `${label} (${dirent.name})`,
+          alwaysShow: true,
+          pid: dirent.name
+        };
+      })
+    });
+  return Promise.all(res);
+}
+
 module.exports = {
   getExtensionPathOf,
   which,
@@ -128,4 +158,5 @@ module.exports = {
   sudo,
   resolveCommand,
   sanitizeEnvVariables,
+  getAllPidsForQuickPick
 };

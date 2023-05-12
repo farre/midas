@@ -41,7 +41,7 @@ const initializer = async (config) => {
       }
     }
   }
-  if (!config.program && config.remoteTargetConfig == null) {
+  if (!config.program && config.remoteTargetConfig == null && config.request != "attach") {
     throw new Error("Program or remoteTargetConfig was not set. One of these fields has to be set in launch.json");
   }
 };

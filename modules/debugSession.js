@@ -214,9 +214,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     }
     this.gdb = new GDB(this, this.#spawnConfig)
     this.gdb.setupEventHandlers(false);
-    const program = args.hasOwnProperty("program") ? args.program : "";
     try {
-      await this.gdb.attach_start(program);
+      await this.gdb.attach_start();
       this.sendResponse(response);
     } catch(err) {
       // this.sendEvent(new DebugAdapter.TerminatedEvent());

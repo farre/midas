@@ -181,8 +181,7 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  async attach_start(program) {
-    this.#program = path.basename(program);
+  async attach_start() {
     trace = this.#target.buildSettings.trace;
     this.allStopMode = true;
     vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);

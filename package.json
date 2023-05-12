@@ -309,10 +309,6 @@
                 "description": "Pid of the process to attach to. ${command:getPid} provides the user with an input box where the user types the process name. If multiple processes with that name exists a drop down list of PIDs to choose from will be displayed",
                 "default": "${command:getPid}"
               },
-              "program": {
-                "type": "string",
-                "description": "Binary to debug. Only required for 'gdb' mode. Used for symbolication when attaching to running process."
-              },
               "trace": {
                 "type": [
                   "string"
@@ -404,7 +400,6 @@
             "type": "midas-gdb",
             "request": "attach",
             "name": "Midas Attach",
-            "program": "${1:program}",
             "pid": "${command:getPid}",
             "trace": "Off",
             "cwd": "${workspaceFolder}",

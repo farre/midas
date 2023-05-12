@@ -63,10 +63,9 @@ function fallbackParseOfrrps(data) {
 }
 
 /**
- *
  * @param { string } rr - path to RR
  * @param { string } trace - trace directory
- * @returns
+ * @returns { Promise<{ value: string, label: string, description: string, detail: string, binary: string }[]> }
  */
 async function getTraceInfo(rr, trace) {
   return new Promise((resolve, reject) => {
@@ -96,7 +95,7 @@ async function getTraceInfo(rr, trace) {
       }
       return {
         value: pid,
-        label: `${path.basename(cmd.split(" ")[0] ?? cmd)}`,
+        label: `${path.basename(cmd.split(" ")[0] ?? cmd)} (${pid})`,
         description: `PID: ${pid}, PPID: ${ppid === "--" ? "--" : +ppid}, EXIT: ${exit}`,
         detail: cmd.trim(),
         binary,

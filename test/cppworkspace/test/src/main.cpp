@@ -69,6 +69,38 @@ inline void alter_t(T &t) {
   t.s.k++;
 }
 
+struct FooBarBaz {
+  int a, b, c;
+};
+
+struct Builder {
+  Builder() {}
+
+  Builder& set_foo(int f) {
+    foo = f;
+    return *this;
+  }
+
+  Builder& set_bar(int b) {
+    bar = b;
+    return *this;
+  }
+
+  Builder& set_baz(int b) {
+    baz = b;
+    return *this;
+  }
+
+  FooBarBaz finalize() {
+    return FooBarBaz { .a = foo, .b = bar, .c = baz };
+  }
+
+private:
+  int foo;
+  int bar;
+  int baz;
+};
+
 int main(int argc, const char **argv) {
   std::map<int, std::string> mumbojumbo;
   mumbojumbo[10] = "hello";
@@ -170,7 +202,10 @@ int main(int argc, const char **argv) {
   statics::main();
   structsrequests::main();
   freefloating_watch::main();
-
+  
+  Builder b;
+  const auto fbb = b.set_foo(10).set_bar(20).set_baz(30).finalize();
+  
   exceptions::main(9);
   exceptions::main(4);
 }
