@@ -1,5 +1,10 @@
 # Usage
 
+- [Setting watchpoints](#setting-watchpoints)
+- [Watch variables](#watch-variables)
+- [Find first operator](#find-first)
+- [Hexadecimal watch variable formatting](#hexadecimal-format-of-watch-variables)
+
 You can use GDB/rr from the debug console in VSCode as normal. No prefix commands with -exec etc, just type whatever commands you want. Notice however, that some commands might alter GDB state which might _not_ be seen by Midas, so if you ever come across a command that breaks Midas or make Midas behave strange, please be so kind and report it so that edge cases can be handled.
 
 ## Setting watchpoints
@@ -35,6 +40,10 @@ The best approach to analyze arrays (of type `T[]`) using Midas debug adapter is
 This feature comes with some limitations and can even cause GDB to hang due to how pretty printers work. This is described in [bugs](./BUGS.MD). If it does, use the `cancel` command described below.
 Pretty printers read values from the type, and thus, if the user enters a range of values where some doesn't exist, the Python Pretty printer might interpret arbitrary data as that type
 and can produce all kinds of strange behaviors, like for instance thinking a `std::vector` has billions of elements.
+
+This feature is _particularly_ useful in use with variable length types. Below is an example from working on some GDB code:
+
+![Another example of subscript operator](./gdb_variable_length_struct.png)
 
 ## Debug Console - Midas Specific commands
 
