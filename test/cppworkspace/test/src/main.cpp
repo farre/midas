@@ -8,6 +8,7 @@
 #include "testcase_namespaces/structrequests.hpp"
 #include "testcase_namespaces/test_freefloating_watch.hpp"
 #include "testcase_namespaces/test_ptrs.hpp"
+#include <cstdint>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -101,6 +102,19 @@ private:
   int baz;
 };
 
+struct ZeroedUint8Memory {
+  ZeroedUint8Memory(int size) : items(size) {
+    elements = new uint8_t[size];
+    for(auto i = elements; i < elements+size; i++) *i = 0;
+  }
+
+  ~ZeroedUint8Memory() {
+    delete[] elements;
+  }
+  int items;
+  uint8_t* elements;
+};
+
 int main(int argc, const char **argv) {
   std::map<int, std::string> mumbojumbo;
   mumbojumbo[10] = "hello";
@@ -112,6 +126,11 @@ int main(int argc, const char **argv) {
   std::vector<std::string> foos[3]{};
   // testing for pretty printed child values of pretty printed type behind a pointer
   auto foovec = new std::vector<std::string>{};
+
+  auto u8mem = ZeroedUint8Memory(32);
+  for(auto i = 0; i < 32; i++) {
+    u8mem.elements[i] = i;
+  }
 
   signal(SIGINT, interrupt_signal);
   std::vector<std::string> captured_args;
@@ -204,8 +223,14 @@ int main(int argc, const char **argv) {
   freefloating_watch::main();
   
   Builder b;
-  const auto fbb = b.set_foo(10).set_bar(20).set_baz(30).finalize();
-  
+  const auto fbb = b.set_foo(10)
+                      .set_bar(20)
+                      .set_baz(30)
+                      .finalize();
+
+  Builder b2;
+  const auto inline_fbb = b2.set_foo(10).set_bar(20).set_baz(30).finalize();
+
   exceptions::main(9);
   exceptions::main(4);
 }

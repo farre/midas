@@ -2,7 +2,7 @@
   "name": "midas",
   "displayName": "midas",
   "icon": "docs/index.png",
-  "description": "Midas: A GDB/MI Visual Studio Code Debug Adapter",
+  "description": "Midas: A GDB & RR Visual Studio Code Debug Adapter",
   "keywords": [
     "gdb",
     "midas",

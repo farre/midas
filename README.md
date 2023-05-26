@@ -1,8 +1,8 @@
 ![Midas](docs/index_large.png)
 
-Be sure to check out [non-self documenting Midas-features](./docs/USAGE.md) if this document doesn't interest you! It explains how to use things like subscript operators, find first operators, debug console, hexadecimal formatting, etc!
-
 Midas is a debug adapter that utilizes the GDB/MI interface while also integrating into the experience an ease of use of [rr](https://rr-project.org/). It also aims to be as fast as GDB/rr allows for non-trivial applications and as such uses GDB's great Python integration to be faster than some debug adapters, where possible.
+
+Be sure to check out [non-self documenting Midas-features](./docs/USAGE.md) if this document doesn't interest you! It explains how to use things like subscript operators, find first operators, debug console, hexadecimal formatting, etc!
 
 Midas defines a set of debug sessions. A "normal debug session" is launching a new session with a specified program to debug.
 The "attach debug session" launches a debug session that attaches to currently running program. A "replayable debug session"
