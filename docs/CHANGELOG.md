@@ -7,6 +7,10 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ## [0.14.0]
 Added toggle-hex formatting functionality
 Added readMemory request - users can now use hex dump view of variables
+
+## [0.12.0]
+Stable release of 0.11.1/5
+
 Fixed instruction-stepping during disassembly not working
 Fixed disassembly to work more reliably
 Fixed due to new implementation of a DAP-request
