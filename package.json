@@ -670,6 +670,342 @@
             }
           }
         ]
+      },
+      {
+        "type": "midas-dap-gdb",
+        "label": "C/C++ Midas DAP GDB",
+        "languages": [
+          "c",
+          "cpp",
+          "cuda-cpp",
+          "rust"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Binary to debug. Only required for 'gdb' mode."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Set breakpoint on main",
+                "default": true
+              },
+              "trace": {
+                "type": [
+                  "string"
+                ],
+                "description": "Debug trace logging",
+                "enum": [
+                  "Off",
+                  "GDB Events",
+                  "Python logs",
+                  "Full"
+                ],
+                "default": "Off",
+                "enumDescriptions": [
+                  "Turn all logging off",
+                  "Turn trace logging of GDB events on",
+                  "Turn debug logging of from Python on",
+                  "Turn on additional debug logging to time.log and update.log, made by Python scripts"
+                ]
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Command line arguments passed to debuggee program",
+                "default": []
+              },
+              "allStopMode": {
+                "type": "boolean",
+                "description": "Whether or not GDB should run in all stop mode",
+                "default": true
+              },
+              "gdbPath": {
+                "type": "string",
+                "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
+                "default": "gdb"
+              },
+              "gdbOptions": {
+                "type": "array",
+                "description": "GDB Arguments."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Current working directory of GDB",
+                "default": "${workspaceFolder}"
+              },
+              "setupCommands": {
+                "type": "array",
+                "description": "GDB Commands to run before debugging."
+              },
+              "attachOnFork": {
+                "type": "boolean",
+                "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
+              },
+              "externalConsole": {
+                "type": "object",
+                "default": {
+                  "path": "",
+                  "closeTerminalOnEndOfSession": true,
+                  "endSessionOnTerminalExit": true
+                },
+                "description": "External console settings",
+                "required": [
+                  "path"
+                ],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "Path to terminal to launch. If it exists in $PATH only the command name has to be provided",
+                    "default": ""
+                  },
+                  "closeTerminalOnEndOfSession": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Attempt to close terminal at the end of debug session"
+                  },
+                  "endSessionOnTerminalExit": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "End debug session if external console exits"
+                  }
+                }
+              },
+              "remoteTargetConfig": {
+                "type": "object",
+                "description": "Launch session on a running remote target",
+                "default": {
+                  "address": null,
+                  "substitute-path": {
+                    "local": null,
+                    "remote": null
+                  }
+                },
+                "properties": {
+                  "description": "string",
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the remote target to connect to",
+                    "default": null
+                  },
+                  "substitute-path": {
+                    "type": "object",
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute",
+                    "default": {
+                      "local": null,
+                      "remote": null
+                    }
+                  }
+                },
+                "required": [
+                  "address",
+                  "substitute-path"
+                ]
+              }
+            }
+          },
+          "attach": {
+            "properties": {
+              "pid": {
+                "type": "string",
+                "description": "Pid of the process to attach to. ${command:getPid} provides the user with an input box where the user types the process name. If multiple processes with that name exists a drop down list of PIDs to choose from will be displayed",
+                "default": "${command:getPid}"
+              },
+              "target": {
+                "type": "object",
+                "description": "Define target type",
+                "properties": {
+                  "type": "string",
+                  "address": "string"
+                },
+                "default": {
+                  "type": "extended-remote",
+                  "address": "127.0.0.1:50505"
+                }
+              },
+              "trace": {
+                "type": [
+                  "string"
+                ],
+                "description": "Debug trace logging",
+                "enum": [
+                  "Off",
+                  "GDB Events",
+                  "Python logs",
+                  "Full"
+                ],
+                "default": "Off",
+                "enumDescriptions": [
+                  "Turn all logging off",
+                  "Turn trace logging of GDB events on",
+                  "Turn debug logging of from Python on",
+                  "Turn on additional debug logging to time.log and update.log, made by Python scripts"
+                ]
+              },
+              "setupCommands": {
+                "type": "array",
+                "description": "GDB Commands to run before debugging."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Current working directory of GDB",
+                "default": "${workspaceFolder}"
+              },
+              "gdbPath": {
+                "type": "string",
+                "description": "Path to GDB. Defaults to trying to execute GDB in $PATH",
+                "default": "gdb"
+              },
+              "gdbOptions": {
+                "type": "array",
+                "description": "GDB Arguments."
+              },
+              "attachOnFork": {
+                "type": "boolean",
+                "description": "Whether or not GDB should attach on fork, for instance if you're debugging a target that spawns new processes with `fork`"
+              },
+              "remoteTargetConfig": {
+                "type": "object",
+                "description": "Launch session on a running remote target",
+                "default": {
+                  "address": null,
+                  "substitute-path": {
+                    "local": null,
+                    "remote": null
+                  }
+                },
+                "properties": {
+                  "description": "string",
+                  "address": {
+                    "type": "string",
+                    "description": "Address of the remote target to connect to",
+                    "default": null
+                  },
+                  "substitute-path": {
+                    "type": "object",
+                    "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute as GDB will find the source files on your local machine.",
+                    "default": {
+                      "local": null,
+                      "remote": null
+                    }
+                  }
+                },
+                "required": [
+                  "address",
+                  "substitute-path"
+                ]
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "midas-dap-gdb",
+            "request": "launch",
+            "name": "(DAP) Midas Launch",
+            "program": "${workspaceFolder}/program",
+            "stopOnEntry": true,
+            "trace": "Off",
+            "allStopMode": true,
+            "cwd": "${workspaceFolder}",
+            "setupCommands": []
+          },
+          {
+            "type": "midas-dap-gdb",
+            "request": "attach",
+            "name": "(DAP) Midas Attach",
+            "pid": "${command:getPid}",
+            "trace": "Off",
+            "cwd": "${workspaceFolder}",
+            "setupCommands": []
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "name": "midas-dap-gdb",
+            "label": "(DAP) Midas GDB: Launch",
+            "description": "Launch normal debugging session for binary selected by user",
+            "body": {
+              "type": "midas-dap-gdb",
+              "request": "launch",
+              "name": "${1:Launch Debug}",
+              "program": "${2:/path/to/binary}",
+              "cwd": "^\"\\${workspaceFolder}\"",
+              "stopOnEntry": true,
+              "trace": "${3:Off}",
+              "gdbPath": "${4:gdb}",
+              "allStopMode": true,
+              "setupCommands": [],
+              "attachOnFork": false
+            }
+          },
+          {
+            "name": "midas-dap-gdb",
+            "label": "(DAP) Midas GDB: Attach",
+            "description": "Attach GDB to a running process",
+            "body": {
+              "type": "midas-dap-gdb",
+              "request": "attach",
+              "name": "${1:Attach to process}",
+              "cwd": "^\"\\${workspaceFolder}\"",
+              "trace": "${4:Off}",
+              "pid": "^\"\\${command:getPid}\"",
+              "gdbPath": "${5:gdb}",
+              "setupCommands": [],
+              "attachOnFork": false
+            }
+          },
+          {
+            "name": "midas-dap-gdb",
+            "label": "(DAP) Midas GDB: Attach in remote session",
+            "description": "Connect to remote instance of GDBServer and instruct it to attach to a running process. You will be given a list of available processes to attach to.",
+            "body": {
+              "type": "midas-dap-gdb",
+              "request": "attach",
+              "name": "Connect and run remote target",
+              "trace": "${4:Off}",
+              "gdbPath": "${5:gdb}",
+              "setupCommands": [],
+              "attachOnFork": false,
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
+            }
+          },
+          {
+            "name": "midas-dap-gdb",
+            "label": "(DAP) Midas GDB: Launch in remote session",
+            "description": "Connect to remote GDBServer and instruct it to launch <program>",
+            "body": {
+              "type": "midas-dap-gdb",
+              "request": "launch",
+              "program": "/path/in/remote/target/to/program",
+              "name": "Connect and run remote target",
+              "trace": "${4:Off}",
+              "gdbPath": "${5:gdb}",
+              "setupCommands": [],
+              "attachOnFork": false,
+              "remoteTargetConfig": {
+                "address": null,
+                "substitute-path": {
+                  "local": null,
+                  "remote": null
+                }
+              }
+            }
+          }
+        ],
+        "variables": {
+          "getPid": "midas.getPid"
+        }
       }
     ]
   },

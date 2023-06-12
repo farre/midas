@@ -4,6 +4,9 @@ All notable changes to the "midas" extension will be documented in this file. Ch
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.12.0]
+Stable release of 0.11.1/5
+
 ## [0.11.1]
 Toolchain versioning management added
 Added auto complete for debug console for gdb commands

@@ -4,6 +4,7 @@ const vscode = require("vscode");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
+const { DAPConfigurationProvider, DAPFactory } = require("./providers/midas-dap-gdb");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which } = require("./utils/sysutils");
 const { getRR, strEmpty, getAPI, queryGit, installRRFromSource, verifyPreRequistesExists, guessInstaller } = require("./utils/utils");
@@ -405,18 +406,7 @@ async function init_midas(api) {
   api.write_midas_version()
 }
 
-/**
- * @param {vscode.ExtensionContext} context
- */
-async function activateExtension(context) {
-  vscode.debug.registerDebugAdapterTrackerFactory("*", new MidasDebugAdapterTrackerFactory());
-  const cp_provider = new CheckpointsViewProvider(context);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    })
-  );
-  context.subscriptions.push(...getVSCodeCommands());
+function registerMidasType(context) {
   let provider = new ConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
@@ -428,8 +418,16 @@ async function activateExtension(context) {
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new DebugAdapterFactory())
   );
+}
 
-  let rrProvider = new RRConfigurationProvider();
+function registerRRType(context) {
+  const cp_provider = new CheckpointsViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
+  const rrProvider = new RRConfigurationProvider();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       rrProvider.type,
@@ -440,6 +438,30 @@ async function activateExtension(context) {
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(rrProvider.type, new RRDebugAdapterFactory(cp_provider))
   );
+}
+
+function registerDAPType(context) {
+  const provider = new DAPConfigurationProvider();
+  const type = provider.type;
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(type, provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
+  )
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(type, new DAPFactory())
+  );
+}
+
+/**
+ * @param {vscode.ExtensionContext} context
+ */
+async function activateExtension(context) {
+  vscode.debug.registerDebugAdapterTrackerFactory("*", new MidasDebugAdapterTrackerFactory());
+  context.subscriptions.push(...getVSCodeCommands());
+
+  registerMidasType(context);
+  registerRRType(context);
+  registerDAPType(context);
+
   global.API = new MidasAPI(context);
   await init_midas(global.API);
   await global.API.checkRRUpdates();
