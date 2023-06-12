@@ -160,7 +160,12 @@ void tuple_tuples() {
 }
 
 int main(int argc, const char **argv) {
-  std::string hw = "Hello World";
+  std::vector<int> integers;
+  integers.push_back(1);
+  integers.push_back(2);
+  integers.push_back(3);
+  integers.push_back(4);
+  integers.push_back(5);
   vecOfString();
   tuple_tuples();
   auto w = 4000;
