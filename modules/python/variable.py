@@ -17,6 +17,7 @@ def vs_display(name: str,
                value: str,
                evaluate_name: str,
                variable_reference: int,
+               memoryReference = None,
                namedVariables=None,
                indexedVariables=None):
     return {
@@ -25,7 +26,8 @@ def vs_display(name: str,
         "evaluateName": evaluate_name,
         "variablesReference": variable_reference,
         "namedVariables": namedVariables,
-        "indexedVariables": indexedVariables
+        "indexedVariables": indexedVariables,
+        "memoryReference": memoryReference
     }
 
 
@@ -196,7 +198,7 @@ class Variable(ReferencedValue):
                 "name": "value",
                 "value": "Invalid address: {}".format(self.get_value()),
                 "evaluateName": None,
-                "variablesReference": 0
+                "variablesReference": 0,
             }]
             # means we are a primitive type; we have no fields. Handle const char*, etc
         except TypeError as e:
@@ -215,6 +217,14 @@ class Variable(ReferencedValue):
                 "variablesReference": 0
             }]
 
+    def memory_reference(self):
+        val = self.get_value()
+        if val.type.code == gdb.TYPE_CODE_PTR:
+            return hex(int(val))
+        else:
+            return hex(int(val.address))
+
+
     def to_vs(self):
         v = self.get_value()
         if v.is_optimized_out:
@@ -226,13 +236,15 @@ class Variable(ReferencedValue):
             return vs_display(name=self.name,
                               value="{}".format(v),
                               evaluate_name=self.evaluateName,
-                              variable_reference=variableReference)
+                              variable_reference=variableReference,
+                              memoryReference=self.memory_reference())
         else:
             # type is structured (or an array, etc)
             return vs_display(name=self.name,
                               value="{}".format(v.type),
                               evaluate_name=self.evaluateName,
-                              variable_reference=variableReference)
+                              variable_reference=variableReference,
+                              memoryReference=self.memory_reference())
 
 
 class BaseClass(ReferencedValue):

@@ -132,6 +132,13 @@ int main(int argc, const char **argv) {
     u8mem.elements[i] = i;
   }
 
+  auto u8mem_ptr = new ZeroedUint8Memory(64);
+  auto ref_to_ptr = &u8mem_ptr;
+
+  for(auto i = 0; i < u8mem_ptr->items; i++) {
+    u8mem.elements[i] = i;
+  }
+
   signal(SIGINT, interrupt_signal);
   std::vector<std::string> captured_args;
   std::copy(argv, argv + argc, std::back_inserter(captured_args));

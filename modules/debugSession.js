@@ -90,7 +90,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // @ts-ignore
     response.body.supportsMemoryReferences = true;
     response.body.supportsReadMemoryRequest = true;
-    response.body.supportsWriteMemoryRequest = true;
+    response.body.supportsWriteMemoryRequest = !this.#spawnConfig.isRRSession();
     // make VS Code show a 'step back' button
     response.body.supportsStepBack = this.#spawnConfig.isRRSession();
     // make VS Code support data breakpoints
@@ -610,8 +610,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  readMemoryRequest(...args) {
-    return this.virtualDispatch(...args);
+  async readMemoryRequest(response, {memoryReference, offset, count}, request) {
+    let res = await this.gdb.execCMD(`read-memory ${memoryReference} ${offset} ${count}`);
+    response.body = res
+    this.sendResponse(response);
   }
 
   writeMemoryRequest(...args) {
