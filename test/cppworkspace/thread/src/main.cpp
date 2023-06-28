@@ -52,7 +52,12 @@ Iterations mandelbrot(double real, double imag, int limit = 100) {
 // lets pretend this looks up cpus
 auto ncpus_to_use() { return 4; }
 
-void process_range(Surface surface, int y_start, int y_to) {
+static const auto surface = Surface{.width = 100,
+                               .height = 100,
+                               .x = {-2.0, 1.0},
+                               .y = {-1.0, 1.0}};
+
+void process_range(int y_start, int y_to) {
   const auto dx =
       (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
   const auto dy =
@@ -139,7 +144,7 @@ void process_tasks_and_run(int screen_width, int screen_height) {
                                .x = {-2.0, 1.0},
                                .y = {-1.0, 1.0}};
   for (auto i = 0; i < screen_height; i += job_size) {
-    tasks.push_back(std::thread{process_range, surface, i, i + job_size});
+    tasks.push_back(std::thread{process_range, i, i + job_size});
   }
   std::cout << jobs << " jobs spun up" << std::endl;
   for (auto &t : tasks)
@@ -166,6 +171,19 @@ int main(int argc, const char **argv) {
   integers.push_back(3);
   integers.push_back(4);
   integers.push_back(5);
+  const auto main_surface = surface;
+  {
+    // shadowing test
+    auto main_surface = surface;
+    main_surface.height += 10;
+    main_surface.width -= 10;
+  }
+
+  auto i = 10 * 20;
+  const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
+  const auto dy =
+      (surface.y.max - surface.y.min) / static_cast<double>(surface.height - 1);
+  i += 2;
   vecOfString();
   tuple_tuples();
   auto w = 4000;
