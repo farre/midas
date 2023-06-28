@@ -227,7 +227,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
           this.sendEvent(evt);
           break;
         case "breakpoint":
-          this.sendEvent(evt);
+          if(body.reason != "removed")
+            this.sendEvent(evt);
           break;
         default:
           this.sendEvent(evt);
@@ -237,13 +238,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     });
 
     this.gdb.responses.on("response", (response) => {
-      if(response.command == "customRequest") {
-        if(response.body.command == "loadPrettyPrinter") {
-          this.gdb.events.emit("pp-loaded");
-        }
-      } else {
-        this.sendResponse(response);
-      }
+      response.seq = 0;
+      this.sendResponse(response);
     });
 
     this.on("error", (event) => {
@@ -291,10 +287,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * @returns {void}
    */
   configurationDoneRequest(response, args, request) {
-    this.gdb.events.once("pp-loaded", () => {
-      this.gdb.sendRequest(request);
-    });
-    this.loadPrettyPrinterRequest();
+    this.gdb.sendRequest(request);
   }
 
   // eslint-disable-next-line no-unused-vars
@@ -304,13 +297,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       false
     );
     this.gdb.sendRequest(request);
-
   }
 
-  async loadPrettyPrinterRequest() {
-    const args = null;
-    vscode.debug.activeDebugSession.customRequest("loadPrettyPrinter", args);
-  }
 
   // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
