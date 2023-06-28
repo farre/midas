@@ -313,7 +313,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       } else if (e.source && !e.source.path) {
         e.source = null;
       }
-      e.instructionPointerReference = "0x" + e.instructionPointerReference.toString(16).padStart(16, "0");
     });
     this.sendResponse(response);
   }
@@ -649,8 +648,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     this.sendResponse(response);
   }
 
+  async disassembleRequest(response, { memoryReference, offset, instructionOffset, instructionCount, resolveSymbols }) {
+    this.gdb.execCMD(
+      `disassemble ${memoryReference} ${offset ?? 0} ${instructionOffset ?? 0} ${instructionCount} ${resolveSymbols ?? null}`
+    ).then(body => {
+      response.body = body;
+      this.sendResponse(response);
+    })
+  }
+
   // eslint-disable-next-line no-unused-vars
-  async disassembleRequest(response, { instructionCount, instructionOffset, memoryReference, offset, resolveSymbols }) {
+  async disassembleRequest2(response, { instructionCount, instructionOffset, memoryReference, offset, resolveSymbols }) {
     /**
      * This takes the result from `-data-disassemble` and makes sure that the final result is in the format (and count) that VSCode requires.
      * For instance, VSCode might ask for 400 instructions (200 "back" and 200 "forward"), if we only can fetch 137 back
