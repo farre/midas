@@ -92,7 +92,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsReadMemoryRequest = true;
     response.body.supportsWriteMemoryRequest = true;
     // make VS Code show a 'step back' button
-    response.body.supportsStepBack = true;
+    response.body.supportsStepBack = this.#spawnConfig.isRRSession();
     // make VS Code support data breakpoints
     response.body.supportsDataBreakpoints = true;
     // make VS Code support completion in REPL
@@ -128,7 +128,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsGotoTargetsRequest = true;
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
-    response.body.supportsStepBack = this.#spawnConfig.isRRSession();
+
 
     response.body.supportsRestartFrame = true;
 
@@ -440,7 +440,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         break;
       case "instruction":
         // todo(simon): introduce stepping down to assembly level, once disassemble-feature is completed
-        await this.gdb.stepIn(args.threadId);
+        await this.gdb.stepInstruction(args.threadId);
         break;
     }
     this.sendResponse(response);
