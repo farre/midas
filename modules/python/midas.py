@@ -87,6 +87,9 @@ whenCommand = rr_commands.RRWhen()
 import memory_request
 read_memory = memory_request.ReadMemoryRequest()
 
+import disassemble
+disasmRequestt = disassemble.DisassembleRequest()
+
 # Midas sets this, when Midas DA has been initialized
 if config.isDevelopmentBuild:
     misc_logger.debug("Development mode is set. Logging enabled.")
