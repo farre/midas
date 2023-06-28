@@ -279,16 +279,12 @@ class GDB extends GDBMixin(GDBBase) {
 
   setupEventHandlers(stopOnEntry) {
     this.on("notify", this.#onNotify.bind(this));
-    this.on("status", this.#onStatus.bind(this));
     this.on("exec", this.#onExec.bind(this));
 
     if (stopOnEntry) {
       this.once("stopped", this.#onStopOnEntry.bind(this));
-    } else {
-      this.on("stopped", this.#onStopped.bind(this));
     }
 
-    this.on("running", this.#onRunning.bind(this));
     this.on("thread-created", this.#onThreadCreated.bind(this));
     this.on("thread-exited", this.#onThreadExited.bind(this));
     this.on("thread-group-started", this.#onThreadGroupStarted.bind(this));
@@ -512,10 +508,6 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  #onStatus(payload) {
-    this.log(getFunctionName(), payload);
-  }
-
   #onSignalNotifyVsCode(signalPayload) {
     let threadId = +signalPayload["thread-id"];
     let evt = new StoppedEvent("exception", threadId);
@@ -593,109 +585,148 @@ class GDB extends GDBMixin(GDBBase) {
     }
   }
 
-  #onExec(payload) {
-    this.log(getFunctionName(), payload);
-    if (this.config.isRRSession()) {
-      if (payload.data.reason == "signal-received") {
-        this.#onSignal(payload);
-      } else if (payload.data.reason == "exited-normally") {
-        // rr has exited
-        this.sendEvent(new TerminatedEvent());
-        return;
+  createStoppedEvent(reason, desc, threadId, allThreadsStopped, hitBreakpointIds) {
+    const safeParseHitBps = (bp) => {
+      if(bp == null) return [];
+      try {
+        return [+bp];
+      } catch(ex) {
+        return [];
       }
-      if ((payload.state ?? "") == "running") {
-        // rr is all stop, it's all or nothing
-        this.sendContinueEvent(payload.data["thread-id"], true);
+    };
+
+    const safeParseThreadId = (thr) => {
+      try {
+        let threadId = Number.parseInt(thr);
+        if(Number.isNaN(threadId)) return null;
+        return threadId;
+      } catch(ex) {
+        console.log(`Couldn't parse ${thr} for stopped event`);
+        return null;
       }
-    } else {
-      if (payload.data.reason && payload.data.reason.includes("exited")) {
-        this.sendEvent(new TerminatedEvent());
-      } else if (payload.state == "running") {
-        if (payload.data["thread-id"] == "all") {
-          this.sendContinueEvent(1, true);
-        } else {
-          this.sendContinueEvent(payload.data["thread-id"], this.allStopMode);
+    };
+
+    return {
+      event: "stopped",
+      body: {
+        reason: reason,
+        description: desc,
+        threadId: safeParseThreadId(threadId),
+        allThreadsStopped: allThreadsStopped,
+        hitBreakpointIds: safeParseHitBps(hitBreakpointIds)
+      }
+    };
+  }
+
+  registerExceptionInfo(thread, exceptionId, description, msg, typeName) {
+    this.threadExceptionInfos.set(thread, {
+      exceptionId: exceptionId,
+      description: description,
+      breakMode: "always",
+      details: {
+        message: msg,
+        typeName: typeName,
+        stackTrace: msg,
+      },
+    });
+  }
+
+  handleExecStopped(data) {
+    vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
+    switch(data.reason) {
+      case "breakpoint-hit":
+        return this.createStoppedEvent("breakpoint", "Hit breakpoint", data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+      case "signal-received":
+        switch (data["signal-name"]) {
+          case "SIGKILL":
+            // rr
+            if(this.config.isRRSession() && data.frame.func == "syscall_traced") {
+              return this.createStoppedEvent("exception", ui_prepare_signal_display(SIGNALS[data["signal-name"]].description, "Replay ended"), data["thread-id"], true, null);
+            } else {
+              return this.createStoppedEvent("exception", ui_prepare_signal_display(SIGNALS[data["signal-name"]].description), data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+            }
+          case "0": {
+            if (this.config.isRRSession() && !this.paused) {
+              return this.createStoppedEvent("entry", "rr trampoline", 1, true, null);
+            } else if(this.paused) {
+              let evt = new StoppedEvent("entry", 1);
+              let body = {
+                reason: "stopped",
+                description: "Interrupted",
+                threadId: 1,
+                allThreadsStopped: true,
+              };
+              evt.body = body;
+              return evt;
+            }
+            break;
+          }
+          default: {
+            const threadId = +data["thread-id"];
+            const desc = ui_prepare_signal_display(SIGNALS[data["signal-name"]].description);
+            // set except_info for VSCode to pluck out in `exceptionInfoRequest`
+            this.registerExceptionInfo(threadId, data["signal-name"], desc, "", data["signal-name"]);
+            return this.createStoppedEvent("exception", desc, threadId, data["stopped-threads"] == "all", null);
+          }
         }
-      } else if (payload.data.reason == "signal-received") {
-        this.#onSignal(payload);
-      } else if (payload.data.reason && payload.data.reason.includes("watchpoint")) {
-        // todo(simon): look into if we can ignore onStopped messages from GDB entirely and move that entire logic
-        // into onExec as it *always* contains more information than onStopped
-        let msg = `Old value: ${payload.data.value.old}\nNew value: ${payload.data.value.new}`;
-        this.threadExceptionInfos.set(+payload.data["thread-id"], {
-          exceptionId: `Watchpoint`,
-          description: "Watch point triggered",
-          breakMode: "always",
-          details: {
-            message: "No additional information",
-            typeName: payload.data.reason,
-            stackTrace: msg,
-          },
-        });
+        break;
+      case "exited-normally":
+        return new TerminatedEvent();
+      case "end-stepping-range": {
+        return this.createStoppedEvent("step", "Stepping finished", data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+      }
+      case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
+      case "function-finished,breakpoint-hit": {
+        return this.createStoppedEvent("breakpoint", "Hit finish breakpoint", data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+      }
+      case "access-watchpoint-trigger":
+      case "watchpoint-trigger":
+      case "read-watchpoint-trigger": {
+        const wp_msg = `Old value: ${data.value.old}\nNew value: ${data.value.new}`;
+        this.registerExceptionInfo(+data["thread-id"], `Watchpoint`, "Watch point triggered", wp_msg, data.reason);
+        return this.createStoppedEvent("exception", "Hit watchpoint",  data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+      }
+      default: {
+        let reason = "pause";
+        if(data.frame && data.frame.func == "_start") {
+          reason = "entry";
+        }
+        return this.createStoppedEvent(reason, "Stopped", data["thread-id"], data["stopped-threads"] == "all", null);
       }
     }
   }
 
-  #onStopped(payload) {
-    this.log(getFunctionName(), payload);
-    vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
-    let reason;
-    try {
-      reason = payload.reason.join(",");
-    } catch {
-      reason = payload.reason;
+  handleExecRunning(data) {
+    let allContinued = false;
+    if(data["thread-id"] == "all") {
+      allContinued = true;
     }
+    let threadId = Number.parseInt(data["thread-id"]);
+    if(Number.isNaN(threadId)) {
+      threadId = 1;
+    }
+    return new ContinuedEvent(threadId, allContinued);
+  }
 
-    switch (reason) {
-      case "breakpoint-hit": {
-        this.#onBreakpointHit(payload.thread);
-        break;
+  #onExec(payload) {
+    this.log(getFunctionName(), payload);
+    switch (payload.state) {
+      case "stopped": {
+        const event = this.handleExecStopped(payload.data);
+        this.sendEvent(event);
+        return;
       }
-      case "exited-normally": {
-        if (!this.config.isRRSession()) this.sendEvent(new TerminatedEvent());
-        else {
-          this.sendEvent(new StoppedEvent("replay ended"));
-        }
-        break;
+      case "running": {
+        const event = this.handleExecRunning(payload.data);
+        this.sendEvent(event);
+        return;
       }
-      case "signal-received": {
-        // unfortunately MI / GDB sends a bunch of different messages on MI. Seems pretty inefficient to me, but what do I know. We handle the
-        // signal from an onExec emitted event; which will dispatch to this.#onSignal instead. That event contains more information.
-        break;
-      }
-      case "end-stepping-range": {
-        this.sendEvent(newStoppedEvent("step", "Stepping finished", this.allStopMode, payload.thread.id));
-        break;
-      }
-      case "function-finished": // this is a little crazy. But some times, payload.reason == ["function-finished", "breakpoint-hit"]
-      case "function-finished,breakpoint-hit": {
-        this.sendEvent(newStoppedEvent("pause", "Function finished", this.allStopMode, payload.thread.id));
-        break;
-      }
-      case "access-watchpoint-trigger":
-      case "watchpoint-trigger":
-        this.sendEvent(newStoppedEvent("exception", "Hardware watchpoint hit", this.allStopMode, payload.thread.id));
-        break;
-      case "read-watchpoint-trigger": {
-        this.sendEvent(
-          newStoppedEvent("Watchpoint trigger", "Hardware watchpoint hit", this.allStopMode, payload.thread.id)
-        );
-        break;
-      }
-      default:
-        this.sendEvent(new StoppedEvent("Unknown reason", payload.thread.id));
     }
   }
 
   #onStopOnEntry(payload) {
     const THREADID = payload.thread.id;
     this.sendEvent(new StoppedEvent("entry", THREADID));
-    this.on("stopped", this.#onStopped.bind(this));
-  }
-
-  #onRunning(payload) {
-    this.log(getFunctionName(), payload);
-    this.userRequestedInterrupt = false;
   }
 
   #onThreadCreated(thread) {
