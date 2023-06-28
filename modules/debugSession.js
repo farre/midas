@@ -128,6 +128,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     response.body.supportsGotoTargetsRequest = true;
     response.body.supportsHitConditionalBreakpoints = true;
     response.body.supportsSetVariable = true;
+    response.body.supportsStepBack = this.#spawnConfig.isRRSession();
 
     response.body.supportsRestartFrame = true;
 
@@ -469,10 +470,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async reverseContinueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
     response.body = {
-      allThreadsContinued: this.gdb.allStopMode,
-    };
-    await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, true);
+      allThreadsContinued : true
+    }
     this.sendResponse(response);
+    this.gdb.execCLI("reverse-continue");
   }
 
   restartFrameRequest(...args) {
