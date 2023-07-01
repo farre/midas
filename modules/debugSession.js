@@ -16,8 +16,8 @@ let server;
 let REPL_MESSAGE_SHOWN = 0;
 
 class MidasDebugSession extends DebugAdapter.DebugSession {
-  /** @type { Set<number> } */
-  formattedVariablesMap = new Set();
+  formatValuesAsHex = false;
+  evaluateNameFormattingMap = new Set();
   /** @type { GDB } */
   gdb;
 
@@ -319,16 +319,13 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async variablesRequest(response, { variablesReference }) {
     response.body = await this.exec(`variable-request ${variablesReference}`);
-    this.checkForHexFormatting(variablesReference, response.body.variables);
+    this.performHexFormat(response.body.variables);
     this.sendResponse(response);
   }
 
-  checkForHexFormatting(variablesReference, variables) {
-    if (this.formattedVariablesMap.has(variablesReference)) {
-      for (let v of variables) {
-        if (v.variablesReference > 0) {
-          this.formattedVariablesMap.add(v.variablesReference);
-        }
+  performHexFormat(variables) {
+    if(this.formatValuesAsHex) {
+      for(let v of variables) {
         if (!isNaN(v.value)) {
           v.value = toHexString(v.value);
         }
@@ -536,22 +533,17 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     const { expression, frameId, context } = args;
     if (context == "watch") {
       try {
-        // meeeeeh. This is what you get for not having real types.
-        const { name, formatting, subscript, scope } = this.parse_evaluate_request_parameters(expression);
-        const cmd = `watch-variable ${name} ${frameId} ${subscript.begin} ${subscript.end} ${scope}`;
-        let { body, success, message } = await this.exec(cmd);
-        if (formatting == "hex" && success) {
-          if (body.variablesReference > 0) {
-            this.formattedVariablesMap.add(Number.parseInt(body.variablesReference));
-          }
-          if (!isNaN(body.result)) {
-            body.result = toHexString(body.result);
-          }
-        }
-        response.body = body;
-        response.success = success;
-        response.message = message;
-        this.sendResponse(response);
+        this.gdb.execCMD(`midas-evaluate ${expression} ${frameId}`).then(({ body, success, message }) => {
+          response.body = body;
+          response.success = success;
+          response.message = message;
+          this.sendResponse(response);
+        }).catch(ex => {
+          response.body = null;
+          response.success = false;
+          response.message = `${ex}`;
+          this.sendResponse(response);
+        })
       } catch (ex) {
         response.body = null;
         response.success = false;
@@ -748,6 +740,10 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   // eslint-disable-next-line no-unused-vars
   async customRequest(command, response, args) {
     switch (command) {
+      case "toggle-hex":
+        this.formatValuesAsHex = !this.formatValuesAsHex;
+        this.sendEvent(new DebugAdapter.InvalidatedEvent(["variables"]));
+        break;
       case CustomRequests.ContinueAll: {
         await this.gdb.continueAll();
         response.body = {

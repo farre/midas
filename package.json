@@ -70,6 +70,11 @@
     ],
     "commands": [
       {
+        "command": "midas.toggle-hex-formatting",
+        "title": "Toggle hex formatting",
+        "shortTitle": "Format: Hex"
+      },
+      {
         "command": "midas.issue-report",
         "title": "Midas: Create github issue log",
         "shortTitle": "Midas: Create github issue log"
@@ -161,6 +166,12 @@
           "command": "midas.set-checkpoint",
           "group": "midas",
           "when": "midas.rrSession == true && midas.debugType == midas-rr"
+        }
+      ],
+      "debug/variables/context": [
+        {
+          "command": "midas.toggle-hex-formatting",
+          "group": "midas"
         }
       ]
     },

@@ -65,6 +65,7 @@ setWatchPointCommand = watchpoint_request.SetWatchPoint()
 
 import watch_variable
 watchVariableCommand = watch_variable.WatchVariable(executionContexts)
+evalRequest = watch_variable.EvaluateRequest(executionContexts)
 
 # Request that is Midas only; it resets all backend state (for when for instance the user wants to restart a debug session).
 import reset_request

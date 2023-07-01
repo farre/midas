@@ -20,18 +20,16 @@ The reasoning behind this, is that the re-evaluation of watch points when new sc
 Since the VSCode UI for Watch Variables isn't extendable as of now, the design decision has been to add "keywords" that change the output of the watch variable contents. These are described here. In the future
 a context menu will be added, for a more clearer use. Example shown below for how it works.
 
-## Find first
-Sometimes you want to watch a variable that's in a frame above the current frame you're in. In order to do so, prepend the "frame wildcard specifier" `*` before the name, and Midas will attempt to find the variable in any
-of the frames above. This functionality works in tandem with the other watch variable functionalities (like subscript, and hexadecimal formatting).
-![Example of frame wildcard specifier](./watch_variable_frame_wildcard_specifier.gif)
-
 ## Hexadecimal format of watch variables
 
-If you want the watch variables to be formatted as hexadecimal, append `,x` to the expression. This will format the value and any of it's possible children as hexadecimal. Displaying hexadecimal floats will look strange for now. It's because Midas is using built in NodeJS functionality for this.
+Unfortunately VSCode provides no good way to format individual values (due to not being fully DAP-compliant), so for now you can only toggle hex formatting for all variables on display. Right click in the "Variables" pane during
+a debugging session and click "Toggle hex formatting":
 
-![Example of hex formatted tuple](./watch_variable_hex_format.png)
+![Toggle hex](./toggle_hex.gif)
 
 ## Watch variable subscript
+
+This feature has been disabled for now. For normal pointers, you can use `foo[0]@10` to get 10 elements of foo (starting at position 0) - i.e. the same way you would, using GDB from the command line. Due to re-factor, subscripting into pretty printed values has been disabled to be able to re-introduce it in newer versions. Documentation is left in, as I expect this feature to work exactly the same in future versions.
 
 The best approach to analyze arrays (of type `T[]`) using Midas debug adapter is to add them to the watch variables list with the desired range. This is achieved by writing
 `foo[N:M]` (or `foo[N]` for single elements). VSCode currently does not honor the "paging" of variables but even if it did, this is still the preferable approach, since paging in variables still would mean you would have to expand until you reach `N:M`.
