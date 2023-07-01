@@ -57,6 +57,10 @@ function getVSCodeCommands() {
     vscode.debug.activeDebugSession.customRequest(CustomRequests.ReverseFinish);
   });
 
+  let toggleHexFormatting = registerCommand("midas.toggle-hex-formatting", (/** item */) => {
+    vscode.debug.activeDebugSession.customRequest("toggle-hex")
+  });
+
   const issueGithubReport = registerCommand("midas.issue-report", async () => {
     if (vscode.debug.activeDebugSession) {
       const cfg = vscode.debug.activeDebugSession.configuration;
@@ -120,6 +124,7 @@ function getVSCodeCommands() {
     issueGithubReport,
     getPid_,
     getRR_,
+    toggleHexFormatting
   ];
 }
 

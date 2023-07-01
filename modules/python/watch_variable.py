@@ -37,6 +37,43 @@ def find_variable(frame, name):
     it = midas_utils.get_global(frame, name)
     return it
 
+class EvaluateRequest(gdb.Command):
+    def __init__(self, ec):
+        super(EvaluateRequest, self).__init__("gdbjs-midas-evaluate", gdb.COMMAND_USER)
+        self.name = "midas-evaluate"
+        self.ec = ec
+
+    @config.timeInvocation
+    def invoke(self, args, from_tty):
+        global watched_variables
+        [expr, frameId] = midas_utils.parse_command_args(args, str, int)
+        try:
+          refId = config.variableReferences.get_context(frameId)
+          if refId is None:
+            raise gdb.GdbError("No variable reference mapping for frame id {} exists".format(frameId))
+          ec = self.ec.get(refId.threadId)
+          if ec is None:
+            raise gdb.GdbError("Execution context does not exist")
+          val = ec.free_floating_watchvariable(expr)
+          if val is not None:
+              res = val.to_vs()
+              result = response(success=True,
+                                  message=None,
+                                  result=res["value"],
+                                  type="{}".format(val.get_type()),
+                                  variableReference=val.get_variable_reference())
+              midas_utils.send_response(self.name, result, midas_utils.prepare_command_response)
+              return
+          sf = ec.get_stackframe(frameId)
+          val = gdb.parse_and_eval(expr)
+          v = sf.add_watched_variable(expr, val, 0, None)
+          displayed = v.to_vs()
+          res = response(True, None, displayed["value"], f"{v.get_type()}", v.get_variable_reference())
+        except Exception as ex:
+          res = response(False, f"Failed to evaluate: {ex}", None)
+        midas_utils.send_response(self.name, res, midas_utils.prepare_command_response)
+
+
 class WatchVariable(gdb.Command):
     """Not to be confused with watch point."""
 
