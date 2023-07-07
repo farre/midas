@@ -449,18 +449,18 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   async stepBackRequest(response, args) {
     let granularity = args.granularity ?? "line";
+    this.sendResponse(response);
     switch (granularity) {
       case "line":
-        await this.gdb.stepOver(args.threadId, true);
+        this.gdb.stepOver(args.threadId, true);
         break;
       case "instruction":
-        await this.gdb.stepInstruction(args.threadId, true);
+        this.gdb.stepInstruction(args.threadId, true);
         break;
       case "statement":
       default:
-        await this.gdb.stepOver(args.threadId, true);
+        this.gdb.stepOver(args.threadId, true);
     }
-    this.sendResponse(response);
   }
 
   async reverseContinueRequest(response, args) {
