@@ -32,6 +32,15 @@
 				"/home/cx/dev/foss/binutils-gdb"
 			]
 		},
+    {
+			"name": "lldb",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"/home/cx/dev/foss/cx/llvm-project/lldb"
+			]
+		},
 		{
 			"name": "Firefox",
 			"type": "extensionHost",
