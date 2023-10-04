@@ -1,0 +1,2 @@
+source modules/python/dap-wrapper/variables_reference.py
+source modules/python/dap-wrapper/dap.py

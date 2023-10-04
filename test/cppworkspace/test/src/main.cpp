@@ -115,6 +115,21 @@ struct ZeroedUint8Memory {
   uint8_t* elements;
 };
 
+void zeroed_test(int foo, float bar) {
+  auto u8mem = ZeroedUint8Memory(32);
+  for(auto i = 0; i < 32; i++) {
+    u8mem.elements[i] = i;
+  }
+
+  auto u8mem_ptr = new ZeroedUint8Memory(64);
+  auto ref_to_ptr = &u8mem_ptr;
+
+  for(auto i = 0; i < u8mem_ptr->items; i++) {
+    u8mem.elements[i] = i;
+  }
+  std::cout << "exiting zeroed_test" << std::endl;
+}
+
 int main(int argc, const char **argv) {
   std::map<int, std::string> mumbojumbo;
   mumbojumbo[10] = "hello";
@@ -127,18 +142,7 @@ int main(int argc, const char **argv) {
   // testing for pretty printed child values of pretty printed type behind a pointer
   auto foovec = new std::vector<std::string>{};
 
-  auto u8mem = ZeroedUint8Memory(32);
-  for(auto i = 0; i < 32; i++) {
-    u8mem.elements[i] = i;
-  }
-
-  auto u8mem_ptr = new ZeroedUint8Memory(64);
-  auto ref_to_ptr = &u8mem_ptr;
-
-  for(auto i = 0; i < u8mem_ptr->items; i++) {
-    u8mem.elements[i] = i;
-  }
-
+  zeroed_test(10, 42.0f);
   signal(SIGINT, interrupt_signal);
   std::vector<std::string> captured_args;
   std::copy(argv, argv + argc, std::back_inserter(captured_args));
