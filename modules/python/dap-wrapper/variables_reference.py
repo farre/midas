@@ -54,7 +54,7 @@ class StackFrame(VariablesReference):
       scope_res = {"name": scope.name, "variablesReference": scope.id }
       print(f"{scope_res}")
       res.append(scope_res)
-    return { "scopes": res }
+    return res
 
 
 # Unfortunately, the DAP-gods in their infinite wisdom, named this concept "VariablesReference"
@@ -121,7 +121,7 @@ class ArgsReference(ScopesReference):
       gdbValue = self.frame.gdbFrame.read_var(symbol, block)
       res.append(vs_variable(symbol.name, gdbValue, symbol.name, 0, gdbValue.address))
 
-    return { "variables": res }
+    return res
 
 class LocalsReference(ScopesReference):
   def __init__(self, stackFrame):
@@ -134,7 +134,7 @@ class LocalsReference(ScopesReference):
       gdbValue = self.frame.gdbFrame.read_var(symbol, block)
       res.append(vs_variable(symbol.name, gdbValue, symbol.name, 0, gdbValue.address))
 
-    return { "variables": res }
+    return res
 
 class RegistersReference(ScopesReference):
   def __init__(self, stackFrame):

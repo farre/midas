@@ -58,7 +58,7 @@ def threads_request(args):
         if t.details is not None:
             thr_name = t.details
         res.append({"id": t.global_num, "name": thr_name})
-    return res
+    return { "threads": res }
 
 
 commands["threads"] = threads_request
@@ -74,7 +74,7 @@ def stacktrace(args):
             ):
                 sf = StackFrame(frame)
                 res.append(sf.contents())
-    return res
+    return { "stackFrames": res }
 
 
 commands["stacktrace"] = stacktrace
@@ -85,7 +85,7 @@ def scopes(args):
     sf = variable_references.get(args["frameId"])
     if sf is None:
         raise gdb.GdbError(f"Failed to get frame with id {args['frameId']}")
-    return sf.scopes()
+    return { "scopes": sf.scopes() }
 
 
 commands["scopes"] = scopes
@@ -98,8 +98,7 @@ def variables(args):
         raise gdb.GdbError(
             f"Failed to get variablesReference {args['variablesReference']}"
         )
-
-    return container.contents()
+    return { "variables": container.contents() }
 
 
 commands["variables"] = variables
@@ -108,9 +107,12 @@ def continue_(args):
     continueOneThread = args.get("singleThread")
     if continueOneThread is not None and continueOneThread:
       thread = select_thread(args.get("threadId"))
-      gdb.execute("continue ")
+      gdb.post_event(lambda: gdb.execute("continue"))
     else:
-      gdb.execute("continue -a")
+      gdb.post_event(lambda: gdb.execute("continue -a"))
+    return { "allThreadsContinued": not continueOneThread }
+
+commands["continue"] = continue_
 
 socket_path = generate_socket_path()
 event_socket: socket = None
@@ -118,7 +120,7 @@ event_connection: socket = None
 
 
 def event_thread():
-    global socket_path
+    socket_path = "/tmp/midas-events"
     global event_socket
     global event_connection
 
@@ -148,72 +150,93 @@ def prep_response(seq, request_seq, success, command, message=None, body=None):
         "body": body,
     }
 
+from io import StringIO
 
-class DAP(BaseHTTPRequestHandler):
-    def do_HEAD(self):
-        return
+DAPHeader = "Content-Length:"
+HeaderLen = len(DAPHeader)
 
-    def do_GET(self):
-        global socket_path
-        if socket_path is None:
-            raise Exception("Event socket has not been setup")
-        self.send_response(200)
-        self.send_header("Content-type", "text/json")
-        self.end_headers()
-        self.wfile.write(bytes(socket_path, "utf8"))
+def check_header(header):
+    if not header.startswith(DAPHeader):
+        raise
 
-    def do_POST(self):
-        global commands
-        global seq
-        self.send_response(200)
-        self.send_header("Content-type", "text/json")
-        self.end_headers()
-        len = int(self.headers.get("Content-length"))
-        if len is not None and len != 0:
-            payload = self.rfile.read(len)
-            obj = json.loads(payload)
-            cmd = obj.get("command")
-            command_handler = commands.get(cmd)
-            if command_handler is None:
-                raise gdb.GdbError(
-                    f"Unknown DAP request: {obj.get('command')}. Request: {json.dumps(obj)} | Payload: '{payload}'"
-                )
-            success = True
-            message = None
-            body = None
-            try:
-                body = command_handler(obj.get("arguments"))
-            except Exception as e:
-                success = False
-                message = f"Failed: {traceback.format_exc()}"
-
-            response = json.dumps(
-                prep_response(
-                    seq=seq,
-                    request_seq=obj.get("seq"),
-                    success=success,
-                    command=cmd,
-                    message=message,
-                    body=body,
-                )
-            )
-            self.wfile.write(bytes(response, "utf8"))
-            seq += 1
-
-
-def start_dap_thread():
-    HOST_NAME = "localhost"
-    PORT_NUMBER = 8000
-    httpd = HTTPServer((HOST_NAME, PORT_NUMBER), DAP)
-    print(time.asctime(), "Server Starts - %s:%s" % (HOST_NAME, PORT_NUMBER))
+def parse_one_request(data) -> (dict, str):
+    global DAPHeader
+    global HeaderLen
+    res = None
+    # we expect newlines to be \r\n as per the DA Protocol
+    buffer = StringIO(data, "\r\n")
+    content_len = None
+    header = buffer.readline().strip()
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    httpd.server_close()
+        check_header(header)
+        header_payload = header[HeaderLen:].strip()
+        content_len = int(header_payload)
+        buffer.readline()
+        current = buffer.tell()
+        payload = buffer.read(content_len)
+        if buffer.tell() - current != content_len:
+            raise
+        res = json.loads(payload)
+        return (res, buffer.read())
+    except:
+        # No message can be parsed from the current contents of `data`
+        return (None, data)    
+
+def start_command_thread():
+    global commands
+    global seq
+    # remove the socket file if it already exists
+    command_socket_path = "/tmp/midas-commands"
+    try:
+        unlink(command_socket_path)
+    except OSError:
+        if path.exists(command_socket_path):
+            raise
+
+    cmd_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    cmd_socket.bind(command_socket_path)
+    cmd_socket.listen(1)
+    cmd_conn, client_address = cmd_socket.accept()
+    buffer = ""
+    try:
+        while True:
+            data = cmd_conn.recv(4096)
+            buffer = buffer + data.decode("utf-8")
+            req = None
+            (req, buffer) = parse_one_request(buffer)
+            while req is not None:
+                cmd = req.get("command")
+                command_handler = commands.get(cmd)
+                if command_handler is None:
+                    raise gdb.GdbError(
+                        f"Unknown DAP request: '{req.get('command')}'. Request: '{json.dumps(req)}' | Buffer: '{buffer}'"
+                    )
+                success = True
+                message = None
+                body = None
+                try:
+                    body = command_handler(req.get("arguments"))
+                except Exception as e:
+                    success = False
+                    message = f"Failed: {traceback.format_exc()}"
+
+                response = json.dumps(
+                    prep_response(
+                        seq=seq,
+                        request_seq=req.get("seq"),
+                        success=success,
+                        command=cmd,
+                        message=message,
+                        body=body,
+                    )
+                )
+                cmd_conn.sendall(response)
+                (req, buffer) = parse_one_request(buffer)
+    finally:
+        unlink(command_socket_path)
 
 
-dap_thread = threading.Thread(target=start_dap_thread, name="DAP-Thread")
+dap_thread = threading.Thread(target=start_command_thread, name="DAP-Thread")
 socket_manager_thread = threading.Thread(target=event_thread, name="Socket Manager")
 
 dap_thread.start()
