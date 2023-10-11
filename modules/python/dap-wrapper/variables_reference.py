@@ -2,7 +2,7 @@ import gdb
 from os import path
 variable_references = {}
 
-def clear_variable_references():
+def clear_variable_references(evt):
   variable_references.clear()
 
 gdb.events.cont.connect(clear_variable_references)
@@ -52,7 +52,6 @@ class StackFrame(VariablesReference):
     res = []
     for scope in self._scopes:
       scope_res = {"name": scope.name, "variablesReference": scope.id }
-      print(f"{scope_res}")
       res.append(scope_res)
     return res
 
