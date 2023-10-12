@@ -29,7 +29,7 @@ class StackFrame(VariablesReference):
   def __init__(self, gdbFrame: gdb.Frame):
     super(StackFrame, self).__init__(frame_name(gdbFrame))
     self.gdbFrame = gdbFrame
-    self._scopes = [ArgsReference(self), LocalsReference(self), RegistersReference(self)]
+    self._scopes = [ScopesReference("Args", gdbFrame, args), ScopesReference("Locals", gdbFrame, locals)]
 
   def contents(self):
       sal = self.gdbFrame.find_sal()
@@ -55,6 +55,9 @@ class StackFrame(VariablesReference):
       res.append(scope_res)
     return res
 
+def is_primitive(type):
+    return hasattr(type, "fields")
+
 
 # Unfortunately, the DAP-gods in their infinite wisdom, named this concept "VariablesReference"
 # something that refers to basically Widget/UI ID's, that can be a "Scope" like a container containing
@@ -64,29 +67,55 @@ class StackFrame(VariablesReference):
 class VariableValueReference(VariablesReference):
   def __init__(self, name, gdbValue):
     super(VariableValueReference, self).__init__(name)
-    self.value = gdbValue
+    self.value: gdb.Value = gdbValue
 
   def contents(self):
-    0
+    return []
 
   def evaluateName(self):
     # return self.name
-    raise "Remember to return full evaluate path here"
+    raise Exception("Remember to return full evaluate path here")
 
 # Midas defines some scopes: Args, Locals, Registers
 # TODO(simon): Add Statics, Globals
 class ScopesReference(VariablesReference):
-  def __init__(self, name, stackFrame: StackFrame):
+  def __init__(self, name, stackFrame, variablesGetter):
     super(ScopesReference, self).__init__(name)
     # if stackFrame is not variable_references.StackFrame:
       # raise gdb.GdbError(f"Expected type of frame to be StackFrame not GDB's Frame: {type(stackFrame)}")
     self.frame = stackFrame
-
-  def gdb_frame(self) -> gdb.Frame:
-    return self.frame.gdb()
+    self.variables = variablesGetter
 
   def contents(self):
-    0
+    block = self.frame.block()
+    res = []
+    for symbol in self.variables(block):
+      gdbValue = self.frame.read_var(symbol, block)
+      if hasattr(gdbValue.type, "fields"):
+        ref = VariableValueReference(symbol.name, gdbValue)
+        res.append({
+          "name": symbol.name,
+          "value": symbol.type.name,
+          "type": symbol.type.name,
+          "evaluateName": symbol.name,
+          "variablesReference": ref.id,
+          "namedVariables": None,
+          "indexedVariables": None,
+          "memoryReference": hex(int(gdbValue.address))
+        })
+      else:
+        res.append({
+          "name": symbol.name,
+          "value": f"{gdbValue}",
+          "type": symbol.type.name,
+          "evaluateName": symbol.name,
+          "variablesReference": 0,
+          "namedVariables": None,
+          "indexedVariables": None,
+          "memoryReference": hex(int(gdbValue.address))
+        })
+    print(f"Scope contents: {res}")
+    return res
 
 def vs_variable(name, value, evaluateName, ref, address):
   return {
@@ -131,13 +160,34 @@ class LocalsReference(ScopesReference):
     res = []
     for symbol in locals(block):
       gdbValue = self.frame.gdbFrame.read_var(symbol, block)
-      res.append(vs_variable(symbol.name, gdbValue, symbol.name, 0, gdbValue.address))
-
+      if hasattr(gdbValue.type, "fields"):
+        ref = VariableValueReference(symbol.name, gdbValue)
+        res.append({
+          "name": symbol.name,
+          "value": symbol.type.name,
+          "type": symbol.type.name,
+          "evaluateName": symbol.name,
+          "variablesReference": ref.id,
+          "namedVariables": None,
+          "indexedVariables": None,
+          "memoryReference": hex(int(gdbValue.address))
+        })
+      else:
+        res.append({
+          "name": symbol.name,
+          "value": f"{gdbValue}",
+          "type": symbol.type.name,
+          "evaluateName": symbol.name,
+          "variablesReference": 0,
+          "namedVariables": None,
+          "indexedVariables": None,
+          "memoryReference": hex(int(gdbValue.address))
+        })
     return res
 
 class RegistersReference(ScopesReference):
   def __init__(self, stackFrame):
-    super(RegistersReference, self).__init__("Registers", stackFrame)
+    super(RegistersReference, self).__init__("Registers", stackFrame, lambda: None)
 
   def contents(self):
-    0
+    return []
