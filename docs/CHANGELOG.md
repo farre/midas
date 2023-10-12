@@ -4,6 +4,7 @@ All notable changes to the "midas" extension will be documented in this file. Ch
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+<<<<<<< HEAD
 ## [0.14.0]
 Added toggle-hex formatting functionality
 Added readMemory request - users can now use hex dump view of variables
@@ -12,6 +13,10 @@ Fixed disassembly to work more reliably
 Fixed due to new implementation of a DAP-request
 Fixed RR reverse-continue bug
 Make step-back icon only display during RR session
+=======
+## [0.12.0]
+Stable release of 0.11.1/5
+>>>>>>> dap-gdb
 
 ## [0.11.1]
 Toolchain versioning management added
