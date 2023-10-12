@@ -8,11 +8,66 @@ import sys
 import random
 import string
 import threading
+
+# Decorator functions
 import functools
+
+# For read memory requests
 import base64
 
 # Import thread-safe queue to be used for message passing
 from queue import Queue
+
+# Add "this" to the path, so we can import variables_reference module
+stdlibpath = path.dirname(path.realpath(__file__))
+if sys.path.count(stdlibpath) == 0:
+    sys.path.append(stdlibpath)
+
+from variables_reference import (
+    variable_references,
+    StackFrame,
+    clear_variable_references,
+)
+
+
+class Session:
+    def __init__(self, sessionArgs):
+        self.sessionArgs = sessionArgs
+        if sessionArgs["type"] == "launch":
+            if sessionArgs.get("program") is None:
+                raise Exception("No program was provided for gdb to launch")
+            gdb.execute(f"file {sessionArgs['program']}")
+        elif sessionArgs["type"] == "attach":
+            gdb.execute(sessionArgs["command"])
+        else:
+            raise Exception(f"Unknown session type {sessionArgs['type']}")
+
+    def start_tracee(self):
+        global singleThreadControl
+        if self.sessionArgs["allStopMode"]:
+            singleThreadControl = True
+            gdb.execute("set non-stop on")
+        if self.sessionArgs["stopOnEntry"]:
+            gdb.post_event(lambda: gdb.execute(f"start"))
+        else:
+            gdb.post_event(lambda: gdb.execute(f"run"))
+
+    def restart(self):
+        clear_variable_references()
+        if self.sessionArgs["stopOnEntry"]:
+            gdb.post_event(lambda: gdb.execute(f"start"))
+        else:
+            gdb.post_event(lambda: gdb.execute(f"run"))
+
+    def kill_tracee(self):
+        gdb.execute("kill")
+
+    def disconnect(self, kill_tracee):
+        global run
+        run = False
+        if kill_tracee:
+            session.kill_tracee()
+
 
 # DAP "Interpreter" State
 commands = {}
@@ -21,10 +76,12 @@ run = True
 breakpoints = {}
 singleThreadControl = False
 responsesQueue = Queue()
+session = None
 
 
 class Args:
-    """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request. """
+    """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request."""
+
     def __init__(self, required=[], optional=[]):
         self.required = set(required)
         self.supported = set(optional).union(self.required)
@@ -48,7 +105,6 @@ protocol["breakpointLocations"] = Args(
     ["source", "line"], ["column", "endLine", "endColumn"]
 )
 protocol["completions"] = Args(["text", "column"], ["frameId", "line"])
-protocol["configurationDone"] = Args()
 protocol["evaluate"] = Args(["expression"], ["frameId", "context", "format"])
 
 
@@ -91,13 +147,6 @@ def generate_socket_path():
     return "/tmp/midas-" + "".join(
         random.choice(string.ascii_uppercase) for i in range(10)
     )
-
-
-stdlibpath = path.dirname(path.realpath(__file__))
-if sys.path.count(stdlibpath) == 0:
-    sys.path.append(stdlibpath)
-
-from variables_reference import variable_references, StackFrame
 
 
 def select_thread(threadId):
@@ -208,12 +257,10 @@ def disassemble(args):
 
 @request("disconnect", Args([], ["terminateDebuggee"]))
 def disconnect(args):
-    global run
+    global session
     # restart = args.get("restart")
     # suspend = args.get("suspendDebuggee")
-    if args.get("terminateDebuggee"):
-        gdb.execute("kill")
-    run = False
+    session.disconnect(args.get("terminateDebuggee"))
     return {}
 
 
@@ -289,6 +336,7 @@ def initialize(args):
         }
     }
 
+
 def start_tracee(program, allStopMode, setBpAtMain):
     global singleThreadControl
     if allStopMode:
@@ -300,24 +348,43 @@ def start_tracee(program, allStopMode, setBpAtMain):
     if setBpAtMain:
         gdb.post_event(lambda: gdb.execute(f"start"))
 
+
+@request("configurationDone")
+def configuration_done(args):
+    global session
+    if session is None:
+        raise Exception("Session has not been configured")
+    else:
+        session.start_tracee()
+
+
 @request("launch", Args(["program"], ["allStopMode", "stopOnEntry"]))
 def launch(args):
-    global singleThreadControl
-    start_tracee(args["program"], args.get("allStopMode"), args.get("stopOnEntry"))
+    global session
+    session = Session(
+        {
+            "type": "launch",
+            "program": args["program"],
+            "stopOnEntry": args.get("stopOnEntry"),
+            "allStopMode": args.get("allStopMode"),
+        }
+    )
     return {}
 
 
 @request("attach", Args([], ["pid", "target", "isExtended"]))
 def attach(args):
+    global session
     pid = args.get("pid")
     if pid is not None:
         cmd = f"attach {pid}"
+        session = Session({"type": "attach", "command": cmd})
     else:
         target = args.get("target")
         isExtended = args.get("extended")
         param = "remote" if not isExtended else "extended-remote"
         cmd = f"target {param} {target}"
-    gdb.execute(cmd, from_tty=False, to_string=False)
+        session = Session({"type": "attach", "command": cmd})
     raise {}
 
 
@@ -342,7 +409,7 @@ def read_memory(args):
     offset = int(args.get("offset"), 0) if args.get("offset") is not None else 0
     base_address = int(args["memoryReference"], 16) + offset
     data = gdb.selected_inferior().read_memory(base_address, int(args["count"], 0))
-    return {"address": base_address, "data": base64.b64encode(data).decode("ascii") }
+    return {"address": base_address, "data": base64.b64encode(data).decode("ascii")}
 
 
 @request("restart")
@@ -356,7 +423,7 @@ def reverse_continue(args):
     thread = select_thread(args.get("threadId"))
     gdb.execute("reverse-continue")
     # RR will always resume all threads.
-    return {"allThreadsContinued": True }
+    return {"allThreadsContinued": True}
 
 
 @request("setBreakpoints", Args(["source"], ["breakpoints"]))
@@ -370,6 +437,8 @@ def set_bps(args):
         result = []
         bps = args.get("breakpoints")
         current_bps = breakpoints.get(path)
+        if current_bps is None:
+            current_bps = {}
         breakpoints[path] = {}
         if bps is None:
             return {"breakpoints": []}
@@ -479,9 +548,11 @@ def source(args):
 @request("stepBack", Args(["threadId"], ["singleThread", "granularity"]))
 def step_back(args):
     select_thread(args["threadId"])
-    cmd = "reverse-stepi" if args.get("granularity") == "instruction" else "reverse-step"
+    cmd = (
+        "reverse-stepi" if args.get("granularity") == "instruction" else "reverse-step"
+    )
     gdb.execute(cmd)
-    return {}    
+    return {}
 
 
 @request("stepIn", Args(["threadId"], ["singleThread", "granularity"]))
@@ -501,11 +572,12 @@ def step_out(args):
 
 @request("terminate", Args([], ["restart"]))
 def terminate(args):
-    global singleThreadControl
-    gdb.execute("kill")
+    global session
+    session.kill_tracee()
     if args.get("restart"):
-        start_tracee(gdb.selected_inferior().progspace.filename, singleThreadControl, True)
+        session.restart()
     return {}
+
 
 event_socket: socket = None
 event_connection = None
@@ -609,8 +681,8 @@ def CommandHandler(seq, req_seq, req, cmd, args):
             "req_seq": req_seq,
             "cmd": req,
             "success": False,
-            "message": "{e}",
-            "body": {"error": {"stacktrace": {traceback.format_exc()}}},
+            "message": f"{e}",
+            "body": {"error": {"stacktrace": traceback.format_exc()}},
         }
     responsesQueue.put(res)
 
