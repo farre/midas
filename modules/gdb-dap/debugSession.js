@@ -3,16 +3,17 @@
 const DebugAdapter = require("@vscode/debugadapter");
 const vscode = require("vscode");
 
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
 const { GDB } = require("../gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
-const net = require("net");
+const net = require("node:net");
 const { isNothing, toHexString, getAPI } = require("../utils/utils");
 const { TerminatedEvent, OutputEvent, InitializedEvent, StoppedEvent } = require("@vscode/debugadapter");
+const { getExtensionPathOf } = require("../utils/sysutils");
 let server;
 
 /**
@@ -38,26 +39,26 @@ function serialize_request(seq, request, args = {}) {
 class GdbOptions {
   constructor(opts_dictionary) {
     this.options = new Map();
-    for(const prop in opts_dictionary) {
+    for (const prop in opts_dictionary) {
       this.options.set(prop, opts_dictionary[prop]);
     }
   }
 
   finalize() {
     const arr = [];
-    for(const [k,v] of this.options.entries())  {
+    for (const [k, v] of this.options.entries()) {
       arr.push(k, v);
     }
     return arr;
   }
 
   log_options(logger) {
-    if(logger == null) {
+    if (logger == null) {
       logger = (k, v) => {
         console.log(`${k} == ${v}`);
-      }
+      };
     }
-    for(const [k, v] of this.options.entries()) {
+    for (const [k, v] of this.options.entries()) {
       logger(k, v);
     }
   }
@@ -82,14 +83,14 @@ function process_buffer(contents) {
     // The result can be accessed through the `m`-variable.
     let contents_start = 0;
     m.forEach((match, groupIndex) => {
-      if(groupIndex == 0) {
+      if (groupIndex == 0) {
         contents_start = m.index + match.length;
       }
 
-      if(groupIndex == 1) {
-        const len = Number.parseInt(match)
-        const all_received = (contents_start + len) <= contents.length;
-        result.push({ start: contents_start, end: contents_start + len, all_received })
+      if (groupIndex == 1) {
+        const len = Number.parseInt(match);
+        const all_received = contents_start + len <= contents.length;
+        result.push({ start: contents_start, end: contents_start + len, all_received });
       }
     });
   }
@@ -111,18 +112,17 @@ function process_buffer(contents) {
 function parse_buffer(buffer, metadata) {
   let parsed_end = 0;
   const res = [];
-  for(const {start, end} of metadata.filter(i => i.all_received)) {
+  for (const { start, end } of metadata.filter((i) => i.all_received)) {
     const data = buffer.slice(start, end);
     const json = JSON.parse(data);
     res.push(json);
     parsed_end = end;
   }
   buffer = buffer.slice(parsed_end);
-  return { buffer, protocol_messages: res }
+  return { buffer, protocol_messages: res };
 }
 
 class Gdb {
-  gdb;
   /** @type {EventEmitter} */
   events;
   /** @type {EventEmitter} */
@@ -133,49 +133,109 @@ class Gdb {
   /**
    * @param { string } path
    */
-  constructor(path, options) {
+  constructor(path, options, eventshandler) {
     this.readBuffer = "";
     this.path = path;
     this.options = options;
-    const args = ["-i=dap", ...options, "-iex", "set debug dap-log-file /home/cx/dev/foss/tom-gdb/build/dap.log"];
+
+    const args = [
+      ...options,
+      "-ex",
+      `source ${getExtensionPathOf("/modules/python/dap-wrapper/variables_reference.py")}`,
+      "-ex",
+      `source ${getExtensionPathOf("/modules/python/dap-wrapper/dap.py")}`,
+    ];
     try {
-      this.gdb = spawn(path, args);
-    } catch(ex) {
+      const gdb_process = spawn("/usr/bin/gdb", args);
+
+      gdb_process.on("spawn", () => {
+        this.commands_socket = net.connect({ path: "/tmp/midas-commands" }, () => {
+          console.log("Connected to commands socket");
+        });
+
+        this.events_socket = net.connect({ path: "/tmp/midas-events" }, () => {
+          console.log("Connected to commands socket");
+        });
+
+        this.commands_socket.on("error", (err) => {
+          if (err) {
+            console.log(`Error connecting to DAP server: ${err}`);
+            throw new Error("Failed to connect to DAP server");
+          }
+        });
+
+        this.send_wait_res = new EventEmitter();
+        this.events = new EventEmitter();
+        this.events.on("event", eventshandler);
+        this.responses = new EventEmitter();
+
+        this.responses.on("response", (res) => {
+          this.send_wait_res.emit(res.command, res);
+        });
+
+        let responseReadBuffer = "";
+        this.commands_socket.on("data", (data) => {
+          const str = data.toString();
+          responseReadBuffer = responseReadBuffer.concat(str);
+          const packets = process_buffer(responseReadBuffer).filter((i) => i.all_received);
+          const { buffer: remaining_buffer, protocol_messages } = parse_buffer(responseReadBuffer, packets);
+          responseReadBuffer = remaining_buffer;
+          for (const msg of protocol_messages) {
+            this.responses.emit("response", msg);
+          }
+          if (responseReadBuffer.length > 0) {
+            console.log(`Remainder buffer: ${responseReadBuffer}`);
+          }
+        });
+
+        let eventsReadBuffer = "";
+        this.events_socket.on("data", (data) => {
+          const str = data.toString();
+          console.log(`Event data: ${str}`);
+          eventsReadBuffer = eventsReadBuffer.concat(str);
+          const packets = process_buffer(eventsReadBuffer).filter((i) => i.all_received);
+          const { buffer: remaining_buffer, protocol_messages } = parse_buffer(eventsReadBuffer, packets);
+          eventsReadBuffer = remaining_buffer;
+          for (const msg of protocol_messages) {
+            this.events.emit("event", msg);
+          }
+          if (eventsReadBuffer.length > 0) {
+            console.log(`Remainder buffer: ${eventsReadBuffer}`);
+          }
+        });
+      });
+      gdb_process.stdout.on("data", (data) => {
+        console.log(data.toString());
+      });
+      gdb_process.stderr.on("data", (data) => {
+        console.log(data.toString());
+      });
+      gdb_process.on("close", (data) => {
+        throw new Error("Gdb exited!?");
+      });
+      this.gdb = gdb_process;
+    } catch (ex) {
       throw new Error(`Could not launch GDB with path ${path}`);
     }
-
-    this.events = new EventEmitter();
-    this.responses = new EventEmitter();
-
-    this.gdb.stdout.on("data", (data) => {
-      const str = data.toString();
-      this.readBuffer = this.readBuffer.concat(str);
-      const packets = process_buffer(this.readBuffer).filter(i => i.all_received);
-      const { buffer: remaining_buffer, protocol_messages } = parse_buffer(this.readBuffer, packets);
-      this.readBuffer = remaining_buffer;
-      for(const msg of protocol_messages) {
-        if(msg.type == "event") {
-          this.events.emit("event", msg);
-        } else if(msg.type == "response") {
-          this.responses.emit("response", msg);
-        }
-      }
-      if(this.readBuffer.length > 0) {
-        console.log(`Remainder buffer: ${this.readBuffer}`);
-      }
-    });
   }
 
   sendRequest(req, args) {
-    const serialized = serialize_request(req.seq, req.command, args ?? req.arguments);
-    this.gdb.stdin.write(serialized);
+    return new Promise((res) => {
+      const serialized = serialize_request(req.seq, req.command, args ?? req.arguments);
+      this.commands_socket.write(serialized);
+      this.send_wait_res.once(req.command, (body) => {
+        res(body);
+      });
+    });
   }
 
   disconnect() {
-    const se_disconnect = serialize_request(this.last_req+1, "disconnect");
+    const se_disconnect = serialize_request(this.last_req + 1, "disconnect");
     this.gdb.stdin.write(se_disconnect);
   }
 }
+
+async function spawn_gdb(path, options) {}
 
 class MidasDAPSession extends DebugAdapter.DebugSession {
   /** @type { Set<number> } */
@@ -190,7 +250,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   #terminal;
   fnBkptChain = Promise.resolve();
 
-  #defaultLogger = (output) => { console.log(output); };
+  #defaultLogger = (output) => {
+    console.log(output);
+  };
 
   /**
    * @type {import("../spawn").SpawnConfig}
@@ -205,20 +267,17 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? []);
-
-    this.gdb.events.on("event", (evt) => {
+    this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? [], (evt) => {
       const { event, body } = evt;
       switch (event) {
         case "exited":
           this.gdb.disconnect();
-          this.sendEvent(new TerminatedEvent(false))
+          this.sendEvent(new TerminatedEvent(false));
           break;
         case "output":
           this.sendEvent(new OutputEvent(body.output, "console"));
           break;
         case "initialized":
-          this.sendEvent(new InitializedEvent());
           break;
         case "stopped":
           this.sendEvent(new StoppedEvent(body.reason, body.threadId));
@@ -227,19 +286,13 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
           this.sendEvent(evt);
           break;
         case "breakpoint":
-          if(body.reason != "removed")
-            this.sendEvent(evt);
+          if (body.reason != "removed") this.sendEvent(evt);
           break;
         default:
           this.sendEvent(evt);
           this.sendEvent(new OutputEvent(`Sent event: ${JSON.stringify(evt)}`, "console"));
           break;
       }
-    });
-
-    this.gdb.responses.on("response", (response) => {
-      response.seq = 0;
-      this.sendResponse(response);
     });
 
     this.on("error", (event) => {
@@ -256,8 +309,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   log(where, output) {
-    const logger = getAPI().getLogger(where)
-    if(logger == undefined) {
+    const logger = getAPI().getLogger(where);
+    if (logger == undefined) {
       this.#defaultLogger(output);
     } else {
       logger.appendLine(output);
@@ -271,12 +324,11 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeResponse} response
    * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeRequestArguments} args
    */
-  initializeRequest(response, args) {
-    const serialized = serialize_request(response.request_seq, "initialize", args);
-    this.gdb.gdb.stdin.write(serialized, (err) => {
-      if(err)
-        this.sendEvent(new OutputEvent(`Error initializing GDB: ${err}`, "console"));
-    });
+  async initializeRequest(response, args) {
+    const res = await this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
+    response.body = res.body;
+    this.sendResponse(response);
+    // this.sendEvent(new InitializedEvent());
   }
 
   /**
@@ -284,10 +336,10 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
    * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneResponse} response
    * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneArguments} args
-   * @returns {void}
    */
-  configurationDoneRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async configurationDoneRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
@@ -296,58 +348,74 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop,
       false
     );
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, {program: args.program, stopOnEntry: args.stopOnEntry, allStopMode: args.allStopMode});
+    response.body = res.body;
+    response.success = res.success;
+    this.sendResponse(res);
+    this.sendEvent(new InitializedEvent());
   }
-
 
   // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async setBreakPointsRequestPython(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async dataBreakpointInfoRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
   // eslint-disable-next-line no-unused-vars
   async setDataBreakpointsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async continueRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async setFunctionBreakPointsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async pauseRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  async threadsRequest(response, args) {
-    this.gdb.sendRequest(args);
+  async threadsRequest(response, request) {
+    const res = await this.gdb.sendRequest(request, {});
+    response.body = res.body;
+    this.sendResponse(response);
   }
 
-  async stackTraceRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  stackTraceRequest(response, args, request) {
+    this.gdb.sendRequest(request, args).then(res => {
+      this.sendResponse(res);
+    })
   }
 
   async variablesRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   checkForHexFormatting(variablesReference, variables) {
@@ -364,7 +432,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   async scopesRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request);
+    response.body = res.body;
+    this.sendResponse(response);
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
@@ -409,8 +479,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async setVariableRequest(response, args, request) {
-    // todo: needs impl in new backend
-    this.sendResponse(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   runInTerminalRequest(...args) {
@@ -419,59 +489,73 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async disconnectRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  terminateRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async terminateRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async restartRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  setExceptionBreakPointsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async setExceptionBreakPointsRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async nextRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async stepInRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async stepOutRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async stepBackRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async reverseContinueRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  restartFrameRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async restartFrameRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  gotoRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async gotoRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  sourceRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async sourceRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  terminateThreadsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async terminateThreadsRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  setExpressionRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async setExpressionRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   parse_subscript(expr) {
@@ -512,53 +596,65 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
   // eslint-disable-next-line no-unused-vars
   async evaluateRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  stepInTargetsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async stepInTargetsRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  gotoTargetsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async gotoTargetsRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async completionsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  exceptionInfoRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async exceptionInfoRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  loadedSourcesRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async loadedSourcesRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  readMemoryRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async readMemoryRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  writeMemoryRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async writeMemoryRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async cancelRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
-  breakpointLocationsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+  async breakpointLocationsRequest(response, args, request) {
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   async setInstructionBreakpointsRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   // eslint-disable-next-line no-unused-vars
   async disassembleRequest(response, args, request) {
-    this.gdb.sendRequest(request);
+    const res = await this.gdb.sendRequest(request, args);
+    this.sendResponse(res);
   }
 
   /**
@@ -570,8 +666,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     const cmd = request.command;
     request.type = "request";
     request.arguments = {
-      "command": cmd,
-      "args": args ?? {}
+      command: cmd,
+      args: args ?? {},
     };
     request.command = "customRequest";
     this.gdb.sendRequest(request);
@@ -643,13 +739,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.#terminal.registerExitAction(handler);
   }
 
-  reloadScripts() {
+  reloadScripts() {}
 
-  }
-
-  async exec(cmd) {
-
-  }
+  async exec(cmd) {}
 
   disposeTerminal() {
     if (this.#terminal) this.#terminal.dispose();
