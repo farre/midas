@@ -99,6 +99,11 @@ class Args:
                     f"Missing required argument: {arg}. Required args: {self.required}"
                 )
 
+class ArbitraryArgs(Args):
+    def __init__(self, required=[], optional=[]):
+        0
+    def check_args(self, args):
+        return
 
 protocol = {}
 protocol["breakpointLocations"] = Args(
@@ -184,14 +189,14 @@ def threads_request(args):
     return {"threads": res}
 
 
-@request("stacktrace", Args(["threadId"], ["levels", "start"]))
+@request("stackTrace", Args(["threadId"], ["levels", "startFrame"]))
 def stacktrace(args):
     res = []
     select_thread(args["threadId"])
     for frame in iterate_frames(
         frame=gdb.selected_frame(),
         count=args.get("levels"),
-        start=args.get("start"),
+        start=args.get("startFrame"),
     ):
         sf = StackFrame(frame)
         res.append(sf.contents())
@@ -271,7 +276,7 @@ def exception_info(args):
     raise Exception("exceptionInfo not implemented")
 
 
-@request("initialize")
+@request("initialize", req_args=ArbitraryArgs())
 def initialize(args):
     # args to request:
     # clientID = args.get("clientID")
@@ -293,10 +298,9 @@ def initialize(args):
 
     # Currently just return false, until important stuff is working
     return {
-        "capabilities": {
-            "supportsConfigurationDoneRequest": False,
-            "supportsFunctionBreakpoints": False,
-            "supportsConditionalBreakpoints": False,
+            "supportsConfigurationDoneRequest": True,
+            "supportsFunctionBreakpoints": True,
+            "supportsConditionalBreakpoints": True,
             "supportsHitConditionalBreakpoints": False,
             "supportsEvaluateForHovers": False,
             "exceptionBreakpointFilters": False,
@@ -310,11 +314,11 @@ def initialize(args):
             "supportsModulesRequest": False,
             "additionalModuleColumns": False,
             "supportedChecksumAlgorithms": False,
-            "supportsRestartRequest": False,
+            "supportsRestartRequest": True,
             "supportsExceptionOptions": False,
             "supportsValueFormattingOptions": False,
             "supportsExceptionInfoRequest": False,
-            "supportTerminateDebuggee": False,
+            "supportTerminateDebuggee": True,
             "supportSuspendDebuggee": False,
             "supportsDelayedStackTraceLoading": False,
             "supportsLoadedSourcesRequest": False,
@@ -323,17 +327,16 @@ def initialize(args):
             "supportsSetExpression": False,
             "supportsTerminateRequest": False,
             "supportsDataBreakpoints": False,
-            "supportsReadMemoryRequest": False,
+            "supportsReadMemoryRequest": True,
             "supportsWriteMemoryRequest": False,
-            "supportsDisassembleRequest": False,
+            "supportsDisassembleRequest": True,
             "supportsCancelRequest": False,
             "supportsBreakpointLocationsRequest": False,
             "supportsClipboardContext": False,
-            "supportsSteppingGranularity": False,
-            "supportsInstructionBreakpoints": False,
+            "supportsSteppingGranularity": True,
+            "supportsInstructionBreakpoints": True,
             "supportsExceptionFilterOptions": False,
             "supportsSingleThreadExecutionRequests": False,
-        }
     }
 
 
@@ -426,7 +429,7 @@ def reverse_continue(args):
     return {"allThreadsContinued": True}
 
 
-@request("setBreakpoints", Args(["source"], ["breakpoints"]))
+@request("setBreakpoints", Args(["source"], ["breakpoints", "lines", "sourceModified"]))
 def set_bps(args):
     global breakpoints
     src = args.get("source")
@@ -485,7 +488,9 @@ def set_fn_bps(args):
     global breakpoints
     result = []
     bps = args["breakpoints"]
-    current_bps = breakpoints["function"]
+    current_bps = breakpoints.get("function")
+    if current_bps is None:
+        current_bps = {}
     breakpoints["function"] = {}
     if len(bps) == 0:
         return {"breakpoints": []}
@@ -514,7 +519,9 @@ def set_ins_bps(args):
     global breakpoints
     result = []
     bps = args["breakpoints"]
-    current_bps = breakpoints["function"]
+    current_bps = breakpoints.get("address")
+    if current_bps is None:
+        current_bps = {}
     breakpoints["address"] = {}
     if len(bps) == 0:
         return {"breakpoints": []}
@@ -711,6 +718,7 @@ def start_command_thread():
     global seq
     global run
     global cmdConn
+    print("Starting command server...")
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
     gdb.execute("set confirm off")
     # remove the socket file if it already exists
@@ -747,9 +755,8 @@ def start_command_thread():
                 args = req.get("arguments")
                 req_seq = req.get("seq")
                 gdb.post_event(
-                    lambda: CommandHandler(seq, req_seq, cmd, command_handler, args)
+                    lambda: CommandHandler(0, req_seq, cmd, command_handler, args)
                 )
-                seq += 1
                 (req, buffer) = parse_one_request(buffer)
     finally:
         unlink(command_socket_path)
