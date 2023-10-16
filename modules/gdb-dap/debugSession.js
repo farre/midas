@@ -1,9 +1,7 @@
 "use strict";
 
 const DebugAdapter = require("@vscode/debugadapter");
-const vscode = require("vscode");
-
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
@@ -122,6 +120,72 @@ function parse_buffer(buffer, metadata) {
   return { buffer, protocol_messages: res };
 }
 
+const MAX_TRIES = 10;
+function connect_socket(name, path, attempts, attempt_interval) {
+  return new Promise((res, rej) => {
+    const socket = new net.Socket();
+    socket.connect({path: path});
+
+    socket.on('connect', () => {
+      console.log(`Connected to DAP Server socket '${name}' with ${MAX_TRIES - attempts} retries`);
+      res(socket);
+    });
+
+    socket.on('error', (error) => {
+      socket.destroy();
+
+      if (attempts === 0) {
+        rej(error);
+      } else {
+        setTimeout(() => {
+          connect_socket(name, path, attempts - 1, attempt_interval + 50).then(res).catch(rej);
+        }, attempt_interval);
+      }
+    });
+  });
+}
+
+class MidasSocket {
+  buffer;
+
+  constructor(name, path, type, emitter) {
+    
+    this.name = name;
+    this.path = path;
+    this.type = type;
+    this.emitter = emitter;
+    // TODO(simon): Do something much better. For now this is just easy enough, i.e. using a string.
+    //  We *really* should do something better here. But until it becomes a problem, let's just be stupid here
+    this.buffer = ""
+  }
+
+  // have to use a custom re-try logic here, because we can't know, when GDB actually has spawned it's threads and opened the sockets
+  connect() {
+    return connect_socket(this.name, this.path, MAX_TRIES, 50).then(socket => {
+      this.socket = socket;
+      this.socket.on("data", (data) => {
+        const str = data.toString();
+        this.buffer = this.buffer.concat(str);
+        const packets = process_buffer(this.buffer).filter((i) => i.all_received);
+        const { buffer: remaining_buffer, protocol_messages } = parse_buffer(this.buffer, packets);
+        this.buffer = remaining_buffer;
+        for (const msg of protocol_messages) {
+          this.emitter.emit(this.type, msg);
+        }
+      });
+    });
+  }
+
+  write(data) {
+    this.socket.write(data, (err) => {
+      if(err) {
+        console.error(`Failed to write ${data} to socket: ${err}`);
+        throw err;
+      }
+    });
+  }
+}
+
 class Gdb {
   /** @type {EventEmitter} */
   events;
@@ -134,122 +198,58 @@ class Gdb {
    * @param { string } path
    */
   constructor(path, options, eventshandler) {
-    this.readBuffer = "";
     this.path = path;
     this.options = options;
-
     const args = [
       ...options,
+      "-q",
       "-ex",
       `source ${getExtensionPathOf("/modules/python/dap-wrapper/variables_reference.py")}`,
       "-ex",
       `source ${getExtensionPathOf("/modules/python/dap-wrapper/dap.py")}`,
     ];
     try {
-      const gdb_process = spawn("/usr/bin/gdb", args);
-
-      gdb_process.on("spawn", () => {
-        this.commands_socket = net.connect({ path: "/tmp/midas-commands" }, () => {
-          console.log("Connected to commands socket");
-        });
-
-        this.events_socket = net.connect({ path: "/tmp/midas-events" }, () => {
-          console.log("Connected to commands socket");
-        });
-
-        this.commands_socket.on("error", (err) => {
-          if (err) {
-            console.log(`Error connecting to DAP server: ${err}`);
-            throw new Error("Failed to connect to DAP server");
-          }
-        });
-
-        this.send_wait_res = new EventEmitter();
-        this.events = new EventEmitter();
-        this.events.on("event", eventshandler);
-        this.responses = new EventEmitter();
-
-        this.responses.on("response", (res) => {
-          this.send_wait_res.emit(res.command, res);
-        });
-
-        let responseReadBuffer = "";
-        this.commands_socket.on("data", (data) => {
-          const str = data.toString();
-          responseReadBuffer = responseReadBuffer.concat(str);
-          const packets = process_buffer(responseReadBuffer).filter((i) => i.all_received);
-          const { buffer: remaining_buffer, protocol_messages } = parse_buffer(responseReadBuffer, packets);
-          responseReadBuffer = remaining_buffer;
-          for (const msg of protocol_messages) {
-            this.responses.emit("response", msg);
-          }
-          if (responseReadBuffer.length > 0) {
-            console.log(`Remainder buffer: ${responseReadBuffer}`);
-          }
-        });
-
-        let eventsReadBuffer = "";
-        this.events_socket.on("data", (data) => {
-          const str = data.toString();
-          console.log(`Event data: ${str}`);
-          eventsReadBuffer = eventsReadBuffer.concat(str);
-          const packets = process_buffer(eventsReadBuffer).filter((i) => i.all_received);
-          const { buffer: remaining_buffer, protocol_messages } = parse_buffer(eventsReadBuffer, packets);
-          eventsReadBuffer = remaining_buffer;
-          for (const msg of protocol_messages) {
-            this.events.emit("event", msg);
-          }
-          if (eventsReadBuffer.length > 0) {
-            console.log(`Remainder buffer: ${eventsReadBuffer}`);
-          }
-        });
-      });
-      gdb_process.stdout.on("data", (data) => {
-        console.log(data.toString());
-      });
+      const gdb_process = spawn(path, args);
+      this.events = new EventEmitter();
+      this.responses = new EventEmitter();
+      this.events.on("event", eventshandler);
+      this.commands_socket = new MidasSocket("commands", "/tmp/midas-commands", "response", this.responses);
+      this.events_socket = new MidasSocket("events", "/tmp/midas-events", "event", this.events);      
       gdb_process.stderr.on("data", (data) => {
         console.log(data.toString());
       });
-      gdb_process.on("close", (data) => {
-        throw new Error("Gdb exited!?");
-      });
+
       this.gdb = gdb_process;
     } catch (ex) {
       throw new Error(`Could not launch GDB with path ${path}`);
     }
   }
 
-  sendRequest(req, args) {
-    return new Promise((res) => {
-      const serialized = serialize_request(req.seq, req.command, args ?? req.arguments);
-      this.commands_socket.write(serialized);
-      this.send_wait_res.once(req.command, (body) => {
-        res(body);
-      });
-    });
+  async initialize() {
+    await this.commands_socket.connect();
+    await this.events_socket.connect();
   }
 
-  disconnect() {
-    const se_disconnect = serialize_request(this.last_req + 1, "disconnect");
-    this.gdb.stdin.write(se_disconnect);
+  response_connect(callback) {
+    this.responses.on("response", callback);
+  }
+
+  events_connect(callback) {
+    this.events.on("event", callback);
+  }
+
+  sendRequest(req, args) {
+    this.commands_socket.write(serialize_request(req.seq, req.command, args ?? req.arguments));
   }
 }
-
-async function spawn_gdb(path, options) {}
 
 class MidasDAPSession extends DebugAdapter.DebugSession {
   /** @type { Set<number> } */
   formattedVariablesMap = new Set();
   /** @type { Gdb } */
   gdb;
-  /** @type { Subject } */
-  configIsDone;
-  _reportProgress;
-  useInvalidetedEvent;
   /** @type {import("../terminalInterface").TerminalInterface} */
   #terminal;
-  fnBkptChain = Promise.resolve();
-
   #defaultLogger = (output) => {
     console.log(output);
   };
@@ -264,35 +264,31 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.#spawnConfig = spawnConfig;
-    this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
     this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? [], (evt) => {
       const { event, body } = evt;
       switch (event) {
         case "exited":
-          this.gdb.disconnect();
           this.sendEvent(new TerminatedEvent(false));
           break;
         case "output":
           this.sendEvent(new OutputEvent(body.output, "console"));
           break;
-        case "initialized":
-          break;
         case "stopped":
           this.sendEvent(new StoppedEvent(body.reason, body.threadId));
-          break;
-        case "thread":
-          this.sendEvent(evt);
           break;
         case "breakpoint":
           if (body.reason != "removed") this.sendEvent(evt);
           break;
         default:
           this.sendEvent(evt);
-          this.sendEvent(new OutputEvent(`Sent event: ${JSON.stringify(evt)}`, "console"));
           break;
       }
+    });
+
+    this.gdb.response_connect((response) => {
+      this.sendResponse(response);
     });
 
     this.on("error", (event) => {
@@ -324,11 +320,13 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeResponse} response
    * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeRequestArguments} args
    */
-  async initializeRequest(response, args) {
-    const res = await this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
-    response.body = res.body;
-    this.sendResponse(response);
-    // this.sendEvent(new InitializedEvent());
+  initializeRequest(response, args) {
+    this.gdb.initialize().then(() => {
+      this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
+    }).catch(err => {
+      this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}`});
+      throw err;
+    })
   }
 
   /**
@@ -338,84 +336,74 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneArguments} args
    */
   async configurationDoneRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async launchRequest(response, args, request) {
+  launchRequest(response, args, request) {
     DebugAdapter.logger.setup(
       args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop,
       false
     );
-    const res = await this.gdb.sendRequest(request, {program: args.program, stopOnEntry: args.stopOnEntry, allStopMode: args.allStopMode});
-    response.body = res.body;
-    response.success = res.success;
-    this.sendResponse(res);
-    this.sendEvent(new InitializedEvent());
+    this.gdb.sendRequest(request, {program: args.program, stopOnEntry: args.stopOnEntry, allStopMode: args.allStopMode});
+
+    // response.body = res.body;
+    // response.success = res.success;
+    // this.sendResponse(res);
+    setTimeout(() => {
+      this.sendEvent(new InitializedEvent());
+    }, 200)
   }
 
   // eslint-disable-next-line no-unused-vars
-  async attachRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  attachRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async setBreakPointsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setBreakPointsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async setBreakPointsRequestPython(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setBreakPointsRequestPython(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async dataBreakpointInfoRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  dataBreakpointInfoRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
+  
   // eslint-disable-next-line no-unused-vars
-  async setDataBreakpointsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
-  }
-
-  // eslint-disable-next-line no-unused-vars
-  async continueRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
-  }
-
-  async setFunctionBreakPointsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setDataBreakpointsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async pauseRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  continueRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async threadsRequest(response, request) {
-    const res = await this.gdb.sendRequest(request, {});
-    response.body = res.body;
-    this.sendResponse(response);
+  setFunctionBreakPointsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  pauseRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
+  }
+
+  threadsRequest(response, request) {
+    this.gdb.sendRequest(request, {});
   }
 
   stackTraceRequest(response, args, request) {
-    this.gdb.sendRequest(request, args).then(res => {
-      this.sendResponse(res);
-    })
+    this.gdb.sendRequest(request, args);
   }
 
-  async variablesRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  variablesRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   checkForHexFormatting(variablesReference, variables) {
@@ -431,10 +419,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     }
   }
 
-  async scopesRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request);
-    response.body = res.body;
-    this.sendResponse(response);
+  scopesRequest(response, args, request) {
+    this.gdb.sendRequest(request);
   }
 
   // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
@@ -478,9 +464,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   // eslint-disable-next-line no-unused-vars
-  async setVariableRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setVariableRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   runInTerminalRequest(...args) {
@@ -488,74 +473,60 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   // eslint-disable-next-line no-unused-vars
-  async disconnectRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  disconnectRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async terminateRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  terminateRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async restartRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  restartRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async setExceptionBreakPointsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setExceptionBreakPointsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async nextRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  nextRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async stepInRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  stepInRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async stepOutRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  stepOutRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async stepBackRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  stepBackRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async reverseContinueRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  reverseContinueRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async restartFrameRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  restartFrameRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async gotoRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  gotoRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async sourceRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  sourceRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async terminateThreadsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  terminateThreadsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async setExpressionRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setExpressionRequest(response, args, request) {
+    this.gdb.sendRequest(request, args); 
   }
 
   parse_subscript(expr) {
@@ -595,66 +566,54 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     };
   }
   // eslint-disable-next-line no-unused-vars
-  async evaluateRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  evaluateRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async stepInTargetsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  stepInTargetsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async gotoTargetsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  gotoTargetsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async completionsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  completionsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async exceptionInfoRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  exceptionInfoRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
-  async loadedSourcesRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  loadedSourcesRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async readMemoryRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  readMemoryRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async writeMemoryRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  writeMemoryRequest(response, args, request) {
+    this.gdb.sendRequest(request, args); 
   }
 
   // eslint-disable-next-line no-unused-vars
-  async cancelRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  cancelRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async breakpointLocationsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  breakpointLocationsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);  
   }
 
-  async setInstructionBreakpointsRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  setInstructionBreakpointsRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
-  async disassembleRequest(response, args, request) {
-    const res = await this.gdb.sendRequest(request, args);
-    this.sendResponse(res);
+  disassembleRequest(response, args, request) {
+    this.gdb.sendRequest(request, args);
   }
 
   /**
