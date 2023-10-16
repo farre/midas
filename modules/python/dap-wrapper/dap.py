@@ -64,6 +64,7 @@ class Session:
 
     def disconnect(self, kill_tracee):
         global run
+        global responsesQueue
         run = False
         if kill_tracee:
             session.kill_tracee()
@@ -76,6 +77,7 @@ run = True
 breakpoints = {}
 singleThreadControl = False
 responsesQueue = Queue()
+eventsQueue = Queue()
 session = None
 
 
@@ -99,11 +101,14 @@ class Args:
                     f"Missing required argument: {arg}. Required args: {self.required}"
                 )
 
+
 class ArbitraryArgs(Args):
     def __init__(self, required=[], optional=[]):
         0
+
     def check_args(self, args):
         return
+
 
 protocol = {}
 protocol["breakpointLocations"] = Args(
@@ -220,7 +225,11 @@ def variables(args):
         raise Exception(
             f"Failed to get variablesReference {args['variablesReference']}"
         )
-    return {"variables": container.contents()}
+    return {
+        "variables": container.contents(
+            args.get("format"), args.get("start"), args.get("count")
+        )
+    }
 
 
 @request("continue", Args(["threadId"], ["singleThread"]))
@@ -260,11 +269,9 @@ def disassemble(args):
     raise Exception("disassemble not implemented")
 
 
-@request("disconnect", Args([], ["terminateDebuggee"]))
+@request("disconnect", Args([], ["terminateDebuggee", "restart", "suspendDebuggee"]))
 def disconnect(args):
     global session
-    # restart = args.get("restart")
-    # suspend = args.get("suspendDebuggee")
     session.disconnect(args.get("terminateDebuggee"))
     return {}
 
@@ -281,7 +288,7 @@ def initialize(args):
     # args to request:
     # clientID = args.get("clientID")
     # clientName = args.get("clientName")
-    # adapterI = args.get("adapterI")
+    # adapterI = args.get("adapterID")
     # locale = args.get("locale")
     # linesStartAt1 = args.get("linesStartAt1")
     # columnsStartAt1 = args.get("columnsStartAt1")
@@ -298,45 +305,45 @@ def initialize(args):
 
     # Currently just return false, until important stuff is working
     return {
-            "supportsConfigurationDoneRequest": True,
-            "supportsFunctionBreakpoints": True,
-            "supportsConditionalBreakpoints": True,
-            "supportsHitConditionalBreakpoints": False,
-            "supportsEvaluateForHovers": False,
-            "exceptionBreakpointFilters": False,
-            "supportsStepBack": False,
-            "supportsSetVariable": False,
-            "supportsRestartFrame": False,
-            "supportsGotoTargetsRequest": False,
-            "supportsStepInTargetsRequest": False,
-            "supportsCompletionsRequest": False,
-            "completionTriggerCharacters": False,
-            "supportsModulesRequest": False,
-            "additionalModuleColumns": False,
-            "supportedChecksumAlgorithms": False,
-            "supportsRestartRequest": True,
-            "supportsExceptionOptions": False,
-            "supportsValueFormattingOptions": False,
-            "supportsExceptionInfoRequest": False,
-            "supportTerminateDebuggee": True,
-            "supportSuspendDebuggee": False,
-            "supportsDelayedStackTraceLoading": False,
-            "supportsLoadedSourcesRequest": False,
-            "supportsLogPoints": False,
-            "supportsTerminateThreadsRequest": False,
-            "supportsSetExpression": False,
-            "supportsTerminateRequest": False,
-            "supportsDataBreakpoints": False,
-            "supportsReadMemoryRequest": True,
-            "supportsWriteMemoryRequest": False,
-            "supportsDisassembleRequest": True,
-            "supportsCancelRequest": False,
-            "supportsBreakpointLocationsRequest": False,
-            "supportsClipboardContext": False,
-            "supportsSteppingGranularity": True,
-            "supportsInstructionBreakpoints": True,
-            "supportsExceptionFilterOptions": False,
-            "supportsSingleThreadExecutionRequests": False,
+        "supportsConfigurationDoneRequest": True,
+        "supportsFunctionBreakpoints": True,
+        "supportsConditionalBreakpoints": True,
+        "supportsHitConditionalBreakpoints": False,
+        "supportsEvaluateForHovers": False,
+        "exceptionBreakpointFilters": False,
+        "supportsStepBack": args.get("rr-session") is not None,
+        "supportsSetVariable": False,
+        "supportsRestartFrame": False,
+        "supportsGotoTargetsRequest": False,
+        "supportsStepInTargetsRequest": False,
+        "supportsCompletionsRequest": False,
+        "completionTriggerCharacters": False,
+        "supportsModulesRequest": False,
+        "additionalModuleColumns": False,
+        "supportedChecksumAlgorithms": False,
+        "supportsRestartRequest": True,
+        "supportsExceptionOptions": False,
+        "supportsValueFormattingOptions": True,
+        "supportsExceptionInfoRequest": False,
+        "supportTerminateDebuggee": True,
+        "supportSuspendDebuggee": False,
+        "supportsDelayedStackTraceLoading": False,
+        "supportsLoadedSourcesRequest": False,
+        "supportsLogPoints": False,
+        "supportsTerminateThreadsRequest": False,
+        "supportsSetExpression": False,
+        "supportsTerminateRequest": False,
+        "supportsDataBreakpoints": False,
+        "supportsReadMemoryRequest": True,
+        "supportsWriteMemoryRequest": args.get("rr-session") is None,
+        "supportsDisassembleRequest": True,
+        "supportsCancelRequest": False,
+        "supportsBreakpointLocationsRequest": False,
+        "supportsClipboardContext": False,
+        "supportsSteppingGranularity": True,
+        "supportsInstructionBreakpoints": True,
+        "supportsExceptionFilterOptions": False,
+        "supportsSingleThreadExecutionRequests": False,
     }
 
 
@@ -359,6 +366,7 @@ def configuration_done(args):
         raise Exception("Session has not been configured")
     else:
         session.start_tracee()
+    return {}
 
 
 @request("launch", Args(["program"], ["allStopMode", "stopOnEntry"]))
@@ -372,6 +380,7 @@ def launch(args):
             "allStopMode": args.get("allStopMode"),
         }
     )
+    send_event("initialized", {})
     return {}
 
 
@@ -409,10 +418,15 @@ def pause(args):
 
 @request("readMemory", Args(["memoryReference", "count"], ["offset"]))
 def read_memory(args):
-    offset = int(args.get("offset"), 0) if args.get("offset") is not None else 0
+    offset = args.get("offset")
+    if offset is None:
+        offset = 0
     base_address = int(args["memoryReference"], 16) + offset
-    data = gdb.selected_inferior().read_memory(base_address, int(args["count"], 0))
-    return {"address": base_address, "data": base64.b64encode(data).decode("ascii")}
+    data = gdb.selected_inferior().read_memory(base_address, args["count"])
+    return {
+        "address": hex(base_address),
+        "data": base64.b64encode(data).decode("ascii"),
+    }
 
 
 @request("restart")
@@ -587,15 +601,19 @@ def terminate(args):
 
 
 event_socket: socket = None
-event_connection = None
 # Socket where we receive requests and send responses on
 cmdConn = None
+
+
+def prep_event(seq, evt):
+    evt["seq"] = seq
+    payload = json.dumps(evt)
+    return f"Content-Length: {len(payload)}\r\n\r\n{payload}"
 
 
 def event_thread():
     socket_path = "/tmp/midas-events"
     global event_socket
-    global event_connection
 
     # remove the socket file if it already exists
     try:
@@ -608,13 +626,16 @@ def event_thread():
     event_socket.bind(socket_path)
     event_socket.listen(1)
     event_connection, client_address = event_socket.accept()
+    global seq
+    while run:
+        res = eventsQueue.get()
+        packet = prep_event(seq, res)
+        seq += 1
+        event_connection.sendall(bytes(packet, "utf-8"))
 
 
 def send_event(evt, body):
-    global seq
-    packet = prep_event(seq, evt, body)
-    seq += 1
-    event_connection.sendall(bytes(packet, "utf-8"))
+    eventsQueue.put({"type": "event", "event": evt, "body": body})
 
 
 def prep_response(seq, request_seq, success, command, message=None, body=None):
@@ -629,11 +650,6 @@ def prep_response(seq, request_seq, success, command, message=None, body=None):
             "body": body,
         }
     )
-    return f"Content-Length: {len(payload)}\r\n\r\n{payload}"
-
-
-def prep_event(seq, event, body):
-    payload = json.dumps({"type": "event", "seq": seq, "event": event, "body": body})
     return f"Content-Length: {len(payload)}\r\n\r\n{payload}"
 
 
@@ -718,7 +734,6 @@ def start_command_thread():
     global seq
     global run
     global cmdConn
-    print("Starting command server...")
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
     gdb.execute("set confirm off")
     # remove the socket file if it already exists
