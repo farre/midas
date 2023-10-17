@@ -1,11 +1,14 @@
 import gdb
 from os import path
 
-variable_references = {}
-
+variableReferences = {}
+exceptionInfos = {}
 
 def clear_variable_references(evt):
-    variable_references.clear()
+    global variableReferences
+    global exceptionInfos
+    variableReferences.clear()
+    exceptionInfos.clear()
 
 
 gdb.events.cont.connect(clear_variable_references)
@@ -22,10 +25,10 @@ def can_var_ref(value: gdb.Value):
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
 class VariablesReference:
     def __init__(self, name):
-        global variable_references
+        global variableReferences
         self.name = name
-        self.id = len(variable_references)
-        variable_references[self.id] = self
+        self.id = len(variableReferences)
+        variableReferences[self.id] = self
 
     def contents(self):
         raise Exception("Base class should not be used directly")
@@ -50,11 +53,15 @@ class StackFrame(VariablesReference):
 
     def contents(self):
         sal = self.gdbFrame.find_sal()
-        filename = path.basename(sal.symtab.filename)
-        fullname = sal.symtab.fullname()
         line_number = sal.line
+        try:
+          filename = path.basename(sal.symtab.filename)
+          fullname = sal.symtab.fullname()
+          src = {"name": filename, "path": fullname }
+        except:
+          src = None
         # DebugProtocol.Source
-        src = {"name": filename, "path": fullname, "sourceReference": 0}
+        
         sf = {
             "id": self.id,
             "source": src,
@@ -113,6 +120,7 @@ class VariableValueReference(VariablesReference):
             t = self.value.type
             a = self.value.address
             res.append(to_vs("value", v, t, None, 0, None, None, a))
+        return res
 
     def contents(self, format=None, start=None, count=None):
         pp = gdb.default_visualizer(self.value)

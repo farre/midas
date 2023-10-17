@@ -275,9 +275,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
         case "output":
           this.sendEvent(new OutputEvent(body.output, "console"));
           break;
-        case "stopped":
-          this.sendEvent(new StoppedEvent(body.reason, body.threadId));
-          break;
         case "breakpoint":
           if (body.reason != "removed") this.sendEvent(evt);
           break;
@@ -288,7 +285,12 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     });
 
     this.gdb.response_connect((response) => {
-      this.sendResponse(response);
+      if(!response.success) {
+        const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
+        this.sendErrorResponse(response, 0, err);
+      } else {
+        this.sendResponse(response);
+      }
     });
 
     this.on("error", (event) => {
