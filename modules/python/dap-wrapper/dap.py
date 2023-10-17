@@ -24,12 +24,13 @@ if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
 from variables_reference import (
-    variable_references,
+    variableReferences,
+    exceptionInfos,
     StackFrame,
     clear_variable_references,
 )
 
-
+# All requests use post_event; so here we _must_ use gdb.execute, so that we don't create weird out-of-order scenarios.
 class Session:
     def __init__(self, sessionArgs):
         self.sessionArgs = sessionArgs
@@ -48,16 +49,17 @@ class Session:
             singleThreadControl = True
             gdb.execute("set non-stop on")
         if self.sessionArgs["stopOnEntry"]:
-            gdb.post_event(lambda: gdb.execute(f"start"))
+            gdb.execute(f"start")
         else:
-            gdb.post_event(lambda: gdb.execute(f"run"))
+            gdb.execute(f"run")
 
     def restart(self):
-        clear_variable_references()
+        clear_variable_references(None)
+        set_configuration()
         if self.sessionArgs["stopOnEntry"]:
-            gdb.post_event(lambda: gdb.execute(f"start"))
+            gdb.execute("start")
         else:
-            gdb.post_event(lambda: gdb.execute(f"run"))
+            gdb.execute("run")
 
     def kill_tracee(self):
         gdb.execute("kill")
@@ -79,7 +81,7 @@ singleThreadControl = False
 responsesQueue = Queue()
 eventsQueue = Queue()
 session = None
-
+exceptionBreakpoints = {}
 
 class Args:
     """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request."""
@@ -110,14 +112,6 @@ class ArbitraryArgs(Args):
         return
 
 
-protocol = {}
-protocol["breakpointLocations"] = Args(
-    ["source", "line"], ["column", "endLine", "endColumn"]
-)
-protocol["completions"] = Args(["text", "column"], ["frameId", "line"])
-protocol["evaluate"] = Args(["expression"], ["frameId", "context", "format"])
-
-
 def check_args(args={}, optional={}, required={}):
     supported = optional.union(required)
     keys = args.keys()
@@ -144,7 +138,6 @@ def request(name, req_args=Args()):
         def wrap(args):
             global protocol
             req_args.check_args(args)
-            # protocol[name].check_args(args)
             return fn(args)
 
         commands[name] = wrap
@@ -210,8 +203,8 @@ def stacktrace(args):
 
 @request("scopes", Args(["frameId"]))
 def scopes(args):
-    global variable_references
-    sf = variable_references.get(args["frameId"])
+    global variableReferences
+    sf = variableReferences.get(args["frameId"])
     if sf is None:
         raise Exception(f"Failed to get frame with id {args['frameId']}")
     return {"scopes": sf.scopes()}
@@ -219,8 +212,8 @@ def scopes(args):
 
 @request("variables", Args(["variablesReference"], ["start", "count", "format"]))
 def variables(args):
-    global variable_references
-    container = variable_references.get(args["variablesReference"])
+    global variableReferences
+    container = variableReferences.get(args["variablesReference"])
     if container is None:
         raise Exception(
             f"Failed to get variablesReference {args['variablesReference']}"
@@ -277,10 +270,14 @@ def disconnect(args):
 
 
 @request(
-    "exceptionInfo", Args(["exceptionId", "breakMode"], ["description", "details"])
+    "exceptionInfo", Args(["threadId"], [])
 )
 def exception_info(args):
-    raise Exception("exceptionInfo not implemented")
+    global exceptionInfos
+    info = exceptionInfos.get(args["threadId"])
+    if info is None:
+        raise Exception(f"Exception Info {args['threadId']} not found.")
+    return info
 
 
 @request("initialize", req_args=ArbitraryArgs())
@@ -310,21 +307,37 @@ def initialize(args):
         "supportsConditionalBreakpoints": True,
         "supportsHitConditionalBreakpoints": False,
         "supportsEvaluateForHovers": False,
-        "exceptionBreakpointFilters": False,
+        "exceptionBreakpointFilters": [
+        {
+            "filter": "throw",
+            "label": "Thrown exceptions",
+            "supportsCondition": False,
+        },
+        {
+            "filter": "rethrow",
+            "label": "Re-thrown exceptions",
+            "supportsCondition": False,
+        },
+        {
+            "filter": "catch",
+            "label": "Caught exceptions",
+            "supportsCondition": False,
+        },
+        ],
         "supportsStepBack": args.get("rr-session") is not None,
         "supportsSetVariable": False,
         "supportsRestartFrame": False,
         "supportsGotoTargetsRequest": False,
         "supportsStepInTargetsRequest": False,
         "supportsCompletionsRequest": False,
-        "completionTriggerCharacters": False,
+        "completionTriggerCharacters": None,
         "supportsModulesRequest": False,
         "additionalModuleColumns": False,
         "supportedChecksumAlgorithms": False,
         "supportsRestartRequest": True,
         "supportsExceptionOptions": False,
         "supportsValueFormattingOptions": True,
-        "supportsExceptionInfoRequest": False,
+        "supportsExceptionInfoRequest": True,
         "supportTerminateDebuggee": True,
         "supportSuspendDebuggee": False,
         "supportsDelayedStackTraceLoading": False,
@@ -342,21 +355,9 @@ def initialize(args):
         "supportsClipboardContext": False,
         "supportsSteppingGranularity": True,
         "supportsInstructionBreakpoints": True,
-        "supportsExceptionFilterOptions": False,
+        "supportsExceptionFilterOptions": True,
         "supportsSingleThreadExecutionRequests": False,
     }
-
-
-def start_tracee(program, allStopMode, setBpAtMain):
-    global singleThreadControl
-    if allStopMode:
-        singleThreadControl = True
-        gdb.execute("set non-stop on")
-    if program is None:
-        raise Exception("No program was provided for gdb to launch")
-    gdb.execute(f"file {program}")
-    if setBpAtMain:
-        gdb.post_event(lambda: gdb.execute(f"start"))
 
 
 @request("configurationDone")
@@ -429,10 +430,11 @@ def read_memory(args):
     }
 
 
-@request("restart")
+@request("restart", req_args=ArbitraryArgs())
 def restart(args):
-    # DAP Implementation Specific (we decide)
-    raise Exception("restart not implemented")
+    global session
+    session.restart()
+    return {}
 
 
 @request("reverseContinue", Args(["threadId"]))
@@ -485,11 +487,40 @@ def set_databps(args):
     raise Exception("setDataBreakpoints not implemented")
 
 
+def pull_new_bp(old, new):
+    diff = set(new) - set(old)
+    if len(diff) > 1:
+        raise Exception("Multiple breakpoints were created (probably in parallell). Can't determine newest breakpoint.")
+    return list(diff)[0] if len(diff) != 0 else None
+
 @request(
     "setExceptionBreakpoints", Args(["filters"], ["filterOptions", "exceptionOptions"])
 )
 def set_exception_bps(args):
-    raise Exception("setExceptionBreakpoints not implemented")
+    global exceptionBreakpoints
+    ids = []
+    for id in args["filters"]:
+        ids.append(id)
+    if args.get("filterOptions") is not None:
+        for opt in args["filterOptions"]:
+            ids.append(opt["filterId"])
+    current_breakpoints = gdb.breakpoints()
+    bps = []
+    for id in ids:
+        if exceptionBreakpoints.get(id) is None:
+            gdb.execute(f"catch {id}")
+            new_bplist = gdb.breakpoints()
+            new_bp = pull_new_bp(current_breakpoints, new_bplist)
+            exceptionBreakpoints[id] = new_bp
+            current_breakpoints = gdb.breakpoints()
+            bps.append(bp_obj(new_bp))
+    
+    unset = set(exceptionBreakpoints.keys()) - set(ids)
+    for id in unset:
+        exceptionBreakpoints[id].delete()
+        del exceptionBreakpoints[id]
+
+    return { "breakpoints": bps }
 
 
 @request("setExpression", Args(["expression", "value"], ["frameId", "format"]))
@@ -728,6 +759,10 @@ def start_command_response_thread():
         cmdConn.sendall(bytes(response, "utf-8"))
     gdb.post_event(lambda: gdb.execute("exit"))
 
+def set_configuration():
+    gdb.execute("set confirm off")
+    gdb.execute("set pagination off")
+    gdb.execute("set python print-stack full")
 
 def start_command_thread():
     global commands
@@ -735,7 +770,7 @@ def start_command_thread():
     global run
     global cmdConn
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
-    gdb.execute("set confirm off")
+    gdb.post_event(set_configuration)
     # remove the socket file if it already exists
     command_socket_path = "/tmp/midas-commands"
     try:
@@ -790,14 +825,34 @@ def continued_event(evt):
 
 
 def stopped(evt):
+    global exceptionInfos
+    global exceptionBreakpoints
     body = {
         "threadId": gdb.selected_thread().global_num,
         "allThreadsStopped": True,
-        "reason": "breakpoint",
+        "reason": "step",
     }
+
     if isinstance(evt, gdb.BreakpointEvent):
+        body["reason"] = "breakpoint"
         body["hitBreakpointIds"] = [bp.number for bp in evt.breakpoints]
-    else:
+        if evt.breakpoint.type == gdb.BP_CATCHPOINT:
+          for (k, bp) in exceptionBreakpoints.items():
+              if bp == evt.breakpoint:        
+                exc_info = {
+                  "exceptionId": f"{k}",
+                  "description": f"Catchpoint for {k} hit.",
+                  "breakMode": "always",
+                }
+                exceptionInfos[gdb.selected_thread().global_num] = exc_info
+          body["reason"] = "exception"
+    elif isinstance(evt, gdb.SignalEvent):
+        exc_info = {
+          "exceptionId": f"{evt.stop_signal}",
+          "description": f"Signal {evt.stop_signal} was raised by tracee",
+          "breakMode": "always",
+        }
+        exceptionInfos[gdb.selected_thread().global_num] = exc_info
         body["reason"] = "exception"
     send_event("stopped", body=body)
 
@@ -805,21 +860,25 @@ def stopped(evt):
 def bp_src_info(bp):
     if len(bp.locations) == 0:
         return (None, None)
+    if bp.locations[0].source is None:
+        return (None, None)
     return bp.locations[0].source
 
 
 def bp_obj(bp):
     (source, line) = bp_src_info(bp)
-    return {
-        "id": bp.number,
-        "verified": not bp.pending,
-        "line": line,
-        "source": {
-            "name": path.basename(source) if source is not None else None,
-            "path": source,
-        },
-        "instructionReference": hex(bp.locations[0].address) if bp.locations else None,
-    }
+    obj = { "id": bp.number, "verified": not bp.pending }
+    if line is not None:
+        obj["line"] = line
+    if source is not None:
+        obj["source"] = {
+            "name": path.basename(source),
+            "path": source
+        }
+    if bp.locations is not None and len(bp.locations) != 0:
+        obj["instructionReference"] = hex(bp.locations[0].address)
+    
+    return obj
 
 
 gdb.events.exited.connect(
@@ -839,7 +898,7 @@ gdb.events.cont.connect(continued_event)
 gdb.events.breakpoint_created.connect(
     lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_obj(bp)})
 )
-gdb.events.breakpoint_created.connect(
+gdb.events.breakpoint_modified.connect(
     lambda bp: send_event(
         "breakpoint", {"reason": "modified", "breakpoint": bp_obj(bp)}
     )
