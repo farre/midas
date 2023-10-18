@@ -9,7 +9,7 @@ const { GDB } = require("../gdb");
 const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("node:net");
-const { isNothing, toHexString, getAPI } = require("../utils/utils");
+const { isNothing, toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
 const { TerminatedEvent, OutputEvent, InitializedEvent, StoppedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 let server;
@@ -127,7 +127,6 @@ function connect_socket(name, path, attempts, attempt_interval) {
     socket.connect({path: path});
 
     socket.on('connect', () => {
-      console.log(`Connected to DAP Server socket '${name}' with ${MAX_TRIES - attempts} retries`);
       res(socket);
     });
 
@@ -197,7 +196,7 @@ class Gdb {
   /**
    * @param { string } path
    */
-  constructor(path, options, eventshandler) {
+  constructor(path, options) {
     this.path = path;
     this.options = options;
     const args = [
@@ -212,10 +211,13 @@ class Gdb {
       const gdb_process = spawn(path, args);
       this.events = new EventEmitter();
       this.responses = new EventEmitter();
-      this.events.on("event", eventshandler);
       this.commands_socket = new MidasSocket("commands", "/tmp/midas-commands", "response", this.responses);
       this.events_socket = new MidasSocket("events", "/tmp/midas-events", "event", this.events);      
       gdb_process.stderr.on("data", (data) => {
+        console.log(data.toString());
+      });
+
+      gdb_process.stdout.on("data", (data) => {
         console.log(data.toString());
       });
 
@@ -266,7 +268,17 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.#spawnConfig = spawnConfig;
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? [], (evt) => {
+    this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? []);
+
+    this.gdb.response_connect((response) => {
+      if(!response.success) {
+        const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
+        this.sendErrorResponse(response, 0, err);
+      }
+      this.sendResponse(response);
+    });
+
+    this.gdb.events_connect((evt) => {
       const { event, body } = evt;
       switch (event) {
         case "exited":
@@ -275,21 +287,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
         case "output":
           this.sendEvent(new OutputEvent(body.output, "console"));
           break;
-        case "breakpoint":
-          if (body.reason != "removed") this.sendEvent(evt);
-          break;
         default:
           this.sendEvent(evt);
           break;
-      }
-    });
-
-    this.gdb.response_connect((response) => {
-      if(!response.success) {
-        const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-        this.sendErrorResponse(response, 0, err);
-      } else {
-        this.sendResponse(response);
       }
     });
 
@@ -328,6 +328,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     }).catch(err => {
       this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}`});
       throw err;
+    }).then(() => {
+      let init = new InitializedEvent();
+      this.sendEvent(init);
     })
   }
 
@@ -337,24 +340,20 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneResponse} response
    * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneArguments} args
    */
-  async configurationDoneRequest(response, args, request) {
+  configurationDoneRequest(response, args, request) {
     this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
   launchRequest(response, args, request) {
+    if(args.allStopMode != null) {
+      uiSetAllStopComponent(args.allStopMode);
+    }
     DebugAdapter.logger.setup(
       args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop,
       false
     );
     this.gdb.sendRequest(request, {program: args.program, stopOnEntry: args.stopOnEntry, allStopMode: args.allStopMode});
-
-    // response.body = res.body;
-    // response.success = res.success;
-    // this.sendResponse(res);
-    setTimeout(() => {
-      this.sendEvent(new InitializedEvent());
-    }, 200)
   }
 
   // eslint-disable-next-line no-unused-vars
@@ -622,15 +621,10 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * Override this hook to implement custom requests.
    */
   // eslint-disable-next-line no-unused-vars
-  async customRequest(command, response, args) {
-    let request = response;
-    const cmd = request.command;
+  customRequest(command, response, args, request) {
     request.type = "request";
-    request.arguments = {
-      command: cmd,
-      args: args ?? {},
-    };
-    request.command = "customRequest";
+    request.arguments = args ?? {};
+    request.command = command;
     this.gdb.sendRequest(request);
   }
 
