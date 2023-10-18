@@ -747,7 +747,6 @@
   "dependencies": {
     "@vscode/codicons": "^0.0.32",
     "@vscode/debugadapter": "^1.58.0",
-    "await-notify": "^1.0.1",
     "gdb-js": "^1.3.0",
     "regenerator-runtime": "^0.13.11"
   }
