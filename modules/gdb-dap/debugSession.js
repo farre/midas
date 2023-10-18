@@ -5,11 +5,10 @@ const { spawn } = require("child_process");
 const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
-const { GDB } = require("../gdb");
 const fs = require("fs");
 const net = require("node:net");
 const { isNothing, toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
-const { TerminatedEvent, OutputEvent, InitializedEvent, StoppedEvent } = require("@vscode/debugadapter");
+const { TerminatedEvent, OutputEvent, InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 let server;
 
