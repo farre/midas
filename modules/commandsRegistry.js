@@ -46,7 +46,7 @@ function getVSCodeCommands() {
   });
 
   let continueAll = registerCommand("midas.session-continue-all", () => {
-    vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll);
+    vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll, {});
   });
 
   let pauseAll = registerCommand("midas.session-pause-all", () => {
