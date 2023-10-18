@@ -45,7 +45,12 @@ class Session:
 
     def start_tracee(self):
         global singleThreadControl
-        if self.sessionArgs["allStopMode"]:
+        allStop = (
+            True
+            if self.sessionArgs.get("allStopMode") is None
+            else self.sessionArgs.get("allStopMode")
+        )
+        if not allStop:
             singleThreadControl = True
             gdb.execute("set non-stop on")
         if self.sessionArgs["stopOnEntry"]:
@@ -56,12 +61,21 @@ class Session:
     def restart(self):
         clear_variable_references(None)
         set_configuration()
+        self.interrupt()
         if self.sessionArgs["stopOnEntry"]:
             gdb.execute("start")
         else:
             gdb.execute("run")
 
+    def interrupt(self):
+        global singleThreadControl
+        if singleThreadControl:
+            gdb.execute("interrupt -a")
+        else:
+            gdb.execute("interrupt")
+
     def kill_tracee(self):
+        self.interrupt()
         gdb.execute("kill")
 
     def disconnect(self, kill_tracee):
@@ -82,6 +96,7 @@ responsesQueue = Queue()
 eventsQueue = Queue()
 session = None
 exceptionBreakpoints = {}
+
 
 class Args:
     """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request."""
@@ -183,20 +198,20 @@ def threads_request(args):
             thr_name = t.name
         if t.details is not None:
             thr_name = t.details
-        res.append({"id": t.global_num, "name": thr_name})
+        res.append({"id": t.global_num, "name": f"{thr_name} (#{t.global_num})"})
     return {"threads": res}
 
 
 @request("stackTrace", Args(["threadId"], ["levels", "startFrame"]))
 def stacktrace(args):
     res = []
-    select_thread(args["threadId"])
+    thread = select_thread(args["threadId"])
     for frame in iterate_frames(
-        frame=gdb.selected_frame(),
+        frame=gdb.newest_frame(),
         count=args.get("levels"),
         start=args.get("startFrame"),
     ):
-        sf = StackFrame(frame)
+        sf = StackFrame(frame, thread)
         res.append(sf.contents())
     return {"stackFrames": res}
 
@@ -218,27 +233,31 @@ def variables(args):
         raise Exception(
             f"Failed to get variablesReference {args['variablesReference']}"
         )
-    return {
-        "variables": container.contents(
-            args.get("format"), args.get("start"), args.get("count")
-        )
-    }
+    variables = container.contents(
+        args.get("format"), args.get("start"), args.get("count")
+    )
+    return {"variables": variables}
 
 
 @request("continue", Args(["threadId"], ["singleThread"]))
 def continue_(args):
     global singleThreadControl
-    continueOneThread = args.get("singleThread")
     thread = select_thread(args.get("threadId"))
-    allThreadsContinued = True
-    if continueOneThread and singleThreadControl:
+    if singleThreadControl:
         gdb.execute("continue")
         allThreadsContinued = False
     else:
+        allThreadsContinued = True
         cmd = "continue -a" if singleThreadControl else "continue"
         gdb.execute(cmd)
 
     return {"allThreadsContinued": allThreadsContinued}
+
+
+@request("continue-all", ArbitraryArgs())
+def continueAll(args):
+    gdb.execute("continue -a")
+    return {"allThreadsContinued": True}
 
 
 @request("dataBreakpointInfo", Args(["name"], ["frameId", "variablesReference"]))
@@ -269,9 +288,7 @@ def disconnect(args):
     return {}
 
 
-@request(
-    "exceptionInfo", Args(["threadId"], [])
-)
+@request("exceptionInfo", Args(["threadId"], []))
 def exception_info(args):
     global exceptionInfos
     info = exceptionInfos.get(args["threadId"])
@@ -308,21 +325,21 @@ def initialize(args):
         "supportsHitConditionalBreakpoints": False,
         "supportsEvaluateForHovers": False,
         "exceptionBreakpointFilters": [
-        {
-            "filter": "throw",
-            "label": "Thrown exceptions",
-            "supportsCondition": False,
-        },
-        {
-            "filter": "rethrow",
-            "label": "Re-thrown exceptions",
-            "supportsCondition": False,
-        },
-        {
-            "filter": "catch",
-            "label": "Caught exceptions",
-            "supportsCondition": False,
-        },
+            {
+                "filter": "throw",
+                "label": "Thrown exceptions",
+                "supportsCondition": False,
+            },
+            {
+                "filter": "rethrow",
+                "label": "Re-thrown exceptions",
+                "supportsCondition": False,
+            },
+            {
+                "filter": "catch",
+                "label": "Caught exceptions",
+                "supportsCondition": False,
+            },
         ],
         "supportsStepBack": args.get("rr-session") is not None,
         "supportsSetVariable": False,
@@ -334,7 +351,7 @@ def initialize(args):
         "supportsModulesRequest": False,
         "additionalModuleColumns": False,
         "supportedChecksumAlgorithms": False,
-        "supportsRestartRequest": True,
+        "supportsRestartRequest": False,
         "supportsExceptionOptions": False,
         "supportsValueFormattingOptions": True,
         "supportsExceptionInfoRequest": True,
@@ -356,7 +373,7 @@ def initialize(args):
         "supportsSteppingGranularity": True,
         "supportsInstructionBreakpoints": True,
         "supportsExceptionFilterOptions": True,
-        "supportsSingleThreadExecutionRequests": False,
+        "supportsSingleThreadExecutionRequests": True,
     }
 
 
@@ -381,7 +398,6 @@ def launch(args):
             "allStopMode": args.get("allStopMode"),
         }
     )
-    send_event("initialized", {})
     return {}
 
 
@@ -439,7 +455,7 @@ def restart(args):
 
 @request("reverseContinue", Args(["threadId"]))
 def reverse_continue(args):
-    thread = select_thread(args.get("threadId"))
+    select_thread(args.get("threadId"))
     gdb.execute("reverse-continue")
     # RR will always resume all threads.
     return {"allThreadsContinued": True}
@@ -490,8 +506,11 @@ def set_databps(args):
 def pull_new_bp(old, new):
     diff = set(new) - set(old)
     if len(diff) > 1:
-        raise Exception("Multiple breakpoints were created (probably in parallell). Can't determine newest breakpoint.")
+        raise Exception(
+            "Multiple breakpoints were created (probably in parallell). Can't determine newest breakpoint."
+        )
     return list(diff)[0] if len(diff) != 0 else None
+
 
 @request(
     "setExceptionBreakpoints", Args(["filters"], ["filterOptions", "exceptionOptions"])
@@ -514,13 +533,13 @@ def set_exception_bps(args):
             exceptionBreakpoints[id] = new_bp
             current_breakpoints = gdb.breakpoints()
             bps.append(bp_obj(new_bp))
-    
+
     unset = set(exceptionBreakpoints.keys()) - set(ids)
     for id in unset:
         exceptionBreakpoints[id].delete()
         del exceptionBreakpoints[id]
 
-    return { "breakpoints": bps }
+    return {"breakpoints": bps}
 
 
 @request("setExpression", Args(["expression", "value"], ["frameId", "format"]))
@@ -551,8 +570,6 @@ def set_fn_bps(args):
         else:
             bp = gdb.Breakpoint(function=bp_req.get("name"))
             bp.condition = bp_req.get("condition")
-            # if bp_req.get("hitCondition") is not None:
-            # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
             breakpoints["function"][bp_key] = bp
             result.append(bp_obj(bp))
 
@@ -600,9 +617,13 @@ def source(args):
 @request("stepBack", Args(["threadId"], ["singleThread", "granularity"]))
 def step_back(args):
     select_thread(args["threadId"])
-    cmd = (
-        "reverse-stepi" if args.get("granularity") == "instruction" else "reverse-step"
-    )
+    granularity = args.get("granularity")
+    if granularity == "instruction":
+        cmd = "reverse-stepi"
+    elif granularity == "line":
+        cmd = "reverse-next"
+    else:
+        cmd = "reverse-step"
     gdb.execute(cmd)
     return {}
 
@@ -759,10 +780,12 @@ def start_command_response_thread():
         cmdConn.sendall(bytes(response, "utf-8"))
     gdb.post_event(lambda: gdb.execute("exit"))
 
+
 def set_configuration():
     gdb.execute("set confirm off")
     gdb.execute("set pagination off")
     gdb.execute("set python print-stack full")
+
 
 def start_command_thread():
     global commands
@@ -827,9 +850,10 @@ def continued_event(evt):
 def stopped(evt):
     global exceptionInfos
     global exceptionBreakpoints
+    global singleThreadControl
     body = {
         "threadId": gdb.selected_thread().global_num,
-        "allThreadsStopped": True,
+        "allThreadsStopped": not singleThreadControl,
         "reason": "step",
     }
 
@@ -837,20 +861,20 @@ def stopped(evt):
         body["reason"] = "breakpoint"
         body["hitBreakpointIds"] = [bp.number for bp in evt.breakpoints]
         if evt.breakpoint.type == gdb.BP_CATCHPOINT:
-          for (k, bp) in exceptionBreakpoints.items():
-              if bp == evt.breakpoint:        
-                exc_info = {
-                  "exceptionId": f"{k}",
-                  "description": f"Catchpoint for {k} hit.",
-                  "breakMode": "always",
-                }
-                exceptionInfos[gdb.selected_thread().global_num] = exc_info
-          body["reason"] = "exception"
+            for (k, bp) in exceptionBreakpoints.items():
+                if bp == evt.breakpoint:
+                    exc_info = {
+                        "exceptionId": f"{k}",
+                        "description": f"Catchpoint for {k} hit.",
+                        "breakMode": "always",
+                    }
+                    exceptionInfos[gdb.selected_thread().global_num] = exc_info
+            body["reason"] = "exception"
     elif isinstance(evt, gdb.SignalEvent):
         exc_info = {
-          "exceptionId": f"{evt.stop_signal}",
-          "description": f"Signal {evt.stop_signal} was raised by tracee",
-          "breakMode": "always",
+            "exceptionId": f"{evt.stop_signal}",
+            "description": f"Signal {evt.stop_signal} was raised by tracee",
+            "breakMode": "always",
         }
         exceptionInfos[gdb.selected_thread().global_num] = exc_info
         body["reason"] = "exception"
@@ -867,17 +891,14 @@ def bp_src_info(bp):
 
 def bp_obj(bp):
     (source, line) = bp_src_info(bp)
-    obj = { "id": bp.number, "verified": not bp.pending }
+    obj = {"id": bp.number, "verified": not bp.pending}
     if line is not None:
         obj["line"] = line
     if source is not None:
-        obj["source"] = {
-            "name": path.basename(source),
-            "path": source
-        }
+        obj["source"] = {"name": path.basename(source), "path": source}
     if bp.locations is not None and len(bp.locations) != 0:
         obj["instructionReference"] = hex(bp.locations[0].address)
-    
+
     return obj
 
 
@@ -899,9 +920,7 @@ gdb.events.breakpoint_created.connect(
     lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_obj(bp)})
 )
 gdb.events.breakpoint_modified.connect(
-    lambda bp: send_event(
-        "breakpoint", {"reason": "modified", "breakpoint": bp_obj(bp)}
-    )
+    lambda bp: send_event("breakpoint", {"reason": "changed", "breakpoint": bp_obj(bp)})
 )
 gdb.events.breakpoint_deleted.connect(
     lambda bp: send_event(
