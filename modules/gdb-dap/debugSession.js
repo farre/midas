@@ -6,7 +6,6 @@ const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
 const { GDB } = require("../gdb");
-const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("node:net");
 const { isNothing, toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
@@ -32,34 +31,6 @@ function serialize_request(seq, request, args = {}) {
   const length = data.length;
   const res = `Content-Length: ${length}\r\n\r\n${data}`;
   return res;
-}
-
-class GdbOptions {
-  constructor(opts_dictionary) {
-    this.options = new Map();
-    for (const prop in opts_dictionary) {
-      this.options.set(prop, opts_dictionary[prop]);
-    }
-  }
-
-  finalize() {
-    const arr = [];
-    for (const [k, v] of this.options.entries()) {
-      arr.push(k, v);
-    }
-    return arr;
-  }
-
-  log_options(logger) {
-    if (logger == null) {
-      logger = (k, v) => {
-        console.log(`${k} == ${v}`);
-      };
-    }
-    for (const [k, v] of this.options.entries()) {
-      logger(k, v);
-    }
-  }
 }
 
 const MessageHeader = /Content-Length: (\d+)\s{4}/gm;
