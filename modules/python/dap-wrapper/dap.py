@@ -96,7 +96,8 @@ responsesQueue = Queue()
 eventsQueue = Queue()
 session = None
 exceptionBreakpoints = {}
-
+event_socket_path = "/tmp/midas-events"
+command_socket_path = "/tmp/midas-commands"
 
 class Args:
     """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request."""
@@ -664,18 +665,18 @@ def prep_event(seq, evt):
 
 
 def event_thread():
-    socket_path = "/tmp/midas-events"
     global event_socket
+    global event_socket_path
 
     # remove the socket file if it already exists
     try:
-        unlink(socket_path)
+        unlink(event_socket_path)
     except OSError:
-        if path.exists(socket_path):
+        if path.exists(event_socket_path):
             raise
 
     event_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    event_socket.bind(socket_path)
+    event_socket.bind(event_socket_path)
     event_socket.listen(1)
     event_connection, client_address = event_socket.accept()
     global seq
@@ -792,10 +793,10 @@ def start_command_thread():
     global seq
     global run
     global cmdConn
+    global command_socket_path
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
     gdb.post_event(set_configuration)
     # remove the socket file if it already exists
-    command_socket_path = "/tmp/midas-commands"
     try:
         unlink(command_socket_path)
     except OSError:
@@ -950,3 +951,20 @@ socket_manager_thread = threading.Thread(
 
 dap_thread.start()
 socket_manager_thread.start()
+
+import atexit
+
+def clean_up():
+    global event_socket_path
+    global command_socket_path
+    try:
+        unlink(event_socket_path)
+    except:
+        pass
+    
+    try:
+        unlink(command_socket_path)
+    except:
+        pass
+    
+atexit.register(clean_up)
