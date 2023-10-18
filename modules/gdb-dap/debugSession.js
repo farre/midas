@@ -694,10 +694,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.#terminal.registerExitAction(handler);
   }
 
-  reloadScripts() {}
-
-  async exec(cmd) {}
-
   disposeTerminal() {
     if (this.#terminal) this.#terminal.dispose();
   }
@@ -709,8 +705,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   getSpawnConfig() {
     return this.#spawnConfig;
   }
-
-  atMidasExit() {}
 }
 
 module.exports = {
