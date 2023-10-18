@@ -4,7 +4,6 @@ const vscode = require("vscode");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
-const { DAPConfigurationProvider, DAPFactory } = require("./providers/midas-dap-gdb");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which } = require("./utils/sysutils");
 const { getRR, strEmpty, getAPI, queryGit, installRRFromSource, verifyPreRequistesExists, guessInstaller } = require("./utils/utils");
@@ -440,17 +439,6 @@ function registerRRType(context) {
   );
 }
 
-function registerDAPType(context) {
-  const provider = new DAPConfigurationProvider();
-  const type = provider.type;
-  context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider(type, provider, vscode.DebugConfigurationProviderTriggerKind.Dynamic)
-  )
-  context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory(type, new DAPFactory())
-  );
-}
-
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -460,7 +448,6 @@ async function activateExtension(context) {
 
   registerMidasType(context);
   registerRRType(context);
-  registerDAPType(context);
 
   global.API = new MidasAPI(context);
   await init_midas(global.API);
