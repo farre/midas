@@ -5,7 +5,6 @@ const vscode = require("vscode");
 
 // eslint-disable-next-line no-unused-vars
 const { GDB } = require("./gdb");
-const { Subject } = require("await-notify");
 const fs = require("fs");
 const net = require("net");
 const { isNothing, ContextKeys, toHexString, getAPI } = require("./utils/utils");
@@ -21,8 +20,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   /** @type { GDB } */
   gdb;
 
-  /** @type { Subject } */
-  configIsDone;
   _reportProgress;
   useInvalidetedEvent;
   /** @type {import("./terminalInterface").TerminalInterface} */
@@ -43,7 +40,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     super();
     // NB! i have no idea what thread id this is supposed to refer to
     this.#spawnConfig = spawnConfig;
-    this.configIsDone = new Subject();
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
 
@@ -162,7 +158,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   configurationDoneRequest(response, args) {
     super.configurationDoneRequest(response, args);
     // notify the launchRequest that configuration has finished
-    this.configIsDone.notify();
     this.sendResponse(response);
   }
 
@@ -173,7 +168,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       false
     );
     // wait until configuration has finished (and configurationDoneRequest has been called)
-    await this.configIsDone.wait(1000);
     this.sendResponse(response);
     if (args.type == "midas-rr") {
       vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
@@ -189,7 +183,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
-    await this.configIsDone.wait(1000);
     let ptraceScope = 0;
     try {
       ptraceScope = nixkernel.readPtraceScope();
