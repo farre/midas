@@ -722,8 +722,8 @@
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.11.15",
     "@types/vscode": "^1.74.0",
-    "@vscode/debugadapter": "^1.58.0",
-    "@vscode/debugadapter-testsupport": "^1.58.0",
+    "@vscode/debugadapter": "^1.63.0",
+    "@vscode/debugadapter-testsupport": "^1.63.0",
     "@vscode/test-electron": "^2.2.1",
     "eslint": "^8.29.0",
     "glob": "^8.0.3",
@@ -745,8 +745,8 @@
     }
   ],
   "dependencies": {
-    "@vscode/codicons": "^0.0.32",
-    "@vscode/debugadapter": "^1.58.0",
+    "@vscode/codicons": "^0.0.33",
+    "@vscode/debugadapter": "^1.63.0",
     "gdb-js": "^1.3.0",
     "regenerator-runtime": "^0.13.11"
   }
