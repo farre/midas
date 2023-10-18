@@ -1,8 +1,10 @@
 import gdb
 from os import path
+import traceback
 
 variableReferences = {}
 exceptionInfos = {}
+
 
 def clear_variable_references(evt):
     global variableReferences
@@ -43,25 +45,26 @@ def frame_name(frame):
 
 
 class StackFrame(VariablesReference):
-    def __init__(self, gdbFrame: gdb.Frame):
+    def __init__(self, gdbFrame, thread):
         super(StackFrame, self).__init__(frame_name(gdbFrame))
         self.gdbFrame = gdbFrame
+        self.thread = thread
         self._scopes = [
-            ScopesReference("Args", gdbFrame, args),
-            ScopesReference("Locals", gdbFrame, locals),
+            ScopesReference("Args", self, args),
+            ScopesReference("Locals", self, locals),
         ]
 
     def contents(self):
         sal = self.gdbFrame.find_sal()
         line_number = sal.line
         try:
-          filename = path.basename(sal.symtab.filename)
-          fullname = sal.symtab.fullname()
-          src = {"name": filename, "path": fullname }
+            filename = path.basename(sal.symtab.filename)
+            fullname = sal.symtab.fullname()
+            src = {"name": filename, "path": fullname}
         except:
-          src = None
+            src = None
         # DebugProtocol.Source
-        
+
         sf = {
             "id": self.id,
             "source": src,
@@ -71,6 +74,10 @@ class StackFrame(VariablesReference):
             "instructionPointerReference": hex(self.gdbFrame.pc()),
         }
         return sf
+
+    def frame(self):
+        self.thread.switch()
+        return self.gdbFrame
 
     def scopes(self):
         res = []
@@ -87,6 +94,18 @@ def is_primitive(type):
 def members(value: gdb.Value):
     for f in value.type.fields():
         yield (f.name, value[f])
+
+
+def frame_top_block(frame):
+    frame.select()
+    block = frame.block()
+    res = block
+    if block is None:
+        return None
+    while not block.is_static:
+        res = block
+        block = block.superblock
+    return res
 
 
 # Unfortunately, the DAP-gods in their infinite wisdom, named this concept "VariablesReference"
@@ -159,41 +178,45 @@ class ScopesReference(VariablesReference):
         super(ScopesReference, self).__init__(name)
         # if stackFrame is not variable_references.StackFrame:
         # raise gdb.GdbError(f"Expected type of frame to be StackFrame not GDB's Frame: {type(stackFrame)}")
-        self.frame = stackFrame
+        self.stack_frame = stackFrame
         self.variables = variablesGetter
 
     def contents(self, format=None, start=None, count=None):
-        block = self.frame.block()
-        res = []
-        for symbol in self.variables(block):
-            gdbValue = self.frame.read_var(symbol, block)
-            if can_var_ref(gdbValue):
-                ref = VariableValueReference(symbol.name, gdbValue)
-                res.append(
-                    {
-                        "name": symbol.name,
-                        "value": "{}".format(symbol.type),
-                        "type": symbol.type.name,
-                        "evaluateName": symbol.name,
-                        "variablesReference": ref.id,
-                        "namedVariables": None,
-                        "indexedVariables": None,
-                        "memoryReference": hex(int(gdbValue.address)),
-                    }
-                )
-            else:
-                res.append(
-                    {
-                        "name": symbol.name,
-                        "value": "{}".format(gdbValue),
-                        "type": symbol.type.name,
-                        "evaluateName": symbol.name,
-                        "variablesReference": 0,
-                        "namedVariables": None,
-                        "indexedVariables": None,
-                        "memoryReference": hex(int(gdbValue.address)),
-                    }
-                )
+        try:
+            frame = self.stack_frame.frame()
+            block = frame_top_block(frame)
+            res = []
+            for symbol in self.variables(block):
+                gdbValue = frame.read_var(symbol, block)
+                if can_var_ref(gdbValue):
+                    ref = VariableValueReference(symbol.name, gdbValue)
+                    res.append(
+                        {
+                            "name": symbol.name,
+                            "value": "{}".format(symbol.type),
+                            "type": symbol.type.name,
+                            "evaluateName": symbol.name,
+                            "variablesReference": ref.id,
+                            "namedVariables": None,
+                            "indexedVariables": None,
+                            "memoryReference": hex(int(gdbValue.address)),
+                        }
+                    )
+                else:
+                    res.append(
+                        {
+                            "name": symbol.name,
+                            "value": "{}".format(gdbValue),
+                            "type": symbol.type.name,
+                            "evaluateName": symbol.name,
+                            "variablesReference": 0,
+                            "namedVariables": None,
+                            "indexedVariables": None,
+                            "memoryReference": hex(int(gdbValue.address)),
+                        }
+                    )
+        except RuntimeError as re:
+            return []
         return res
 
 
@@ -211,12 +234,16 @@ def to_vs(name, value, type, evaluateName, ref, named, indexed, address):
 
 
 def args(block):
+    if block is None:
+        return
     for symbol in block:
         if symbol.is_argument and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
             yield symbol
 
 
 def locals(block):
+    if block is None:
+        return None
     for symbol in block:
         if symbol.is_variable and not symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT:
             yield symbol
