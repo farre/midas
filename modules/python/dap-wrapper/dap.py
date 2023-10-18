@@ -317,7 +317,6 @@ def initialize(args):
     # supportsMemoryEvent = args.get("supportsMemoryEvent")
     # supportsArgsCanBeInterpretedByShell = args.get("supportsArgsCanBeInterpretedByShell")
     # supportsStartDebuggingRequest = args.get("supportsStartDebuggingRequest")
-
     # Currently just return false, until important stuff is working
     return {
         "supportsConfigurationDoneRequest": True,
@@ -342,7 +341,7 @@ def initialize(args):
                 "supportsCondition": False,
             },
         ],
-        "supportsStepBack": args.get("rr-session") is not None,
+        "supportsStepBack": bool(args.get("rr-session")),
         "supportsSetVariable": False,
         "supportsRestartFrame": False,
         "supportsGotoTargetsRequest": False,
@@ -362,11 +361,11 @@ def initialize(args):
         "supportsLoadedSourcesRequest": False,
         "supportsLogPoints": False,
         "supportsTerminateThreadsRequest": False,
-        "supportsSetExpression": False,
+        "supportsSetExpression": not bool(args.get("rr-session")),
         "supportsTerminateRequest": False,
         "supportsDataBreakpoints": False,
         "supportsReadMemoryRequest": True,
-        "supportsWriteMemoryRequest": args.get("rr-session") is None,
+        "supportsWriteMemoryRequest": not bool(args.get("rr-session")),
         "supportsDisassembleRequest": True,
         "supportsCancelRequest": False,
         "supportsBreakpointLocationsRequest": False,
@@ -374,7 +373,7 @@ def initialize(args):
         "supportsSteppingGranularity": True,
         "supportsInstructionBreakpoints": True,
         "supportsExceptionFilterOptions": True,
-        "supportsSingleThreadExecutionRequests": True,
+        "supportsSingleThreadExecutionRequests": not bool(args.get("rr-session")),
     }
 
 
