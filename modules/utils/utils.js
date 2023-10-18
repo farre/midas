@@ -79,6 +79,11 @@ class Tool {
   }
 }
 
+function uiSetAllStopComponent(value) {
+  if(typeof value !== "boolean") throw new Error("Must use a boolean to set All Stop Mode UI component");
+  vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, value);
+}
+
 /**
  *
  * @param {string} name
@@ -1010,5 +1015,6 @@ module.exports = {
   installRRFromSource,
   verifyPreRequistesExists,
   resolveLatestVersion,
-  guessInstaller
+  guessInstaller,
+  uiSetAllStopComponent
 };
