@@ -181,8 +181,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     }
   }
 
-  // eslint-disable-next-line no-unused-vars
-  async attachRequest(response, args, request) {
+  verifyPtraceScope(response) {
     let ptraceScope = 0;
     try {
       ptraceScope = nixkernel.readPtraceScope();
@@ -193,28 +192,38 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     }
     if (ptraceScope == 1) {
       const Message = {
-        /** Unique identifier for the message. */
         id: 1,
         format:
           "Ptrace privileges are restricted. Run 'sudo sysctl kernel.yama.ptrace_scope=0' to allow non-children to ptrace other processes.",
         showUser: true,
-        /** An optional url where additional information about this message can be found. */
         url: "https://askubuntu.com/questions/41629/after-upgrade-gdb-wont-attach-to-process",
-        /** An optional label that is presented to the user as the UI for opening the url. */
         urlLabel: "Read more about ptrace privileges",
       };
       this.sendErrorResponse(response, Message);
+      return false;
+    }
+    return true;
+  }
+
+  // eslint-disable-next-line no-unused-vars
+  async attachRequest(response, args, request) {
+    if(!this.verifyPtraceScope(response)) {
       return;
     }
     this.gdb = new GDB(this, this.#spawnConfig)
     this.gdb.setupEventHandlers(false);
-    try {
-      await this.gdb.attach_start();
+    if (args.type == "midas-rr") {
+      await this.gdb.startWithRR(args.program, args.stopOnEntry, this.#spawnConfig.isSpawnType("remote-rr"));
       this.sendResponse(response);
-    } catch(err) {
-      // this.sendEvent(new DebugAdapter.TerminatedEvent());
+    } else {
+      try {
+        await this.gdb.attach_start();
+        this.sendResponse(response);
+      } catch(err) {
+        // this.sendEvent(new DebugAdapter.TerminatedEvent());
+      }
+      this.sendResponse(response);
     }
-    this.sendResponse(response);
   }
 
   // eslint-disable-next-line no-unused-vars
