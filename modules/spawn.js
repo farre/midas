@@ -56,6 +56,7 @@ class SpawnConfig {
     this.traceSettings = new MidasRunMode(launchJson);
     this.attachOnFork = launchJson.attachOnFork ?? false;
     this.externalConsole = launchJson.externalConsole;
+    this.trace = launchJson["trace"];
   }
 
   /**
