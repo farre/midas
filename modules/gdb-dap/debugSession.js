@@ -294,6 +294,8 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    */
   initializeRequest(response, args) {
     this.gdb.initialize().then(() => {
+      args["trace"] = this.#spawnConfig.trace;
+      args["rr-session"] = this.#spawnConfig.isRRSession()
       this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
     }).catch(err => {
       this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}`});
@@ -321,13 +323,13 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     }
     DebugAdapter.logger.setup(
       args.trace ? DebugAdapter.Logger.LogLevel.Verbose : DebugAdapter.Logger.LogLevel.Stop,
-      false
-    );
-    this.gdb.sendRequest(request, {program: args.program, stopOnEntry: args.stopOnEntry, allStopMode: args.allStopMode});
+      false);
+    this.gdb.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
   attachRequest(response, args, request) {
+    args["setupCommands"] = this.#spawnConfig.setupCommands;
     this.gdb.sendRequest(request, args);
   }
 
@@ -538,7 +540,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
   // eslint-disable-next-line no-unused-vars
   evaluateRequest(response, args, request) {
-    this.gdb.sendRequest(request, args);  
+    this.gdb.sendRequest(request, args);
   }
 
   stepInTargetsRequest(response, args, request) {

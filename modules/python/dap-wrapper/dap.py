@@ -8,6 +8,7 @@ import sys
 import random
 import string
 import threading
+import time
 
 # Decorator functions
 import functools
@@ -24,15 +25,97 @@ if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
 from variables_reference import (
+    can_var_ref,
     variableReferences,
     exceptionInfos,
     StackFrame,
     clear_variable_references,
+    VariableValueReference
 )
+
+# DAP "Interpreter" State
+commands = {}
+seq = 1
+run = True
+breakpoints = {}
+singleThreadControl = False
+responsesQueue = Queue()
+eventsQueue = Queue()
+
+session = None
+exceptionBreakpoints = {}
+event_socket_path = "/tmp/midas-events"
+command_socket_path = "/tmp/midas-commands"
+
+
+class LogFile:
+    def __init__(self, name):
+        global stdlibpath
+        self.name = name
+        self.path = f"{stdlibpath}/{name}"
+        self.file = open(self.path, "w")
+
+    def log(self, msg):
+        self.file.write(msg)
+
+    def __del__(self):
+        print(f"Flushing contents to {self.path}")
+        self.file.flush()
+        self.file.close()
+
+
+class Logger:
+    def __init__(self):
+        self.perf = None
+        self.debug = None
+
+    def init_perf_log(self, log_name):
+        self.perf = LogFile(log_name)
+
+    def init_debug_log(self, log_name):
+        self.debug = LogFile(log_name)
+
+    def log_request(self, fn, args, res):
+        if self.debug is not None:
+            self.debug.log(msg=f"[req]: [{fn}] <- {json.dumps(args)}\n[res]: [{fn}] -> {json.dumps(res)}\n")
+
+    def log_msg(self, msg):
+        if self.debug is not None:
+            self.debug.log(msg)
+
+    def perf_log(self, fn, msg):
+        start = time.perf_counter_ns()
+        res = fn()
+        end = time.perf_counter_ns()
+        self.perf.log(msg=f"[{msg}]: {(end-start) / 1000_0000} ms\n")
+        return res
+
+
+logger = Logger()
+
+
+def iterate_options(opts):
+    if opts is not None:
+        for opt in opts:
+            yield opt
+    return
+
 
 # All requests use post_event; so here we _must_ use gdb.execute, so that we don't create weird out-of-order scenarios.
 class Session:
-    def __init__(self, sessionArgs):
+    def __init__(self, type):
+        self.type = type
+        self.started = False
+
+    def is_rr_session(self):
+        return self.type == "midas-rr"
+
+    def start_session(self, sessionArgs):
+        global logger
+        if self.started:
+            raise Exception("Session already started")
+        self.started = True
+
         self.sessionArgs = sessionArgs
         if sessionArgs["type"] == "launch":
             if sessionArgs.get("program") is None:
@@ -42,6 +125,9 @@ class Session:
             gdb.execute(sessionArgs["command"])
         else:
             raise Exception(f"Unknown session type {sessionArgs['type']}")
+        for opt in iterate_options(self.sessionArgs.get("setupCommands")):
+            logger.log_msg(f"[cfg]: '{opt}'\n")
+            gdb.execute(opt)
 
     def start_tracee(self):
         global singleThreadControl
@@ -50,13 +136,14 @@ class Session:
             if self.sessionArgs.get("allStopMode") is None
             else self.sessionArgs.get("allStopMode")
         )
-        if not allStop:
-            singleThreadControl = True
-            gdb.execute("set non-stop on")
-        if self.sessionArgs["stopOnEntry"]:
-            gdb.execute(f"start")
-        else:
-            gdb.execute(f"run")
+        if self.sessionArgs["type"] == "launch":
+          if not allStop:
+              singleThreadControl = True
+              gdb.execute("set non-stop on")
+          if self.sessionArgs["stopOnEntry"]:
+              gdb.execute(f"start")
+          else:
+              gdb.execute(f"run")
 
     def restart(self):
         clear_variable_references(None)
@@ -84,20 +171,9 @@ class Session:
         run = False
         if kill_tracee:
             session.kill_tracee()
+        elif self.is_rr_session():
+            session.kill_tracee()
 
-
-# DAP "Interpreter" State
-commands = {}
-seq = 1
-run = True
-breakpoints = {}
-singleThreadControl = False
-responsesQueue = Queue()
-eventsQueue = Queue()
-session = None
-exceptionBreakpoints = {}
-event_socket_path = "/tmp/midas-events"
-command_socket_path = "/tmp/midas-commands"
 
 class Args:
     """Passed to the @requests decorator. Used to verify the values passed in the `args` field of the JSON DAP request."""
@@ -120,27 +196,15 @@ class Args:
                 )
 
 
-class ArbitraryArgs(Args):
+class ArbitraryOptionalArgs(Args):
     def __init__(self, required=[], optional=[]):
-        0
+        self.required = set(required)
 
     def check_args(self, args):
-        return
-
-
-def check_args(args={}, optional={}, required={}):
-    supported = optional.union(required)
-    keys = args.keys()
-    for arg in keys:
-        if arg not in supported:
-            raise Exception(
-                f"Argument {arg} not supported. Supported args: {supported}"
-            )
-    for arg in required:
-        if arg not in keys:
-            raise Exception(
-                f"Missing required argument: {arg}. Required args: {required}"
-            )
+        keys = args.keys()
+        for arg in self.required:
+            if arg not in keys:
+                raise Exception(f"Missing required argument: {arg}. Required args: {self.required}")
 
 
 def request(name, req_args=Args()):
@@ -152,9 +216,12 @@ def request(name, req_args=Args()):
 
         @functools.wraps(fn)
         def wrap(args):
-            global protocol
+            global logger
             req_args.check_args(args)
-            return fn(args)
+            result = fn(args)
+            logger.log_request(name, args, result)
+            return result
+            
 
         commands[name] = wrap
         return wrap
@@ -196,8 +263,18 @@ def evaluate(args):
         result = gdb.execute(args["expression"], from_tty=False, to_string=True)
         return {"result": result, "variablesReference": 0}
     elif args["context"] == "watch":
-        raise Exception("Watch variables not yet implemented")
-    return {}
+        try:
+          value = gdb.parse_and_eval(args["expression"])
+          if can_var_ref(value):
+              ref = VariableValueReference(args["expression"], value)
+              res = ref.ui_data()
+              res["result"] = res.pop("value")
+              return res
+          else:
+              return { "result": f"{value}", "variablesReference": 0, "memoryReference": hex(int(value.address)) }
+        except:
+            return { "result": "couldn't be evaluated", "variablesReference": 0 }
+    raise Exception("evaluate request failed")
 
 
 @request("threads", Args())
@@ -265,7 +342,7 @@ def continue_(args):
     return {"allThreadsContinued": allThreadsContinued}
 
 
-@request("continue-all", ArbitraryArgs())
+@request("continue-all", ArbitraryOptionalArgs())
 def continueAll(args):
     gdb.execute("continue -a")
     return {"allThreadsContinued": True}
@@ -308,26 +385,23 @@ def exception_info(args):
     return info
 
 
-@request("initialize", req_args=ArbitraryArgs())
+@request("initialize", req_args=ArbitraryOptionalArgs())
 def initialize(args):
-    # args to request:
-    # clientID = args.get("clientID")
-    # clientName = args.get("clientName")
-    # adapterI = args.get("adapterID")
-    # locale = args.get("locale")
-    # linesStartAt1 = args.get("linesStartAt1")
-    # columnsStartAt1 = args.get("columnsStartAt1")
-    # pathFormat = args.get("pathFormat")
-    # supportsVariableType = args.get("supportsVariableType")
-    # supportsVariablePaging = args.get("supportsVariablePaging")
-    # supportsRunInTerminalRequest = args.get("supportsRunInTerminalRequest")
-    # supportsMemoryReferences = args.get("supportsMemoryReferences")
-    # supportsProgressReporting = args.get("supportsProgressReporting")
-    # supportsInvalidatedEvent = args.get("supportsInvalidatedEvent")
-    # supportsMemoryEvent = args.get("supportsMemoryEvent")
-    # supportsArgsCanBeInterpretedByShell = args.get("supportsArgsCanBeInterpretedByShell")
-    # supportsStartDebuggingRequest = args.get("supportsStartDebuggingRequest")
-    # Currently just return false, until important stuff is working
+    global logger
+    global Handler
+    global session
+
+    sessionType = "midas-gdb"
+    if args.get("type") is not None:
+        sessionType = args.get("type")
+
+    session = Session(sessionType)
+
+    if args.get("trace") == "Full":
+        logger.init_perf_log("perf.log")
+        logger.init_debug_log("debug.log")
+        Handler = LoggingCommandHandler
+
     return {
         "supportsConfigurationDoneRequest": True,
         "supportsFunctionBreakpoints": True,
@@ -397,34 +471,36 @@ def configuration_done(args):
     return {}
 
 
-@request("launch", Args(["program"], ["allStopMode", "stopOnEntry"]))
+@request("launch", ArbitraryOptionalArgs(["program"]))
 def launch(args):
     global session
-    session = Session(
-        {
+    session.start_session({
             "type": "launch",
             "program": args["program"],
             "stopOnEntry": args.get("stopOnEntry"),
             "allStopMode": args.get("allStopMode"),
-        }
-    )
+            "setupCommands": args.get("setupCommands"),
+    })
     return {}
 
 
-@request("attach", Args([], ["pid", "target", "isExtended"]))
+@request("attach", ArbitraryOptionalArgs([], ["pid", "target", "isExtended"]))
 def attach(args):
     global session
     pid = args.get("pid")
+    cmd = None
     if pid is not None:
         cmd = f"attach {pid}"
-        session = Session({"type": "attach", "command": cmd})
+        session.start_session({ "type": "attach", "command": cmd, "setupCommands": args.get("setupCommands") })
     else:
         target = args.get("target")
         isExtended = args.get("extended")
         param = "remote" if not isExtended else "extended-remote"
         cmd = f"target {param} {target}"
-        session = Session({"type": "attach", "command": cmd})
-    raise {}
+        session.start_session({ "type": "attach", "command": cmd, "allStopMode": args.get("allStopMode"), "setupCommands": args.get("setupCommands") })
+        if bool(args.get("stopOnEntry")):
+            gdb.execute("tbreak main")
+    return {}
 
 
 @request("next", Args(["threadId"], ["singleThread", "granularity"]))
@@ -456,7 +532,7 @@ def read_memory(args):
     }
 
 
-@request("restart", req_args=ArbitraryArgs())
+@request("restart", req_args=ArbitraryOptionalArgs())
 def restart(args):
     global session
     session.restart()
@@ -662,7 +738,7 @@ def terminate(args):
     return {}
 
 
-event_socket: socket = None
+event_socket = None
 # Socket where we receive requests and send responses on
 cmdConn = None
 
@@ -748,8 +824,36 @@ def parse_one_request(data) -> (dict, str):
         return (None, data)
 
 
+def LoggingCommandHandler(seq, req_seq, req, args):
+    global logger
+    global commands
+    cmd = commands.get(req)
+    try:
+        body = logger.perf_log(lambda: cmd(args), req)
+        res = {
+            "seq": seq,
+            "req_seq": req_seq,
+            "cmd": req,
+            "success": True,
+            "message": None,
+            "body": body,
+        }
+    except Exception as e:
+        res = {
+            "seq": seq,
+            "req_seq": req_seq,
+            "cmd": req,
+            "success": False,
+            "message": f"{e}",
+            "body": {"error": {"stacktrace": traceback.format_exc()}},
+        }
+    responsesQueue.put(res)
+
+
 # The CommandHandler callable gets posted via a lambda. That way, we can catch exceptions and place those values on the thread safe queue as well
-def CommandHandler(seq, req_seq, req, cmd, args):
+def CommandHandler(seq, req_seq, req, args):
+    global commands
+    cmd = commands.get(req)
     try:
         body = cmd(args)
         res = {
@@ -772,13 +876,18 @@ def CommandHandler(seq, req_seq, req, cmd, args):
     responsesQueue.put(res)
 
 
+Handler = CommandHandler
+
 def start_command_response_thread():
     global run
     global cmdConn
     global responsesQueue
-
+    last_seq = None
     while run:
         res = responsesQueue.get()
+        if last_seq == res["req_seq"]:
+            raise gdb.GdbError(f"request_seq seen twice: {last_seq} for command {res['cmd']}")
+        last_seq = res['req_seq']
         response = prep_response(
             seq=res["seq"],
             request_seq=res["req_seq"],
@@ -796,6 +905,21 @@ def set_configuration():
     gdb.execute("set pagination off")
     gdb.execute("set python print-stack full")
 
+def handle_request(req):
+    global commands
+    global Handler
+    cmd = req.get("command")
+    command_handler = commands.get(cmd)
+
+    if command_handler is None:
+        raise gdb.GdbError(
+            f"Unknown DAP request: '{req.get('command')}'. Request: '{json.dumps(req)}'"
+        )
+    args = req.get("arguments")
+    req_seq = req.get("seq")
+    if req_seq is None:
+        raise gdb.GdbError("Request sequence number not found")
+    gdb.post_event(lambda: Handler(0, req_seq, cmd, args))   
 
 def start_command_thread():
     global commands
@@ -803,6 +927,7 @@ def start_command_thread():
     global run
     global cmdConn
     global command_socket_path
+    global Handler
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
     gdb.post_event(set_configuration)
     # remove the socket file if it already exists
@@ -811,7 +936,6 @@ def start_command_thread():
     except OSError:
         if path.exists(command_socket_path):
             raise
-
     cmd_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     cmd_socket.bind(command_socket_path)
     cmd_socket.listen(1)
@@ -828,18 +952,7 @@ def start_command_thread():
             req = None
             (req, buffer) = parse_one_request(buffer)
             while req is not None:
-                cmd = req.get("command")
-                command_handler = commands.get(cmd)
-
-                if command_handler is None:
-                    raise gdb.GdbError(
-                        f"Unknown DAP request: '{req.get('command')}'. Request: '{json.dumps(req)}' | Buffer: '{buffer}'"
-                    )
-                args = req.get("arguments")
-                req_seq = req.get("seq")
-                gdb.post_event(
-                    lambda: CommandHandler(0, req_seq, cmd, command_handler, args)
-                )
+                handle_request(req)
                 (req, buffer) = parse_one_request(buffer)
     finally:
         unlink(command_socket_path)
@@ -963,17 +1076,21 @@ socket_manager_thread.start()
 
 import atexit
 
+
 def clean_up():
     global event_socket_path
     global command_socket_path
+    global logger
+    del logger
     try:
         unlink(event_socket_path)
     except:
         pass
-    
+
     try:
         unlink(command_socket_path)
     except:
         pass
-    
+
+
 atexit.register(clean_up)

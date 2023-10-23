@@ -525,7 +525,7 @@
           "rust"
         ],
         "configurationAttributes": {
-          "launch": {
+          "attach": {
             "properties": {
               "use-dap": {
                 "type": "boolean",
@@ -643,7 +643,7 @@
         "initialConfigurations": [
           {
             "type": "midas-rr",
-            "request": "launch",
+            "request": "attach",
             "name": "Launch replay session",
             "use-dap": false,
             "trace": "Off",
@@ -662,7 +662,7 @@
             "description": "Launches an RR debugging session",
             "body": {
               "type": "midas-rr",
-              "request": "launch",
+              "request": "attach",
               "name": "${1:Launch replay debug session}",
               "use-dap": false,
               "cwd": "^\"\\${workspaceFolder}\"",
@@ -682,7 +682,7 @@
             "description": "Launches an RR debugging session",
             "body": {
               "type": "midas-rr",
-              "request": "launch",
+              "request": "attach",
               "name": "${1:Launch replay debug session}",
               "use-dap": false,
               "cwd": "^\"\\${workspaceFolder}\"",
