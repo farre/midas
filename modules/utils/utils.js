@@ -401,12 +401,12 @@ async function spawnExternalConsole(config) {
 /**
  * Spawn external console that also launches rr in it.
  * @param { { terminal: string, closeOnExit: boolean } } config
- * @param {{path: string, addr: string, port: string, pid: string, traceWorkspace: string}} rrArgs
+ * @param {{path: string, address: string, port: string, pid: string, traceWorkspace: string}} rrArgs
  * @returns {Promise<TerminalInterface>}
  */
 async function spawnExternalRrConsole(config, rrArgs) {
-  const { path, addr, port, pid, traceWorkspace } = rrArgs;
-  const cmd = `${path} replay -h ${addr} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+  const { path, address, port, pid, traceWorkspace } = rrArgs;
+  const cmd = `${path} replay -h ${address} -s ${port} -p ${pid} -k ${traceWorkspace}`;
   const ttyInfoPath = randomTtyFile();
   return spawnConsole(config.terminal, ttyInfoPath, config.closeOnExit, [
     "clear",
