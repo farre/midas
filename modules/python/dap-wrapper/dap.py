@@ -352,6 +352,10 @@ def continueAll(args):
 def databreakpoint_info(args):
     raise Exception("dataBreakpointInfo not implemented")
 
+@request("setDataBreakpoints", Args(["breakpoints"]))
+def set_databps(args):
+    raise Exception("setDataBreakpoints not implemented")
+
 
 @request(
     "disassemble",
@@ -582,11 +586,6 @@ def set_bps(args):
                 result.append(bp_obj(bp))
 
     return {"breakpoints": result}
-
-
-@request("setDataBreakpoints", Args(["breakpoints"]))
-def set_databps(args):
-    raise Exception("setDataBreakpoints not implemented")
 
 
 def pull_new_bp(old, new):
@@ -882,12 +881,8 @@ def start_command_response_thread():
     global run
     global cmdConn
     global responsesQueue
-    last_seq = None
     while run:
         res = responsesQueue.get()
-        if last_seq == res["req_seq"]:
-            raise gdb.GdbError(f"request_seq seen twice: {last_seq} for command {res['cmd']}")
-        last_seq = res['req_seq']
         response = prep_response(
             seq=res["seq"],
             request_seq=res["req_seq"],
