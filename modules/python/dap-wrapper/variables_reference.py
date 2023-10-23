@@ -33,7 +33,10 @@ class VariablesReference:
         variableReferences[self.id] = self
 
     def contents(self):
-        raise Exception("Base class should not be used directly")
+        raise Exception("'contents' method not supported by this class")
+    
+    def find_value(self, name):
+        raise Exception("'find_value' method not supported by this class")
 
 
 def frame_name(frame):
@@ -155,9 +158,7 @@ class VariableValueReference(VariablesReference):
                     )
                     res.append(item)
                 else:
-                    res.append(
-                        to_vs(name, val, val.type, None, 0, None, None, val.address)
-                    )
+                    res.append(to_vs(name, val, val.type, None, 0, None, None, val.address))
         else:
             v = pp.to_string()
             t = self.value.type
@@ -167,17 +168,16 @@ class VariableValueReference(VariablesReference):
 
     def contents(self, format=None, start=None, count=None):
         try:
+          if self.value.type.code == gdb.TYPE_CODE_PTR:
+              try:
+                  self.value = self.value.dereference()
+              except:
+                  pass
           pp = gdb.default_visualizer(self.value)
           if pp is not None:
               return self.pp_contents(pp, format, start, count)
           else:
               res = []
-              if self.value.type.code == gdb.TYPE_CODE_PTR:
-                  try:
-                      self.value = self.value.dereference()
-                  except:
-                      pass
-                  
               for (name, v) in members(self.value):
                   if can_var_ref(v):
                     ref = VariableValueReference(name, v)
@@ -186,7 +186,24 @@ class VariableValueReference(VariablesReference):
                       res.append(to_vs(name, v, v.type, None, 0, None, None, v.address))
               return res
         except:
-            return []    
+            return []
+
+    def find_value(self, find_name):
+        """find_value will _always_ be called after a call to .contents() has been made
+           Because of this, we can be sure that if this Var Ref was a pointer, it has
+           been dereferenced."""
+        assert self.value.type.code != gdb.TYPE_CODE_PTR, "Value has not yet been dereferenced - this state should be impossible."
+        pp = gdb.default_visualizer(self.value)
+        if pp is not None:
+            for (name, val) in pp.children():
+                if name == find_name:
+                    return val
+        else:
+            for (name, val) in members(self.value):
+                if name == find_name:
+                    return val
+        raise Exception(f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}")
+            
 
 # Midas defines some scopes: Args, Locals, Registers
 # TODO(simon): Add Statics, Globals
@@ -225,6 +242,16 @@ class ScopesReference(VariablesReference):
         except RuntimeError as re:
             return []
         return res
+    
+    def find_value(self, find_name):
+        frame = self.stack_frame.frame()
+        block = frame_top_block(frame)
+        res = []
+        for symbol in self.variables(block):
+            if symbol.name == find_name:
+              return frame.read_var(symbol, block)
+        raise Exception(f"Could not find name {find_name} in scope container {self.name} with id {self.id}")
+
 
 
 def to_vs(name, value, type, evaluateName, ref, named, indexed, address):
