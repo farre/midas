@@ -16,14 +16,9 @@ __pycache__
 
 **/build/**
 
-update.log
-time.log
-debug.log
-performance_time.log
-error.log
-exception-logger.log
 .vscode/launch.json
 .vscode/launch.json
 test/cppworkspace/rr/.vscode/
 rr-*
 test/cppworkspace/bin/*
+*.log
