@@ -38,12 +38,13 @@ commands = {}
 seq = 1
 run = True
 breakpoints = {}
+exceptionBreakpoints = {}
+watchpoints = {}
 singleThreadControl = False
 responsesQueue = Queue()
 eventsQueue = Queue()
 
 session = None
-exceptionBreakpoints = {}
 event_socket_path = "/tmp/midas-events"
 command_socket_path = "/tmp/midas-commands"
 
@@ -348,13 +349,53 @@ def continueAll(args):
     return {"allThreadsContinued": True}
 
 
-@request("dataBreakpointInfo", Args(["name"], ["frameId", "variablesReference"]))
+@request("dataBreakpointInfo", Args(["name", "variablesReference"], ["frameId"]))
 def databreakpoint_info(args):
-    raise Exception("dataBreakpointInfo not implemented")
+    global variableReferences
+    global session
+    canPersist = session.is_rr_session()
+    try:
+        container = variableReferences.get(args["variablesReference"])
+        value = container.find_value(args["name"])
+        return { "dataId": hex(int(value.address)), "description": args["name"], "accessTypes": ["read", "write", "readWrite"], "canPersist": canPersist }
+    except Exception as e:
+        return { "dataId": None, "description": f"{e}", "accessTypes": ["read", "write", "readWrite"], "canPersist": canPersist }
+
+def watchpoint_ids(bps):
+    for watchpoint_id in bps:
+        yield(watchpoint_id["dataId"], watchpoint_id["accessType"], watchpoint_id.get("condition"), watchpoint_id.get("hitCondition"))
+
+def set_wp(dataId, accessType, condition, hitCondition):
+    if accessType == "read":
+        gdb.execute(f"rwatch -l *{dataId}")
+    elif accessType == "write":
+        gdb.execute(f"watch -l *{dataId}")
+    else:
+        gdb.execute(f"awatch -l *{dataId}")
+    return gdb.breakpoints()[-1]
+
+def wp_obj(wp):
+    return { "id": wp.number, "verified": not wp.pending }
 
 @request("setDataBreakpoints", Args(["breakpoints"]))
 def set_databps(args):
-    raise Exception("setDataBreakpoints not implemented")
+    global watchpoints
+    previous_wp_state = watchpoints
+    watchpoints = {}
+    for wp_key in watchpoint_ids(args["breakpoints"]):
+        (dataId, accessType, condition, hitCondition) = wp_key
+        if previous_wp_state.get(wp_key) is not None:
+            watchpoints[wp_key] = previous_wp_state.get(wp_key)
+        else:
+            wp = set_wp(dataId, accessType, condition, hitCondition)
+            watchpoints[wp_key] = wp
+
+    diff = set(previous_wp_state.keys()) - set(watchpoints.keys())
+    for key in diff:
+        watchpoints[key].delete()
+        del watchpoints[key]
+
+    return { "breakpoints": [ wp_obj(x) for x in watchpoints.values() ] }
 
 
 @request(
@@ -451,7 +492,7 @@ def initialize(args):
         "supportsTerminateThreadsRequest": False,
         "supportsSetExpression": not bool(args.get("rr-session")),
         "supportsTerminateRequest": False,
-        "supportsDataBreakpoints": False,
+        "supportsDataBreakpoints": True,
         "supportsReadMemoryRequest": True,
         "supportsWriteMemoryRequest": not bool(args.get("rr-session")),
         "supportsDisassembleRequest": True,
