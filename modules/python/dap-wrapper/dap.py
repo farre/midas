@@ -149,8 +149,8 @@ class Session:
 
     def restart(self):
         clear_variable_references(None)
-        set_configuration()
         self.interrupt()
+        set_configuration()
         if self.sessionArgs["stopOnEntry"]:
             gdb.execute("start")
         else:
@@ -373,10 +373,9 @@ def set_wp(dataId, accessType, condition, hitCondition):
         gdb.execute(f"watch -l *{dataId}")
     else:
         gdb.execute(f"awatch -l *{dataId}")
-    return gdb.breakpoints()[-1]
-
-def wp_obj(wp):
-    return { "id": wp.number, "verified": not wp.pending }
+    bp = gdb.breakpoints()[-1]
+    bp.condition = condition
+    return bp
 
 @request("setDataBreakpoints", Args(["breakpoints"]))
 def set_databps(args):
@@ -396,7 +395,7 @@ def set_databps(args):
         watchpoints[key].delete()
         del watchpoints[key]
 
-    return { "breakpoints": [ wp_obj(x) for x in watchpoints.values() ] }
+    return { "breakpoints": [ bp_to_ui(x) for x in watchpoints.values() ] }
 
 
 @request(
@@ -630,7 +629,7 @@ def set_bps(args):
             previous_bp_state[key].delete()
             del previous_bp_state[key]
 
-    return { "breakpoints": [bp_obj(x) for x in breakpoints[path].values()] }
+    return { "breakpoints": [bp_to_ui(x) for x in breakpoints[path].values()] }
 
 
 def pull_new_bp(old, new):
@@ -662,7 +661,7 @@ def set_exception_bps(args):
             new_bp = pull_new_bp(current_breakpoints, new_bplist)
             exceptionBreakpoints[id] = new_bp
             current_breakpoints = gdb.breakpoints()
-            bps.append(bp_obj(new_bp))
+            bps.append(bp_to_ui(new_bp))
 
     unset = set(exceptionBreakpoints.keys()) - set(ids)
     for id in unset:
@@ -699,14 +698,14 @@ def set_fn_bps(args):
             bp = gdb.Breakpoint(function=bp_req.get("name"))
             bp.condition = bp_req.get("condition")
             breakpoints["function"][bp_key] = bp
-            result.append(bp_obj(bp))
+            result.append(bp_to_ui(bp))
     
     diff = set(previous_bp_state.keys()) - set(breakpoints["function"].keys())
     for key in diff:
         previous_bp_state[key].delete()
         del previous_bp_state[key]
 
-    return { "breakpoints": [bp_obj(x) for x in breakpoints["function"].values()] }
+    return { "breakpoints": [bp_to_ui(x) for x in breakpoints["function"].values()] }
 
 @request("setInstructionBreakpoints", Args(["breakpoints"], []))
 def set_ins_bps(args):
@@ -734,14 +733,14 @@ def set_ins_bps(args):
             # if bp_req.get("hitCondition") is not None:
             # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
             breakpoints["address"][bp_key] = bp
-            result.append(bp_obj(bp))
+            result.append(bp_to_ui(bp))
 
     diff = set(previous_bp_state.keys()) - set(breakpoints["address"].keys())
     for key in diff:
         previous_bp_state[key].delete()
         del previous_bp_state[key]
 
-    return { "breakpoints": [bp_obj(x) for x in breakpoints["address"].values()] }
+    return { "breakpoints": [bp_to_ui(x) for x in breakpoints["address"].values()] }
 
 @request("source", Args(["sourceReference"], ["source"]))
 def source(args):
@@ -984,6 +983,8 @@ def start_command_thread():
     cmd_socket.bind(command_socket_path)
     cmd_socket.listen(1)
     cmdConn, client_address = cmd_socket.accept()
+    # TODO(simon): do something better than just using a dumb string as a buffer. For now, it's the simplest solution (though stupid).
+    # Re-use the memory instead reducing allocations.
     buffer = ""
     responder_thread = threading.Thread(
         target=start_command_response_thread, name="Responder", daemon=True
@@ -1049,14 +1050,17 @@ def stopped(evt):
 
 
 def bp_src_info(bp):
-    if len(bp.locations) == 0:
+    if hasattr(bp, "locations"):
+        if len(bp.locations) == 0:
+            return (None, None)
+        if bp.locations[0].source is None:
+            return (None, None)
+        return bp.locations[0].source
+    else:
         return (None, None)
-    if bp.locations[0].source is None:
-        return (None, None)
-    return bp.locations[0].source
 
 
-def bp_obj(bp):
+def bp_to_ui(bp):
     (source, line) = bp_src_info(bp)
     obj = {"id": bp.number, "verified": not bp.pending }
     if line is not None:
@@ -1079,15 +1083,14 @@ gdb.events.new_thread.connect(
         "thread", {"reason": "started", "threadId": evt.inferior_thread.global_num}
     )
 )
-# gdb.events.thread_exited.connect(lambda evt: send_event("thread", { "reason": "exited", "threadId": evt.inferior_thread.global_num }))
+
 gdb.events.cont.connect(continued_event)
 
-# gdb.events.breakpoint_created.connect(bp_created)
 gdb.events.breakpoint_created.connect(
-    lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_obj(bp)})
+    lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_to_ui(bp)})
 )
 gdb.events.breakpoint_modified.connect(
-    lambda bp: send_event("breakpoint", {"reason": "changed", "breakpoint": bp_obj(bp)})
+    lambda bp: send_event("breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)})
 )
 gdb.events.breakpoint_deleted.connect(
     lambda bp: send_event(
