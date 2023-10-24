@@ -34,7 +34,7 @@ class VariablesReference:
 
     def contents(self):
         raise Exception("'contents' method not supported by this class")
-    
+
     def find_value(self, name):
         raise Exception("'find_value' method not supported by this class")
 
@@ -97,10 +97,10 @@ def is_primitive(type):
 def members(value):
     type = value.type
     if type.code == gdb.TYPE_CODE_PTR:
-      try:  
-        type = value.type.target()
-      except:
-        type = value.type
+        try:
+            type = value.type.target()
+        except:
+            type = value.type
 
     for f in type.fields():
         yield (f.name, value[f])
@@ -117,6 +117,7 @@ def frame_top_block(frame):
         block = block.superblock
     return res
 
+
 # Unfortunately, the DAP-gods in their infinite wisdom, named this concept "VariablesReference"
 # something that refers to basically Widget/UI ID's, that can be a "Scope" like a container containing
 # the variables that are locals or arguments, or anything really. So to actually signal, that this type
@@ -130,19 +131,20 @@ class VariableValueReference(VariablesReference):
             self.display = "{} ({})".format(self.value.type, hex(int(self.value)))
         else:
             self.display = "{}".format(self.value.type)
-        
 
     def ui_data(self):
-        address = hex(int(self.value.address)) if self.value.address is not None else None
-        return { 
-            "name": self.name, 
+        address = (
+            hex(int(self.value.address)) if self.value.address is not None else None
+        )
+        return {
+            "name": self.name,
             "value": self.display,
-            "type": f"{self.value.type}", 
-            "evaluateName": None, 
-            "variablesReference": self.id, 
-            "namedVariables": None, 
-            "indexedVariables": None, 
-            "memoryReference": address
+            "type": f"{self.value.type}",
+            "evaluateName": None,
+            "variablesReference": self.id,
+            "namedVariables": None,
+            "indexedVariables": None,
+            "memoryReference": address,
         }
 
     def pp_contents(self, pp, format, start, count):
@@ -158,7 +160,9 @@ class VariableValueReference(VariablesReference):
                     )
                     res.append(item)
                 else:
-                    res.append(to_vs(name, val, val.type, None, 0, None, None, val.address))
+                    res.append(
+                        to_vs(name, val, val.type, None, 0, None, None, val.address)
+                    )
         else:
             v = pp.to_string()
             t = self.value.type
@@ -168,31 +172,37 @@ class VariableValueReference(VariablesReference):
 
     def contents(self, format=None, start=None, count=None):
         try:
-          if self.value.type.code == gdb.TYPE_CODE_PTR:
-              try:
-                  self.value = self.value.dereference()
-              except:
-                  pass
-          pp = gdb.default_visualizer(self.value)
-          if pp is not None:
-              return self.pp_contents(pp, format, start, count)
-          else:
-              res = []
-              for (name, v) in members(self.value):
-                  if can_var_ref(v):
-                    ref = VariableValueReference(name, v)
-                    res.append(to_vs(name, v, v.type, None, ref.id, None, None, v.address))
-                  else:
-                      res.append(to_vs(name, v, v.type, None, 0, None, None, v.address))
-              return res
+            if self.value.type.code == gdb.TYPE_CODE_PTR:
+                try:
+                    self.value = self.value.dereference()
+                except:
+                    pass
+            pp = gdb.default_visualizer(self.value)
+            if pp is not None:
+                return self.pp_contents(pp, format, start, count)
+            else:
+                res = []
+                for (name, v) in members(self.value):
+                    if can_var_ref(v):
+                        ref = VariableValueReference(name, v)
+                        res.append(
+                            to_vs(name, v, v.type, None, ref.id, None, None, v.address)
+                        )
+                    else:
+                        res.append(
+                            to_vs(name, v, v.type, None, 0, None, None, v.address)
+                        )
+                return res
         except:
             return []
 
     def find_value(self, find_name):
         """find_value will _always_ be called after a call to .contents() has been made
-           Because of this, we can be sure that if this Var Ref was a pointer, it has
-           been dereferenced."""
-        assert self.value.type.code != gdb.TYPE_CODE_PTR, "Value has not yet been dereferenced - this state should be impossible."
+        Because of this, we can be sure that if this Var Ref was a pointer, it has
+        been dereferenced."""
+        assert (
+            self.value.type.code != gdb.TYPE_CODE_PTR
+        ), "Value has not yet been dereferenced - this state should be impossible."
         pp = gdb.default_visualizer(self.value)
         if pp is not None:
             for (name, val) in pp.children():
@@ -202,8 +212,10 @@ class VariableValueReference(VariablesReference):
             for (name, val) in members(self.value):
                 if name == find_name:
                     return val
-        raise Exception(f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}")
-            
+        raise Exception(
+            f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}"
+        )
+
 
 # Midas defines some scopes: Args, Locals, Registers
 # TODO(simon): Add Statics, Globals
@@ -226,7 +238,11 @@ class ScopesReference(VariablesReference):
                     ref = VariableValueReference(symbol.name, gdbValue)
                     res.append(ref.ui_data())
                 else:
-                    address = hex(int(gdbValue.address)) if gdbValue.address is not None else None
+                    address = (
+                        hex(int(gdbValue.address))
+                        if gdbValue.address is not None
+                        else None
+                    )
                     res.append(
                         {
                             "name": symbol.name,
@@ -242,16 +258,17 @@ class ScopesReference(VariablesReference):
         except RuntimeError as re:
             return []
         return res
-    
+
     def find_value(self, find_name):
         frame = self.stack_frame.frame()
         block = frame_top_block(frame)
         res = []
         for symbol in self.variables(block):
             if symbol.name == find_name:
-              return frame.read_var(symbol, block)
-        raise Exception(f"Could not find name {find_name} in scope container {self.name} with id {self.id}")
-
+                return frame.read_var(symbol, block)
+        raise Exception(
+            f"Could not find name {find_name} in scope container {self.name} with id {self.id}"
+        )
 
 
 def to_vs(name, value, type, evaluateName, ref, named, indexed, address):
@@ -271,7 +288,9 @@ def args(block):
     if block is None:
         return
     for symbol in block:
-        if symbol.is_argument and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+        if symbol.is_argument and not (
+            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+        ):
             yield symbol
 
 
@@ -279,7 +298,9 @@ def locals(block):
     if block is None:
         return None
     for symbol in block:
-        if symbol.is_variable and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+        if symbol.is_variable and not (
+            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+        ):
             yield symbol
 
 
