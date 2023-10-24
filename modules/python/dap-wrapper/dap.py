@@ -30,6 +30,7 @@ from variables_reference import (
     exceptionInfos,
     StackFrame,
     clear_variable_references,
+    VariablesReference,
     VariableValueReference
 )
 
@@ -598,13 +599,12 @@ def set_bps(args):
     src = args.get("source")
     path = src.get("path")
     if path is None:
-        result = []
+        return { "breakpoints": [] }
     else:
-        result = []
         bps = args.get("breakpoints")
-        current_bps = breakpoints.get(path)
-        if current_bps is None:
-            current_bps = {}
+        previous_bp_state = breakpoints.get(path)
+        if previous_bp_state is None:
+            previous_bp_state = {}
         breakpoints[path] = {}
         if bps is None:
             return {"breakpoints": []}
@@ -616,17 +616,21 @@ def set_bps(args):
                 bp_req.get("hitCondition"),
                 bp_req.get("logMessage"),
             )
-            if bp_key in current_bps:
-                breakpoints[path][bp_key] = current_bps[bp_key]
+            if bp_key in previous_bp_state:
+                breakpoints[path][bp_key] = previous_bp_state[bp_key]
             else:
                 bp = gdb.Breakpoint(source=path, line=int(bp_req.get("line")))
                 bp.condition = bp_req.get("condition")
                 # if bp_req.get("hitCondition") is not None:
                 # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
                 breakpoints[path][bp_key] = bp
-                result.append(bp_obj(bp))
+        
+        diff = set(previous_bp_state.keys()) - set(breakpoints[path].keys())
+        for key in diff:
+            previous_bp_state[key].delete()
+            del previous_bp_state[key]
 
-    return {"breakpoints": result}
+    return { "breakpoints": [bp_obj(x) for x in breakpoints[path].values()] }
 
 
 def pull_new_bp(old, new):
@@ -678,12 +682,10 @@ def set_fn_bps(args):
     global breakpoints
     result = []
     bps = args["breakpoints"]
-    current_bps = breakpoints.get("function")
-    if current_bps is None:
-        current_bps = {}
+    previous_bp_state = breakpoints.get("function")
+    if previous_bp_state is None:
+        previous_bp_state = {}
     breakpoints["function"] = {}
-    if len(bps) == 0:
-        return {"breakpoints": []}
 
     for bp_req in bps:
         bp_key = (
@@ -691,28 +693,30 @@ def set_fn_bps(args):
             bp_req.get("condition"),
             bp_req.get("hitCondition"),
         )
-        if bp_key in current_bps:
-            breakpoints["function"][bp_key] = current_bps[bp_key]
+        if bp_key in previous_bp_state:
+            breakpoints["function"][bp_key] = previous_bp_state[bp_key]
         else:
             bp = gdb.Breakpoint(function=bp_req.get("name"))
             bp.condition = bp_req.get("condition")
             breakpoints["function"][bp_key] = bp
             result.append(bp_obj(bp))
+    
+    diff = set(previous_bp_state.keys()) - set(breakpoints["function"].keys())
+    for key in diff:
+        previous_bp_state[key].delete()
+        del previous_bp_state[key]
 
-    return {"breakpoints": result}
-
+    return { "breakpoints": [bp_obj(x) for x in breakpoints["function"].values()] }
 
 @request("setInstructionBreakpoints", Args(["breakpoints"], []))
 def set_ins_bps(args):
     global breakpoints
     result = []
     bps = args["breakpoints"]
-    current_bps = breakpoints.get("address")
-    if current_bps is None:
-        current_bps = {}
+    previous_bp_state = breakpoints.get("address")
+    if previous_bp_state is None:
+        previous_bp_state = {}
     breakpoints["address"] = {}
-    if len(bps) == 0:
-        return {"breakpoints": []}
 
     for bp_req in bps:
         bp_key = (
@@ -721,8 +725,8 @@ def set_ins_bps(args):
             bp_req.get("condition"),
             bp_req.get("hitCondition"),
         )
-        if bp_key in current_bps:
-            breakpoints["address"][bp_key] = current_bps[bp_key]
+        if bp_key in previous_bp_state:
+            breakpoints["address"][bp_key] = previous_bp_state[bp_key]
         else:
             address = int(bp_req.get("instructionReference"), 16)
             bp = gdb.Breakpoint(spec=f"*0x{address}")
@@ -732,8 +736,12 @@ def set_ins_bps(args):
             breakpoints["address"][bp_key] = bp
             result.append(bp_obj(bp))
 
-    return {"breakpoints": result}
+    diff = set(previous_bp_state.keys()) - set(breakpoints["address"].keys())
+    for key in diff:
+        previous_bp_state[key].delete()
+        del previous_bp_state[key]
 
+    return { "breakpoints": [bp_obj(x) for x in breakpoints["address"].values()] }
 
 @request("source", Args(["sourceReference"], ["source"]))
 def source(args):
@@ -1050,7 +1058,7 @@ def bp_src_info(bp):
 
 def bp_obj(bp):
     (source, line) = bp_src_info(bp)
-    obj = {"id": bp.number, "verified": not bp.pending}
+    obj = {"id": bp.number, "verified": not bp.pending }
     if line is not None:
         obj["line"] = line
     if source is not None:
