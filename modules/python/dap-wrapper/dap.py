@@ -31,7 +31,7 @@ from variables_reference import (
     StackFrame,
     clear_variable_references,
     VariablesReference,
-    VariableValueReference
+    VariableValueReference,
 )
 
 # DAP "Interpreter" State
@@ -79,7 +79,9 @@ class Logger:
 
     def log_request(self, fn, args, res):
         if self.debug is not None:
-            self.debug.log(msg=f"[req]: [{fn}] <- {json.dumps(args)}\n[res]: [{fn}] -> {json.dumps(res)}\n")
+            self.debug.log(
+                msg=f"[req]: [{fn}] <- {json.dumps(args)}\n[res]: [{fn}] -> {json.dumps(res)}\n"
+            )
 
     def log_msg(self, msg):
         if self.debug is not None:
@@ -139,13 +141,13 @@ class Session:
             else self.sessionArgs.get("allStopMode")
         )
         if self.sessionArgs["type"] == "launch":
-          if not allStop:
-              singleThreadControl = True
-              gdb.execute("set non-stop on")
-          if self.sessionArgs["stopOnEntry"]:
-              gdb.execute(f"start")
-          else:
-              gdb.execute(f"run")
+            if not allStop:
+                singleThreadControl = True
+                gdb.execute("set non-stop on")
+            if self.sessionArgs["stopOnEntry"]:
+                gdb.execute(f"start")
+            else:
+                gdb.execute(f"run")
 
     def restart(self):
         clear_variable_references(None)
@@ -206,7 +208,9 @@ class ArbitraryOptionalArgs(Args):
         keys = args.keys()
         for arg in self.required:
             if arg not in keys:
-                raise Exception(f"Missing required argument: {arg}. Required args: {self.required}")
+                raise Exception(
+                    f"Missing required argument: {arg}. Required args: {self.required}"
+                )
 
 
 def request(name, req_args=Args()):
@@ -223,7 +227,6 @@ def request(name, req_args=Args()):
             result = fn(args)
             logger.log_request(name, args, result)
             return result
-            
 
         commands[name] = wrap
         return wrap
@@ -266,16 +269,20 @@ def evaluate(args):
         return {"result": result, "variablesReference": 0}
     elif args["context"] == "watch":
         try:
-          value = gdb.parse_and_eval(args["expression"])
-          if can_var_ref(value):
-              ref = VariableValueReference(args["expression"], value)
-              res = ref.ui_data()
-              res["result"] = res.pop("value")
-              return res
-          else:
-              return { "result": f"{value}", "variablesReference": 0, "memoryReference": hex(int(value.address)) }
+            value = gdb.parse_and_eval(args["expression"])
+            if can_var_ref(value):
+                ref = VariableValueReference(args["expression"], value)
+                res = ref.ui_data()
+                res["result"] = res.pop("value")
+                return res
+            else:
+                return {
+                    "result": f"{value}",
+                    "variablesReference": 0,
+                    "memoryReference": hex(int(value.address)),
+                }
         except:
-            return { "result": "couldn't be evaluated", "variablesReference": 0 }
+            return {"result": "couldn't be evaluated", "variablesReference": 0}
     raise Exception("evaluate request failed")
 
 
@@ -358,13 +365,30 @@ def databreakpoint_info(args):
     try:
         container = variableReferences.get(args["variablesReference"])
         value = container.find_value(args["name"])
-        return { "dataId": hex(int(value.address)), "description": args["name"], "accessTypes": ["read", "write", "readWrite"], "canPersist": canPersist }
+        return {
+            "dataId": hex(int(value.address)),
+            "description": args["name"],
+            "accessTypes": ["read", "write", "readWrite"],
+            "canPersist": canPersist,
+        }
     except Exception as e:
-        return { "dataId": None, "description": f"{e}", "accessTypes": ["read", "write", "readWrite"], "canPersist": canPersist }
+        return {
+            "dataId": None,
+            "description": f"{e}",
+            "accessTypes": ["read", "write", "readWrite"],
+            "canPersist": canPersist,
+        }
+
 
 def watchpoint_ids(bps):
     for watchpoint_id in bps:
-        yield(watchpoint_id["dataId"], watchpoint_id["accessType"], watchpoint_id.get("condition"), watchpoint_id.get("hitCondition"))
+        yield (
+            watchpoint_id["dataId"],
+            watchpoint_id["accessType"],
+            watchpoint_id.get("condition"),
+            watchpoint_id.get("hitCondition"),
+        )
+
 
 def set_wp(dataId, accessType, condition, hitCondition):
     if accessType == "read":
@@ -376,6 +400,7 @@ def set_wp(dataId, accessType, condition, hitCondition):
     bp = gdb.breakpoints()[-1]
     bp.condition = condition
     return bp
+
 
 @request("setDataBreakpoints", Args(["breakpoints"]))
 def set_databps(args):
@@ -395,7 +420,7 @@ def set_databps(args):
         watchpoints[key].delete()
         del watchpoints[key]
 
-    return { "breakpoints": [ bp_to_ui(x) for x in watchpoints.values() ] }
+    return {"breakpoints": [bp_to_ui(x) for x in watchpoints.values()]}
 
 
 @request(
@@ -519,13 +544,15 @@ def configuration_done(args):
 @request("launch", ArbitraryOptionalArgs(["program"]))
 def launch(args):
     global session
-    session.start_session({
+    session.start_session(
+        {
             "type": "launch",
             "program": args["program"],
             "stopOnEntry": args.get("stopOnEntry"),
             "allStopMode": args.get("allStopMode"),
             "setupCommands": args.get("setupCommands"),
-    })
+        }
+    )
     return {}
 
 
@@ -536,13 +563,26 @@ def attach(args):
     cmd = None
     if pid is not None:
         cmd = f"attach {pid}"
-        session.start_session({ "type": "attach", "command": cmd, "setupCommands": args.get("setupCommands") })
+        session.start_session(
+            {
+                "type": "attach",
+                "command": cmd,
+                "setupCommands": args.get("setupCommands"),
+            }
+        )
     else:
         target = args.get("target")
         isExtended = args.get("extended")
         param = "remote" if not isExtended else "extended-remote"
         cmd = f"target {param} {target}"
-        session.start_session({ "type": "attach", "command": cmd, "allStopMode": args.get("allStopMode"), "setupCommands": args.get("setupCommands") })
+        session.start_session(
+            {
+                "type": "attach",
+                "command": cmd,
+                "allStopMode": args.get("allStopMode"),
+                "setupCommands": args.get("setupCommands"),
+            }
+        )
         if bool(args.get("stopOnEntry")):
             gdb.execute("tbreak main")
     return {}
@@ -598,7 +638,7 @@ def set_bps(args):
     src = args.get("source")
     path = src.get("path")
     if path is None:
-        return { "breakpoints": [] }
+        return {"breakpoints": []}
     else:
         bps = args.get("breakpoints")
         previous_bp_state = breakpoints.get(path)
@@ -623,13 +663,13 @@ def set_bps(args):
                 # if bp_req.get("hitCondition") is not None:
                 # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
                 breakpoints[path][bp_key] = bp
-        
+
         diff = set(previous_bp_state.keys()) - set(breakpoints[path].keys())
         for key in diff:
             previous_bp_state[key].delete()
             del previous_bp_state[key]
 
-    return { "breakpoints": [bp_to_ui(x) for x in breakpoints[path].values()] }
+    return {"breakpoints": [bp_to_ui(x) for x in breakpoints[path].values()]}
 
 
 def pull_new_bp(old, new):
@@ -699,13 +739,14 @@ def set_fn_bps(args):
             bp.condition = bp_req.get("condition")
             breakpoints["function"][bp_key] = bp
             result.append(bp_to_ui(bp))
-    
+
     diff = set(previous_bp_state.keys()) - set(breakpoints["function"].keys())
     for key in diff:
         previous_bp_state[key].delete()
         del previous_bp_state[key]
 
-    return { "breakpoints": [bp_to_ui(x) for x in breakpoints["function"].values()] }
+    return {"breakpoints": [bp_to_ui(x) for x in breakpoints["function"].values()]}
+
 
 @request("setInstructionBreakpoints", Args(["breakpoints"], []))
 def set_ins_bps(args):
@@ -740,7 +781,8 @@ def set_ins_bps(args):
         previous_bp_state[key].delete()
         del previous_bp_state[key]
 
-    return { "breakpoints": [bp_to_ui(x) for x in breakpoints["address"].values()] }
+    return {"breakpoints": [bp_to_ui(x) for x in breakpoints["address"].values()]}
+
 
 @request("source", Args(["sourceReference"], ["source"]))
 def source(args):
@@ -925,6 +967,7 @@ def CommandHandler(seq, req_seq, req, args):
 
 Handler = CommandHandler
 
+
 def start_command_response_thread():
     global run
     global cmdConn
@@ -948,6 +991,7 @@ def set_configuration():
     gdb.execute("set pagination off")
     gdb.execute("set python print-stack full")
 
+
 def handle_request(req):
     global commands
     global Handler
@@ -962,7 +1006,8 @@ def handle_request(req):
     req_seq = req.get("seq")
     if req_seq is None:
         raise gdb.GdbError("Request sequence number not found")
-    gdb.post_event(lambda: Handler(0, req_seq, cmd, args))   
+    gdb.post_event(lambda: Handler(0, req_seq, cmd, args))
+
 
 def start_command_thread():
     global commands
@@ -1062,7 +1107,7 @@ def bp_src_info(bp):
 
 def bp_to_ui(bp):
     (source, line) = bp_src_info(bp)
-    obj = {"id": bp.number, "verified": not bp.pending }
+    obj = {"id": bp.number, "verified": not bp.pending}
     if line is not None:
         obj["line"] = line
     if source is not None:
@@ -1090,7 +1135,9 @@ gdb.events.breakpoint_created.connect(
     lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_to_ui(bp)})
 )
 gdb.events.breakpoint_modified.connect(
-    lambda bp: send_event("breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)})
+    lambda bp: send_event(
+        "breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)}
+    )
 )
 gdb.events.breakpoint_deleted.connect(
     lambda bp: send_event(
