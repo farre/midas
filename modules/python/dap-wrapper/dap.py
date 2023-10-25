@@ -91,7 +91,7 @@ class Logger:
         start = time.perf_counter_ns()
         res = fn()
         end = time.perf_counter_ns()
-        self.perf.log(msg=f"[{msg}]: {(end-start) / 1000_0000} ms\n")
+        self.perf.log(msg=f"[{msg}]: {(end-start) / (1000 * 1000)} ms\n")
         return res
 
 
@@ -609,12 +609,15 @@ def read_memory(args):
     offset = args.get("offset")
     if offset is None:
         offset = 0
-    base_address = int(args["memoryReference"], 16) + offset
-    data = gdb.selected_inferior().read_memory(base_address, args["count"])
-    return {
-        "address": hex(base_address),
-        "data": base64.b64encode(data).decode("ascii"),
-    }
+    try:
+        base_address = int(args["memoryReference"], 16) + offset
+        data = gdb.selected_inferior().read_memory(base_address, args["count"])
+        return {
+            "address": hex(base_address),
+            "data": base64.b64encode(data).decode("ascii"),
+        }
+    except:
+        return {"address": hex(base_address), "unreadableBytes": args["count"]}
 
 
 @request("restart", req_args=ArbitraryOptionalArgs())
@@ -628,7 +631,7 @@ def restart(args):
 def reverse_continue(args):
     select_thread(args.get("threadId"))
     gdb.execute("reverse-continue")
-    # RR will always resume all threads.
+    # RR will always resume all threads - at least from the perspective of the user (it doesn't really do it)
     return {"allThreadsContinued": True}
 
 
@@ -713,7 +716,11 @@ def set_exception_bps(args):
 
 @request("setExpression", Args(["expression", "value"], ["frameId", "format"]))
 def set_expression(args):
-    raise Exception("setExpression not supported")
+    expr = args["expression"]
+    val = args["value"]
+    gdb.execute(f"set variable {expr} = {val}")
+    value = gdb.parse_and_eval(f"{expr}")
+    return {"value": f"{value}"}
 
 
 @request("setFunctionBreakpoints", Args(["breakpoints"]))
