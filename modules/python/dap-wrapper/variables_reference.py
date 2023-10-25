@@ -23,6 +23,12 @@ def can_var_ref(value):
         or actual_type.code == gdb.TYPE_CODE_PTR
     )
 
+def can_var_ref_type(type):
+    return (
+        type.code == gdb.TYPE_CODE_STRUCT
+        or type.code == gdb.TYPE_CODE_PTR
+    )
+
 
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
 class VariablesReference:
@@ -165,9 +171,16 @@ class VariableValueReference(VariablesReference):
                     )
         else:
             v = pp.to_string()
+            # Means we're a lazy string.
+            if hasattr(v, "value"):
+                v = v.value()
             t = self.value.type
-            a = self.value.address
-            res.append(to_vs("value", v, t, None, 0, None, None, a))
+            # If the pretty printer isn't exposing .children attribute, it's a shitty written pretty printer
+            # Thus, it will mean, that that the address we pass here, actually points into memory some where way different
+            # than what the user is probably expecting. But that's not our fault. Only in the case of LazyString is this 
+            # actually returning the address the user is expecting; the address of the string in memory.
+            a = v.address
+            res.append(to_vs("to-string", v, t, None, 0, None, None, a))
         return res
 
     def contents(self, format=None, start=None, count=None):
