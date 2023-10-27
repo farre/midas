@@ -495,7 +495,7 @@ async function activateExtension(context) {
 
 function deactivateExtension() {}
 
-const breaking_changes = [{ major: 0, minor: 20, patch: 0 }];
+const breaking_changes = [{ major: 0, minor: 19, patch: 0 }];
 
 module.exports = {
   activateExtension,
