@@ -23,11 +23,9 @@ def can_var_ref(value):
         or actual_type.code == gdb.TYPE_CODE_PTR
     )
 
+
 def can_var_ref_type(type):
-    return (
-        type.code == gdb.TYPE_CODE_STRUCT
-        or type.code == gdb.TYPE_CODE_PTR
-    )
+    return type.code == gdb.TYPE_CODE_STRUCT or type.code == gdb.TYPE_CODE_PTR
 
 
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
@@ -50,7 +48,7 @@ def frame_name(frame):
     if fn is not None:
         return fn.name
     else:
-        return "frame"
+        return "unknown frame"
 
 
 class StackFrame(VariablesReference):
@@ -109,7 +107,7 @@ def members(value):
             type = value.type
 
     for f in type.fields():
-        yield (f.name, value[f])
+        yield f
 
 
 def frame_top_block(frame):
@@ -124,33 +122,83 @@ def frame_top_block(frame):
     return res
 
 
+# we have to wrap this. Because this gets called in a loop where `value` is created on each iteration
+# For some reason, Python, in it's infinite wisdom, make that value be overwritten to be the same in every lambda
+def create_deferred_scopes_ref(name, value):
+    return VariableValueReference(
+        name=name, type=value.type, value_getter=lambda: value, addr=value.address
+    )
+
+
+# we have to wrap this. Because this gets called in a loop where `value[field]` is created on each iteration
+# For some reason, Python, in it's infinite wisdom, make that value[field] be overwritten to be the same in every lambda
+def create_deferred_var_ref(field, parent_value, address):
+    return VariableValueReference(
+        name=field.name,
+        type=field.type,
+        value_getter=lambda: parent_value[field],
+        addr=address,
+    )
+
+
+def create_eager_var_ref(name, value):
+    return VariableValueReference(
+        name=name, type=value.type, value_getter=lambda: value, addr=value.address
+    )
+
+
+# Create UI data for a value that is not VariableReference'able (i.e. VariableReference = 0)
+def value_ui_data(name, value):
+    return {
+        "name": name,
+        "value": "{}".format(value),
+        "type": "{}".format(value.type),
+        "evaluateName": None,
+        "variablesReference": 0,
+        "namedVariables": None,
+        "indexedVariables": None,
+        "memoryReference": hex(int(value.address)),
+    }
+
+
 # Unfortunately, the DAP-gods in their infinite wisdom, named this concept "VariablesReference"
 # something that refers to basically Widget/UI ID's, that can be a "Scope" like a container containing
 # the variables that are locals or arguments, or anything really. So to actually signal, that this type
 # refers to actual *variables* and their "children" we have to name it VariableValueReference to make
 # any distinction between this and the base class
 class VariableValueReference(VariablesReference):
-    def __init__(self, name, gdbValue):
+    def __init__(self, name, type, value_getter, addr):
         super(VariableValueReference, self).__init__(name)
-        self.value = gdbValue
-        if self.value.type.code == gdb.TYPE_CODE_PTR:
-            self.display = "{} ({})".format(self.value.type, hex(int(self.value)))
-        else:
-            self.display = "{}".format(self.value.type)
+        self.type = type
+        self.value_getter = value_getter
+        self.value_cache = None
+        self.addr = addr
+
+    def is_pointer(self):
+        return self.type.code == gdb.TYPE_CODE_PTR
+
+    def get_value(self):
+        if self.value_cache is None:
+            self.value_cache = self.value_getter()
+            if self.value_cache.type.code == gdb.TYPE_CODE_PTR:
+                try:
+                    self.value_cache = self.value_cache.dereference()
+                except:
+                    print(f"get_value() EXCEPTION")
+        return self.value_cache
 
     def ui_data(self):
-        address = (
-            hex(int(self.value.address)) if self.value.address is not None else None
-        )
         return {
             "name": self.name,
-            "value": self.display,
-            "type": f"{self.value.type}",
+            "value": f"{self.type.name}"
+            if not self.is_pointer()
+            else f"{self.type} ({hex(int(self.addr))})",
+            "type": f"{self.type.name}",
             "evaluateName": None,
             "variablesReference": self.id,
             "namedVariables": None,
             "indexedVariables": None,
-            "memoryReference": address,
+            "memoryReference": hex(int(self.addr)),
         }
 
     def pp_contents(self, pp, format, start, count):
@@ -158,73 +206,50 @@ class VariableValueReference(VariablesReference):
         if hasattr(pp, "children"):
             for (name, val) in pp.children():
                 if can_var_ref(val):
-                    ref = VariableValueReference(name, val)
-                    indexed = pp.num_children() if hasattr(pp, "num_children") else None
-                    v = f"{val.type}"
-                    item = to_vs(
-                        name, v, val.type, None, ref.id, None, indexed, val.address
-                    )
-                    res.append(item)
+                    ref = create_eager_var_ref(name=name, value=val)
+                    res.append(ref.ui_data())
                 else:
-                    res.append(
-                        to_vs(name, val, val.type, None, 0, None, None, val.address)
-                    )
+                    res.append(value_ui_data(name, val))
         else:
             v = pp.to_string()
-            # Means we're a lazy string.
+            # If to_string returns a lazy string, we want to get the actual string.
             if hasattr(v, "value"):
                 v = v.value()
-            t = self.value.type
-            # If the pretty printer isn't exposing .children attribute, it's a shitty written pretty printer
-            # Thus, it will mean, that that the address we pass here, actually points into memory some where way different
-            # than what the user is probably expecting. But that's not our fault. Only in the case of LazyString is this 
-            # actually returning the address the user is expecting; the address of the string in memory.
-            a = v.address
-            res.append(to_vs("to-string", v, t, None, 0, None, None, a))
+
+            item = value_ui_data("to-string", v)
+            item["type"] = self.type
+            res.append(item)
         return res
 
     def contents(self, format=None, start=None, count=None):
-        try:
-            if self.value.type.code == gdb.TYPE_CODE_PTR:
-                try:
-                    self.value = self.value.dereference()
-                except:
-                    pass
-            pp = gdb.default_visualizer(self.value)
-            if pp is not None:
-                return self.pp_contents(pp, format, start, count)
-            else:
-                res = []
-                for (name, v) in members(self.value):
-                    if can_var_ref(v):
-                        ref = VariableValueReference(name, v)
-                        res.append(
-                            to_vs(name, v, v.type, None, ref.id, None, None, v.address)
-                        )
-                    else:
-                        res.append(
-                            to_vs(name, v, v.type, None, 0, None, None, v.address)
-                        )
-                return res
-        except:
-            return []
+        value = self.get_value()
+        pp = gdb.default_visualizer(value)
+        if pp is not None:
+            return self.pp_contents(pp, format, start, count)
+        else:
+            res = []
+            for field in members(value):
+                if can_var_ref_type(field.type):
+                    # since we defer creating values for the members, we calculate actual address in memory by
+                    # offset of the member inside the type.
+                    addr = int(value.address) + (int(field.bitpos) / 8)
+                    ref = create_deferred_var_ref(field, value, addr)
+                    res.append(ref.ui_data())
+                else:
+                    res.append(value_ui_data(field.name, value[field]))
+            return res
 
     def find_value(self, find_name):
-        """find_value will _always_ be called after a call to .contents() has been made
-        Because of this, we can be sure that if this Var Ref was a pointer, it has
-        been dereferenced."""
-        assert (
-            self.value.type.code != gdb.TYPE_CODE_PTR
-        ), "Value has not yet been dereferenced - this state should be impossible."
-        pp = gdb.default_visualizer(self.value)
+        value = self.get_value()
+        pp = gdb.default_visualizer(value)
         if pp is not None:
             for (name, val) in pp.children():
                 if name == find_name:
                     return val
         else:
-            for (name, val) in members(self.value):
-                if name == find_name:
-                    return val
+            for field in members(value):
+                if field.name == find_name:
+                    return value[field]
         raise Exception(
             f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}"
         )
@@ -235,41 +260,34 @@ class VariableValueReference(VariablesReference):
 class ScopesReference(VariablesReference):
     def __init__(self, name, stackFrame, variablesGetter):
         super(ScopesReference, self).__init__(name)
-        # if stackFrame is not variable_references.StackFrame:
-        # raise gdb.GdbError(f"Expected type of frame to be StackFrame not GDB's Frame: {type(stackFrame)}")
         self.stack_frame = stackFrame
         self.variables = variablesGetter
 
     def contents(self, format=None, start=None, count=None):
-        try:
-            frame = self.stack_frame.frame()
-            block = frame_top_block(frame)
-            res = []
-            for symbol in self.variables(block):
-                gdbValue = frame.read_var(symbol, block)
-                if can_var_ref(gdbValue):
-                    ref = VariableValueReference(symbol.name, gdbValue)
-                    res.append(ref.ui_data())
-                else:
-                    address = (
-                        hex(int(gdbValue.address))
-                        if gdbValue.address is not None
-                        else None
-                    )
-                    res.append(
-                        {
-                            "name": symbol.name,
-                            "value": "{}".format(gdbValue),
-                            "type": f"{symbol.type}",
-                            "evaluateName": symbol.name,
-                            "variablesReference": 0,
-                            "namedVariables": None,
-                            "indexedVariables": None,
-                            "memoryReference": address,
-                        }
-                    )
-        except RuntimeError as re:
-            return []
+        frame = self.stack_frame.frame()
+        block = frame_top_block(frame)
+        res = []
+        for symbol in self.variables(block):
+            gdbValue = frame.read_var(symbol, block)
+            if can_var_ref(gdbValue):
+                ref = create_deferred_scopes_ref(name=symbol.name, value=gdbValue)
+                res.append(ref.ui_data())
+            else:
+                address = (
+                    hex(int(gdbValue.address)) if gdbValue.address is not None else None
+                )
+                res.append(
+                    {
+                        "name": symbol.name,
+                        "value": "{}".format(gdbValue),
+                        "type": f"{symbol.type}",
+                        "evaluateName": symbol.name,
+                        "variablesReference": 0,
+                        "namedVariables": None,
+                        "indexedVariables": None,
+                        "memoryReference": address,
+                    }
+                )
         return res
 
     def find_value(self, find_name):
@@ -282,19 +300,6 @@ class ScopesReference(VariablesReference):
         raise Exception(
             f"Could not find name {find_name} in scope container {self.name} with id {self.id}"
         )
-
-
-def to_vs(name, value, type, evaluateName, ref, named, indexed, address):
-    return {
-        "name": name,
-        "value": "{}".format(value),
-        "type": "{}".format(type),
-        "evaluateName": evaluateName,
-        "variablesReference": ref,
-        "namedVariables": named,
-        "indexedVariables": indexed,
-        "memoryReference": hex(int(address)) if address is not None else None,
-    }
 
 
 def args(block):
