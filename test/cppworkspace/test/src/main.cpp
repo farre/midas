@@ -133,6 +133,23 @@ void zeroed_test(int foo, float bar) {
   std::cout << "exiting zeroed_test" << std::endl;
 }
 
+std::vector<int> create_vector() {
+  std::vector<int> result;
+  result.reserve(10000);
+  for(auto i = 0; i < 10000; i++) result.push_back(i);
+  return result;
+}
+
+std::vector<std::string> create_string_vector(int size) {
+  std::vector<std::string> result;
+  result.reserve(size);
+  for(auto i = 0; i < size; i++) result.push_back(std::to_string(i));
+  return result;
+}
+
+void fill_vector(Vector<String>& v) {
+  for(auto i = 0; i < 10000; i++) v.push(std::to_string(i));
+}
 
 void vec_str() {
   Vector<String> v{};
@@ -205,6 +222,7 @@ struct Bar_ {
   Foo foo;
   int bar = 30;
 };
+
 int main(int argc, const char **argv) {
   simple_foo(10, 11.1);
   test_pps();
@@ -226,6 +244,9 @@ int main(int argc, const char **argv) {
   strings_2.emplace_back("universe");
   strings_2.emplace_back("!");
 
+  signal(SIGTERM, interrupt_signal);
+  raise(SIGTERM);
+
   const auto ref = strings_2[2];
 
   mumbojumbo[10] = "hello";
@@ -243,82 +264,13 @@ int main(int argc, const char **argv) {
   auto sz = 128;
   auto u8mem = ZeroedUint8Memory(sz);
   auto u8mem_heap = new ZeroedUint8Memory{sz};
-
+  
   zeroed_test(10, 42.0f);
-  signal(SIGINT, interrupt_signal);
-  std::vector<std::string> captured_args;
-  std::copy(argv, argv + argc, std::back_inserter(captured_args));
-  for(const auto& arg : captured_args) {
-    foovec->push_back(arg);
+  for(auto i = 0; i < sz; i++) {
+    u8mem.elements[i] = i;
+    u8mem_heap->elements[i] = i;
   }
-  std::copy(argv, argv + argc, std::back_inserter(foos[0]));
-  std::copy(argv, argv + argc, std::back_inserter(foos[1]));
-  std::copy(argv, argv + argc, std::back_inserter(foos[2]));
-  std::string helloworld{"Hello world, I manage myself and I'm also made sure "
-                         "to be allocated on the heap"};
-  std::string_view v{helloworld};
-  raise(SIGINT);
-  doFooBar();
-  testRValueReferences(std::move(helloworld));
-  T t{.s = S{.j = 10, .k = 200}, .f = 3.14};
-  [[always_inline]] alter_t(t);
-  // std::vector<T> vec_ts{};
-  vec_ts.push_back(T{.s = S{.j = 42, .k = 5005}, .f = 13.37});
-  vec_ts.push_back(T{.s = S{.j = 1, .k = 2}, .f = 3.0});
-  [[always_inline]] alter_t(t);
-  // watch variable `stack_ts[0:2]` should produce 2 elements of T
-  T stack_ts[2]{T{.s = S{.j = 42, .k = 5005}, .f = 13.37},
-                T{.s = S{.j = 1, .k = 2}, .f = 3.0}};
-  stack_ts[0].next = &stack_ts[1];
-  auto tptrs = new T *[2];
-  // watch variable `tptrs[0:2]` should produce 2 elements of T*
-  tptrs[0] = vec_ts.data();
-  tptrs[1] = vec_ts.data() + 1;
-  // watch variable: `it[0:2]` should produce first two elements of vec_ts since
-  // they are laid out adjacent in memory
-  T *it = *tptrs;
-  // for testing that watch var subscript operators work on members;
-  // `ts.ts[0:2]` should produce what `it[0:2]` does in this case
-  Ts ts;
-  ts.ts = vec_ts.data();
 
-  const auto somelocal = 42;
-  constexpr int array[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-  constexpr S s_array[7]{{1, 2}, {2, 3}, {3, 4}, {4, 5},
-                         {5, 6}, {6, 7}, {7, 8}};
-  T *tptr_to_stack = stack_ts;
-
-  T **ptrs_to_ptr = new T *[2];
-  ptrs_to_ptr[0] = vec_ts.data();
-  ptrs_to_ptr[1] = new T{.s = S{.j = 999, .k = 888}, .f = -0.1234567};
-  ptrs_to_ptr[1]->next = &vec_ts.back();
-  auto iptr = new int{42};
-  int *ptrs[10];
-  int *arrayPtrs = new int[10];
-  for (auto idx = 0; idx < 10; idx++) {
-    ptrs[idx] = new int{42 + idx};
-    arrayPtrs[idx] = idx;
-  }
-  t.s.j++;
-
-  // shadowing test
-  int i = 10;
-  {
-    int i = 20;
-    float f = 2.0f;
-  }
-  const auto j = i;
-
-  i += 1;
-  // set breakpoint here.
-  auto Double = add_two(1.550795, 1.590795);
-  auto Float = add_two(668.19685f, 668.93685f);
-  auto Int = add_two(20, 22);
-
-  int ol1 = overload(1);
-  float ol2 = overload(2.0f);
-  double ol3 = overload(3.0);
-*/
   // lets be longer than a machine register
   static const auto foo = "foobar is something to say";
   static constexpr auto bar = "saying barfoo is something nobody does";
