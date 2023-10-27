@@ -1,13 +1,15 @@
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <tuple>
 #include <vector>
-
+#include <signal.h>
 std::mutex g_stdio_mutex;
 struct Foo {
   double x, y;
@@ -178,7 +180,13 @@ int main(int argc, const char **argv) {
     main_surface.height += 10;
     main_surface.width -= 10;
   }
-
+  try {
+    throw std::runtime_error("I wonder what will happen here?");
+  } catch(std::exception& ex) {
+    std::cout << "exception caught: " << ex.what() << std::endl;
+  }
+  
+  raise(SIGINT);
   auto i = 10 * 20;
   const auto dx = (surface.x.max - surface.x.min) / static_cast<double>(surface.width - 1);
   const auto dy =

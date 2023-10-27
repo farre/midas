@@ -171,7 +171,8 @@ void test_pps() {
 }
 
 void stringfuckup() {
-  auto strs = create_string_vector(4);
+  std::string foo = "check this out ya bish";
+  auto strs = create_string_vector(12000);
   std::cout << "many strs" << strs.size();
 }
 
@@ -190,12 +191,29 @@ void many_ints() {
   std::cout << "many ints" << std::endl;
 }
 
+int simple_foo(int a, float b) {
+  int j = static_cast<int>(static_cast<float>(a) * b);
+  return j;
+}
+
+struct Foo {
+  int a = 10;
+  int b = 20;
+};
+
+struct Bar_ {
+  Foo foo;
+  int bar = 30;
+};
 int main(int argc, const char **argv) {
+  simple_foo(10, 11.1);
   test_pps();
   stringfuckup();
   use_string();
   use_cstring();
   many_ints();
+  Foo foo_{};
+  Bar_ ba{};
   std::string foostring{"foobarbaz asadasdasasdsadasd"};
   std::map<int, std::string> mumbojumbo{};
   std::vector<std::string> strings_2{};
