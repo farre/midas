@@ -30,8 +30,7 @@ from variables_reference import (
     exceptionInfos,
     StackFrame,
     clear_variable_references,
-    VariablesReference,
-    VariableValueReference,
+    create_eager_var_ref,
 )
 
 # DAP "Interpreter" State
@@ -271,7 +270,7 @@ def evaluate(args):
         try:
             value = gdb.parse_and_eval(args["expression"])
             if can_var_ref(value):
-                ref = VariableValueReference(args["expression"], value)
+                ref = create_eager_var_ref(args["expression"], value)
                 res = ref.ui_data()
                 res["result"] = res.pop("value")
                 return res
@@ -940,8 +939,12 @@ def LoggingCommandHandler(seq, req_seq, req, args):
             "req_seq": req_seq,
             "cmd": req,
             "success": False,
-            "message": f"{e}",
-            "body": {"error": {"stacktrace": traceback.format_exc()}},
+            "message": f"Request {req} failed:\n{e}",
+            "body": {
+                "error": {
+                    "stacktrace": f"Request {req} failed:\n{traceback.format_exc()}"
+                }
+            },
         }
     responsesQueue.put(res)
 
