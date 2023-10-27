@@ -190,7 +190,7 @@ class VariableValueReference(VariablesReference):
     def ui_data(self):
         return {
             "name": self.name,
-            "value": f"{self.type.name}"
+            "value": f"{self.type}"
             if not self.is_pointer()
             else f"{self.type} ({hex(int(self.addr))})",
             "type": f"{self.type.name}",
@@ -217,7 +217,7 @@ class VariableValueReference(VariablesReference):
                 v = v.value()
 
             item = value_ui_data("to-string", v)
-            item["type"] = self.type
+            item["type"] = "{}".format(self.type)
             res.append(item)
         return res
 
