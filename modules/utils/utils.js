@@ -480,6 +480,17 @@ function parseSemVer(string) {
 }
 
 /**
+ * @param {SemVer} semver 
+ * @param {SemVer} compare 
+ * @returns {boolean}
+ */
+function semverIsNewer(semver, compare) {
+  const bits = (semver.major << 16) | (semver.minor) << 8 | semver.patch;
+  const cmp_bits = (compare.major << 16) | (compare.minor << 8) | compare.patch;
+  return bits > cmp_bits;
+}
+
+/**
  * Executes `pathToBinary` and passes the parameter `--version` and parses this output for a SemVer.
  * @param {string} pathToBinary - path to binary which we execute with parameter `--version` to retrieve it's version.
  * @returns {Promise<SemVer>}
@@ -1004,6 +1015,7 @@ module.exports = {
   toHexString,
   REGEXES,
   parseSemVer,
+  semverIsNewer,
   getVersion,
   requiresMinimum,
   getPid,

@@ -11,6 +11,7 @@ which consists of connecting to a remote target machine to debug there.
 
 ## Contents
 
+- [News](#news)
 - [Requirements](#requirements)
 - [Toolchain management](#toolchain-management)
 - [Launch configuration](#launch-configuration)
@@ -20,6 +21,15 @@ which consists of connecting to a remote target machine to debug there.
 - [Remote debug sessions](#remote-debug-sessions)
 - [Setup commands](#setup-commands)
 
+
+## NEWS
+
+### 0.20.0
+Starting with this version all `midas-rr` sessions (RR sessions) will have the configuration go from `launch` to `attach` type. See [launch.json example](#replayable-rr-debug-session) for example.
+
+In the coming releases, Midas will start using it's custom DAP implementation inside GDB, as a polyfill for those who can't use the very newest GDB, which itself will have a built in DAP interpreter (hopefully) in release 14.0. This pretty major refactor aims to achieve 2 things, the aforementioned polyfill as well as being a more stable debug adapter as this relieves Midas of much it's responsibility since we don't have to work around some of the more quirky parts of GDB to maintain an acceptable debugging experience as far as performance goes.
+
+As such, users can (should) set the `use-dap` flag in launch.json to true. Only if Midas stops working, should you turn this off (please, file an issue on [github](https://github.com/farre/midas), whether or not you can determine what is not working).
 
 ## Q & A
 
@@ -154,7 +164,8 @@ A minimum required launch config for RR is really simple as Midas will query RR 
 ```json
 {
   "type": "midas-rr",
-  "request": "launch",
+  "request": "attach",
+  "use-dap": true, // set to false if Midas stops working.
   "name": "Minimum rr",
   "trace": "Off",
 }
@@ -167,7 +178,7 @@ Configuration example, for a rr debug session of for example a `firefox` test:
 ```json
 {
   "type": "midas-rr",
-  "request": "launch",
+  "request": "attach",
   "name": "Launch replay debug session",
   "cwd": "${workspaceFolder}",
   "stopOnEntry": true,

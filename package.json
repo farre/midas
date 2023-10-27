@@ -189,7 +189,7 @@
             "properties": {
               "use-dap": {
                 "type": "boolean",
-                "description": "Use the new Midas custom DAP implementation in GDB",
+                "description": "Use the new Midas custom DAP implementation in GDB. If Midas stops working - set this to false.",
                 "default": false
               },
               "program": {
