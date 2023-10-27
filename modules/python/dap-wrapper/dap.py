@@ -934,6 +934,10 @@ def LoggingCommandHandler(seq, req_seq, req, args):
             "body": body,
         }
     except Exception as e:
+        try:
+            args_contents = json.dumps(args)
+        except:
+            args_contents = "Failed to determine args to request"
         res = {
             "seq": seq,
             "req_seq": req_seq,
@@ -942,7 +946,7 @@ def LoggingCommandHandler(seq, req_seq, req, args):
             "message": f"Request {req} failed:\n{e}",
             "body": {
                 "error": {
-                    "stacktrace": f"Request {req} failed:\n{traceback.format_exc()}"
+                    "stacktrace": f"Request {req} failed with args {args_contents}:\n{traceback.format_exc()}"
                 }
             },
         }
