@@ -181,24 +181,20 @@ class VariableValueReference(VariablesReference):
         if self.value_cache is None:
             self.value_cache = self.value_getter()
             if self.value_cache.type.code == gdb.TYPE_CODE_PTR:
-                try:
-                    self.value_cache = self.value_cache.dereference()
-                except:
-                    print(f"get_value() EXCEPTION")
+                self.value_cache = self.value_cache.referenced_value()
         return self.value_cache
 
     def ui_data(self):
+        addr = hex(int(self.addr)) if self.addr is not None else None
         return {
             "name": self.name,
-            "value": f"{self.type}"
-            if not self.is_pointer()
-            else f"{self.type} ({hex(int(self.addr))})",
+            "value": f"{self.type}",
             "type": f"{self.type.name}",
             "evaluateName": None,
             "variablesReference": self.id,
             "namedVariables": None,
             "indexedVariables": None,
-            "memoryReference": hex(int(self.addr)),
+            "memoryReference": addr,
         }
 
     def pp_contents(self, pp, format, start, count):
@@ -222,22 +218,29 @@ class VariableValueReference(VariablesReference):
         return res
 
     def contents(self, format=None, start=None, count=None):
-        value = self.get_value()
-        pp = gdb.default_visualizer(value)
-        if pp is not None:
-            return self.pp_contents(pp, format, start, count)
-        else:
-            res = []
-            for field in members(value):
-                if can_var_ref_type(field.type):
-                    # since we defer creating values for the members, we calculate actual address in memory by
-                    # offset of the member inside the type.
-                    addr = int(value.address) + (int(field.bitpos) / 8)
-                    ref = create_deferred_var_ref(field, value, addr)
-                    res.append(ref.ui_data())
-                else:
-                    res.append(value_ui_data(field.name, value[field]))
-            return res
+        try:
+            value = self.get_value()
+            pp = gdb.default_visualizer(value)
+            if pp is not None:
+                return self.pp_contents(pp, format, start, count)
+            else:
+                res = []
+                for field in members(value):
+                    if can_var_ref_type(field.type):
+                        # since we defer creating values for the members, we calculate actual address in memory by
+                        # offset of the member inside the type.
+                        if hasattr(field, "bitpos"):
+                            addr = int(value.address) + (int(field.bitpos) / 8)
+                        else:
+                            # Is a static member
+                            addr = None
+                        ref = create_deferred_var_ref(field, value, addr)
+                        res.append(ref.ui_data())
+                    else:
+                        res.append(value_ui_data(field.name, value[field]))
+                return res
+        except gdb.MemoryError as mem_err:
+            return [{"name": "error", "value": f"{mem_err}", "variablesReference": 0}]
 
     def find_value(self, find_name):
         value = self.get_value()
