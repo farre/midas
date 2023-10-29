@@ -53,8 +53,8 @@ responsesQueue = Queue()
 eventsQueue = Queue()
 
 session = None
-event_socket_path = "/tmp/midas-events"
-command_socket_path = "/tmp/midas-commands"
+eventSocketPath = "/tmp/midas-events"
+commandSocketPath = "/tmp/midas-commands"
 
 
 class LogFile:
@@ -677,7 +677,7 @@ def reverse_continue(args):
     select_thread(args.get("threadId"))
     gdb.execute("reverse-continue")
     # RR will always resume all threads - at least from the perspective of the user (it doesn't really do it)
-    return {"allThreadsContinued": True}
+    return { "allThreadsContinued": True }
 
 
 @request("setBreakpoints", Args(["source"], ["breakpoints", "lines", "sourceModified"]))
@@ -879,7 +879,7 @@ def terminate(args):
     return {}
 
 
-event_socket = None
+eventSocket = None
 # Socket where we receive requests and send responses on
 cmdConn = None
 
@@ -891,20 +891,20 @@ def prep_event(seq, evt):
 
 
 def event_thread():
-    global event_socket
-    global event_socket_path
+    global eventSocket
+    global eventSocketPath
 
     # remove the socket file if it already exists
     try:
-        unlink(event_socket_path)
+        unlink(eventSocketPath)
     except OSError:
-        if path.exists(event_socket_path):
+        if path.exists(eventSocketPath):
             raise
 
-    event_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    event_socket.bind(event_socket_path)
-    event_socket.listen(1)
-    event_connection, client_address = event_socket.accept()
+    eventSocket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    eventSocket.bind(eventSocketPath)
+    eventSocket.listen(1)
+    event_connection, client_address = eventSocket.accept()
     global seq
     while run:
         res = eventsQueue.get()
@@ -1074,18 +1074,18 @@ def start_command_thread():
     global seq
     global run
     global cmdConn
-    global command_socket_path
+    global commandSocketPath
     global Handler
     # Must be turned off; otherwise `gdb.execute("kill")` will crash gdb
     gdb.post_event(set_configuration)
     # remove the socket file if it already exists
     try:
-        unlink(command_socket_path)
+        unlink(commandSocketPath)
     except OSError:
-        if path.exists(command_socket_path):
+        if path.exists(commandSocketPath):
             raise
     cmd_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    cmd_socket.bind(command_socket_path)
+    cmd_socket.bind(commandSocketPath)
     cmd_socket.listen(1)
     cmdConn, client_address = cmd_socket.accept()
     # TODO(simon): do something better than just using a dumb string as a buffer. For now, it's the simplest solution (though stupid).
@@ -1105,7 +1105,7 @@ def start_command_thread():
                 handle_request(req)
                 (req, buffer) = parse_one_request(buffer)
     finally:
-        unlink(command_socket_path)
+        unlink(commandSocketPath)
 
 
 def continued_event(evt):
@@ -1232,17 +1232,17 @@ import atexit
 
 
 def clean_up():
-    global event_socket_path
-    global command_socket_path
+    global eventSocketPath
+    global commandSocketPath
     global logger
     del logger
     try:
-        unlink(event_socket_path)
+        unlink(eventSocketPath)
     except:
         pass
 
     try:
-        unlink(command_socket_path)
+        unlink(commandSocketPath)
     except:
         pass
 
