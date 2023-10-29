@@ -33,6 +33,14 @@ from variables_reference import (
     create_eager_var_ref,
 )
 
+
+def safeInt(value):
+    if value is None:
+        return 0
+    else:
+        return value
+
+
 # DAP "Interpreter" State
 commands = {}
 seq = 1
@@ -422,6 +430,32 @@ def set_databps(args):
     return {"breakpoints": [bp_to_ui(x) for x in watchpoints.values()]}
 
 
+# Disassemble backwards from end_pc .. (some address that's offset instructions from end_pc)
+def offset_disassemble(arch, end_pc, offset, count):
+    ins_at_pc = arch.disassemble(start_pc=end_pc)[0]
+    start = end_pc - 8 * offset
+    instructions = []
+    while len(instructions) < (offset + 1):
+        block = gdb.current_progspace().block_for_pc(start)
+        if block is None:
+            instructions = [
+                {"addr": 0, "asm": "unknown"}
+                for i in range(0, offset - len(instructions))
+            ] + instructions
+        else:
+            ins = arch.disassemble(start_pc=block.start, end_pc=end_pc)
+            instructions = ins + instructions
+        start = start - 8 * (offset - len(instructions))
+        end_pc = block.start
+
+    diff = len(instructions) - offset
+    result = instructions[diff : diff + count]
+    if result[-1]["addr"] == ins_at_pc["addr"]:
+        result.pop()
+        result = [instructions[diff - 1]] + result
+    return result[:count]
+
+
 @request(
     "disassemble",
     Args(
@@ -430,12 +464,24 @@ def set_databps(args):
     ),
 )
 def disassemble(args):
-    addr = args.get("memoryReference")
-    offset = args.get("offset")
-    ins_offset = args.get("instructionOffset")
-    ins_count = args.get("instructionCount")
-    resolve = args.get("resolveSymbols")
-    raise Exception("disassemble not implemented")
+    ins_offset = safeInt(args.get("instructionOffset"))
+    addr = int(args["memoryReference"], 16) + safeInt(args.get("offset"))
+    count = safeInt(args["instructionCount"])
+    resolve = bool(args.get("resolveSymbols"))
+    arch = gdb.selected_inferior().architecture()
+    result = []
+    if ins_offset < 0:
+        disassembly = offset_disassemble(arch, addr, abs(ins_offset), count)
+        ins_offset = 0
+        count = count - len(result)
+        result = [
+            {"address": hex(i["addr"]), "instruction": i["asm"]} for i in disassembly
+        ]
+
+    for i in arch.disassemble(addr, count=count + ins_offset)[ins_offset:]:
+        result.append({"address": hex(i["addr"]), "instruction": i["asm"]})
+
+    return {"instructions": result}
 
 
 @request("disconnect", Args([], ["terminateDebuggee", "restart", "suspendDebuggee"]))
