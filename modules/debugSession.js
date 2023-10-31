@@ -220,9 +220,9 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
         await this.gdb.attach_start();
         this.sendResponse(response);
       } catch(err) {
-        // this.sendEvent(new DebugAdapter.TerminatedEvent());
+        this.sendErrorResponse(response, 0, "Failed to attach");
+        this.sendEvent(new DebugAdapter.TerminatedEvent())
       }
-      this.sendResponse(response);
     }
   }
 
@@ -879,13 +879,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     if (onExitHandler) {
       this.#terminal.registerExitAction(onExitHandler);
     }
-  }
-
-  addTerminalExitHandler(handler) {
-    if (isNothing(this.#terminal)) {
-      throw new Error("No terminal registered to register handler with");
-    }
-    this.#terminal.registerExitAction(handler);
   }
 
   reloadScripts() {

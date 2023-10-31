@@ -182,7 +182,7 @@ class Gdb {
       this.events = new EventEmitter();
       this.responses = new EventEmitter();
       this.commands_socket = new MidasSocket("commands", "/tmp/midas-commands", "response", this.responses);
-      this.events_socket = new MidasSocket("events", "/tmp/midas-events", "event", this.events);      
+      this.events_socket = new MidasSocket("events", "/tmp/midas-events", "event", this.events);
       gdb_process.stderr.on("data", (data) => {
         console.log(data.toString());
       });
@@ -232,13 +232,13 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   #spawnConfig;
   addressBreakpoints = [];
   // eslint-disable-next-line no-unused-vars
-  constructor(debuggerLinesStartAt1, isServer = false, fileSystem = fs, spawnConfig, terminal, checkpointsUI) {
+  constructor(spawnConfig, terminal, checkpointsUI) {
     super();
-    // NB! i have no idea what thread id this is supposed to refer to
     this.#spawnConfig = spawnConfig;
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
     this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? []);
+    this.#terminal = terminal;
 
     this.gdb.response_connect((response) => {
       if(!response.success) {
@@ -253,6 +253,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       switch (event) {
         case "exited":
           this.sendEvent(new TerminatedEvent(false));
+          this.emit("exit");
           break;
         case "output":
           this.sendEvent(new OutputEvent(body.output, "console"));
@@ -263,10 +264,25 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       }
     });
 
+    this.on("exit", (evt) => {
+      this.disposeTerminal();
+      if(this.gdb.gdb.exitCode == null) {
+        this.gdb.gdb.kill(9);
+      }
+    });
+
     this.on("error", (event) => {
       this.sendEvent(new DebugAdapter.OutputEvent(event.body, "console", event));
     });
-    this.#terminal = terminal;
+
+  }
+
+  atExitCleanUp(signal) {
+    this.gdb.gdb.kill(signal);
+    if (this.#spawnConfig.disposeOnExit()) this.disposeTerminal();
+    else {
+      if (this.#terminal) this.#terminal.disposeChildren();
+    }
   }
 
   /**
@@ -295,7 +311,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   initializeRequest(response, args) {
     this.gdb.initialize().then(() => {
       args["trace"] = this.#spawnConfig.trace;
-      args["rr-session"] = this.#spawnConfig.isRRSession()
+      args["rr-session"] = this.#spawnConfig.isRRSession();
       this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
     }).catch(err => {
       this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}`});
@@ -394,32 +410,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   scopesRequest(response, args, request) {
     this.gdb.sendRequest(request);
-  }
-
-  // "VIRTUAL FUNCTIONS" av DebugSession som behövs implementeras (några av dom i alla fall)
-  static run(port) {
-    if (!port) {
-      DebugAdapter.DebugSession.run(MidasDAPSession);
-      return;
-    }
-    if (server) {
-      server.close();
-      server = null;
-    }
-
-    // start a server that creates a new session for every connection request
-    server = net
-      .createServer((socket) => {
-        socket.on("end", () => {});
-        const session = new MidasDAPSession();
-        session.setRunAsServer(true);
-        session.start(socket, socket);
-      })
-      .listen(port);
-  }
-
-  static shutdown() {
-    server.close();
   }
 
   virtualDispatch(...args) {
@@ -552,7 +542,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   completionsRequest(response, args, request) {
-    this.gdb.sendRequest(request, args);  
+    this.gdb.sendRequest(request, args);
   }
 
   exceptionInfoRequest(response, args, request) {
@@ -657,13 +647,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     if (onExitHandler) {
       this.#terminal.registerExitAction(onExitHandler);
     }
-  }
-
-  addTerminalExitHandler(handler) {
-    if (isNothing(this.#terminal)) {
-      throw new Error("No terminal registered to register handler with");
-    }
-    this.#terminal.registerExitAction(handler);
   }
 
   disposeTerminal() {

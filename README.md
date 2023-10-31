@@ -25,11 +25,15 @@ which consists of connecting to a remote target machine to debug there.
 ## NEWS
 
 ### 0.20.0
+#### New interpreter
 Starting with this version all `midas-rr` sessions (RR sessions) will have the configuration go from `launch` to `attach` type. See [launch.json example](#replayable-rr-debug-session) for example.
 
 In the coming releases, Midas will start using it's custom DAP implementation inside GDB, as a polyfill for those who can't use the very newest GDB, which itself will have a built in DAP interpreter (hopefully) in release 14.0. This pretty major refactor aims to achieve 2 things, the aforementioned polyfill as well as being a more stable debug adapter as this relieves Midas of much it's responsibility since we don't have to work around some of the more quirky parts of GDB to maintain an acceptable debugging experience as far as performance goes.
 
 As such, users can (should) set the `use-dap` flag in launch.json to true. Only if Midas stops working, should you turn this off (please, file an issue on [github](https://github.com/farre/midas), whether or not you can determine what is not working).
+
+#### Attach configuration
+Debugging remote targets has changed to look more like how one would do it naturally in GDB. As such the `remoteTargetConfig` has been removed in favor of `target`. See [example](#remote-debug-sessions) below.
 
 ## Q & A
 
@@ -96,7 +100,6 @@ The quickest way to configure is to open up the `launch.json` file and hit the a
   "name": "Launch Debug",
   "program": "/path/to/binary",
   "cwd": "${workspaceFolder}",
-  "rrPath": "rr", // not required if you let Midas manage the toolchain
   "gdbPath": "gdb", // if GDB is on $PATH, this field is not required
   "stopOnEntry": true,
   "trace": "Off",
@@ -217,85 +220,22 @@ Leave PID field as is (or remove the field entirely) and you will be asked for i
 [back to top](#contents)
 
 ## Remote debug sessions
-Midas currently supports remote debug sessions in a rudimentary fashion. In order to set up a remote debug session, you must
-add the following field to your configurations in launch.json: `remoteTargetConfiguration`. The Midas maintainer(s) don't have much
-experience in remote debugging; so developing a simplified work flow will not be perfect just yet but if you have any issues, please
-report them here on Github and we will get to working on them as soon as possible.
-
-Below is an example of a `normal remote debug session` launching an application by connecting to a remote GDBServer and instructing it to launch `program`
+To use Midas to debug an application running on a remote target, the user must have first started a gdbserver that is running the application and listening for connections on some address. To connect to a gdbserver at address `127.0.0.1:12345`, use following configuration.
 
 ```json
-{
-  "type": "midas-gdb",
-  "request": "launch",
-  "name": "Launch application in remote",
-  "program": "/path/to/app/on/remote",
-  "trace": "Off",
-  "setupCommands": [],
-  "remoteTargetConfig": {
-    "address": "192.168.1.15:12345",
-    "substitute-path": {
-      "local": "/prefix-path/on/your/machine",
-      "remote": "/prefix-path/on/remote/machine"
-    }
-  }
-}
-```
-
-The `address` field is self-explanatory. The `substitute-path` field, describes how to replace a path on the remote machine with
-a path on your local machine. If the remote application exists in a root folder of `/home/remote/dev/` and your local source files
-exists on your system under `/home/local/dev`, then set `local` to `/home/local/dev` and `remote` to `/home/remote/dev/` as this will make GDB find the source code so that you can have a full debugging experience. If your remote system and local system has identical paths to the application being debugged, then you can set both `local` and `remote` to `null`.
-
-As usual, these fields come with auto-completion when writing them in `launch.json` with description showing if you hover the mouse over them.
-
-For a `attach remote debug session` the configuration looks a bit different, it excludes the `program` field:
-```json
-// Example config of a remote target running at address 192.168.1.100 on port 12345. In this case, remote file system matches local file system
 {
   "type": "midas-gdb",
   "request": "attach",
-  "name": "Connect and run remote target",
-  "trace": "Off",
-  "gdbPath": "gdb", // not required if GDB is in $PATH
-  "setupCommands": [],
-  "attachOnFork": false,
-  "remoteTargetConfig": {
-    "address": "192.168.1.100:12345",
-    "substitute-path": {
-      "local": null,
-      "remote": null
-    }
-  }
-},
-```
-
-`remote replayable debug session` example configuration:
-
-```json
-// connect to RR debug session at 192.168.1.100 on port 12345
-{
-  "type": "midas-rr",
-  "request": "launch",
-  "name": "Launch replay debug session",
-  "trace": "Off",
-  "gdbPath": "gdb",
-  "rrPath": "rr",
-  "setupCommands": [
-    "set sysroot /",
-    "set debuginfod enabled off",
-    "set auto-load safe-path /"
-  ],
-  "remoteTargetConfig": {
-    "address": "192.168.1.100",
-    // where ever GDB sees /home/user/remoteDevRootFolder as a path, it will
-    // replace it with /home/user/myLocalDevFolder and look for source files there in your local machine
-    "substitute-path": {
-      "local": "/home/user/myLocalDevFolder",
-      "remote": "/home/user/remoteDevRootFolder"
-    }
-  }
+  "name": "Attach to remote debug session hosted by gdbserver",
+  "setupCommands": [], // set of GDB commands you want executed before debugging starts.
+  "target": {
+    "type": "remote", // "extended-remote" or "remote"
+    "parameter": "127.0.0.1:12345" // the parameter to the `target remote/extended-remote` command on the GDB CLI.
+  },
 }
 ```
+
+If the remote session is an RR replay, just replace `midas-gdb` with `midas-rr` in the `type` field launch.json.
 
 [back to top](#contents)
 ## Setup commands
