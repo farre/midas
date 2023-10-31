@@ -266,9 +266,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
     this.on("exit", (evt) => {
       this.disposeTerminal();
-      if(this.gdb.gdb.exitCode == null) {
-        this.gdb.gdb.kill(9);
-      }
     });
 
     this.on("error", (event) => {

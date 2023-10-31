@@ -182,7 +182,7 @@ class Session:
         run = False
         if kill_tracee:
             session.kill_tracee()
-        if self.is_rr_session():
+        elif self.is_rr_session():
             session.kill_tracee()
         gdb.execute("disconnect")
 
