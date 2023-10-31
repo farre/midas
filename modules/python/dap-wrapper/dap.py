@@ -499,6 +499,11 @@ def exception_info(args):
         raise Exception(f"Exception Info {args['threadId']} not found.")
     return info
 
+@request("completions", Args(["text", "column"], ["frameId", "line"]))
+def completions(args):
+    replace_len = len(args["text"])
+    result = [ { "label": item, "length": replace_len } for item in gdb.execute(f"complete {args['text']}", to_string=True).splitlines()]
+    return { "targets": result }
 
 @request("initialize", req_args=ArbitraryOptionalArgs())
 def initialize(args):
@@ -545,7 +550,7 @@ def initialize(args):
         "supportsRestartFrame": False,
         "supportsGotoTargetsRequest": False,
         "supportsStepInTargetsRequest": False,
-        "supportsCompletionsRequest": False,
+        "supportsCompletionsRequest": True,
         "completionTriggerCharacters": None,
         "supportsModulesRequest": False,
         "additionalModuleColumns": False,
