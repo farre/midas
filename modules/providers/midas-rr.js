@@ -40,9 +40,7 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-  if (!config.hasOwnProperty("remoteTargetConfig")) {
-    config.remoteTargetConfig = null;
-  }
+
   const perf_event_paranoid = krnl.readPerfEventParanoid();
   if (perf_event_paranoid > 1) {
     let choice = await showErrorPopup(
@@ -67,7 +65,7 @@ async function setServerAddress() {
 
 function getAddrSetting(config) {
   if(config.target === null) throw new Error("No RR server address was set or configured");
-  const [addr, port] = config.target.split(":");
+  const [addr, port] = config.target.parameter.split(":");
   return { address: (addr == "localhost" ? "127.0.0.1" : addr), port: port }
 }
 
@@ -81,8 +79,10 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     if (!fs.existsSync(config.rrPath)) {
       throw new Error(`No RR found at ${config.rrPath}`);
     }
-    config.target = await setServerAddress();
-    config.extended = true;
+    config.target = {
+      "type": "extended-remote",
+      "parameter": await setServerAddress()
+    };
 
     if (config.traceWorkspace && !config.replay.pid) {
       config = await tracePicked(config.rrPath, config.traceWorkspace).then((replay_parameters) => {
@@ -203,7 +203,7 @@ class RRDebugAdapterFactory {
           rrArgs
         );
         if (config["use-dap"]) {
-          let session = new MidasDAPSession(true, false, fs, new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
+          let session = new MidasDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
           return new vscode.DebugAdapterInlineImplementation(session);
         } else {
           let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
@@ -218,7 +218,7 @@ class RRDebugAdapterFactory {
       term.sendText(cmd_str);
       term.show(true);
       if (config["use-dap"]) {
-        let dbg_session = new MidasDAPSession(true, false, fs, new RRSpawnConfig(config), term, this.#cp_ui);
+        let dbg_session = new MidasDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } else {
         let dbg_session = new MidasDebugSession(

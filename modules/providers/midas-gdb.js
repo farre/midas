@@ -81,7 +81,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
       return null;
     }
 
-    if (config.request == "attach" && config.remoteTargetConfig == null) {
+    if (config.request == "attach" && config.target == null) {
       if (!config.pid) {
         const pid = await getPid();
         if (isNothing(pid)) {
@@ -109,7 +109,8 @@ class DebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     if(config["use-dap"]) {
-      const midas_session = new MidasDAPSession(true, false, fs, this.spawnConfig(config), null, null);
+      let terminal = null;
+      const midas_session = new MidasDAPSession(this.spawnConfig(config), terminal, null);
       vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
       return new vscode.DebugAdapterInlineImplementation(midas_session);
     } else {
@@ -122,13 +123,13 @@ class DebugAdapterFactory {
   spawnConfig(config) {
     switch(config.request) {
       case "attach":
-        if(config.remoteTargetConfig != null) {
+        if(config.target != null) {
           return new RemoteAttachSpawnConfig(config);
         } else {
           return new AttachSpawnConfig(config);
         }
       case "launch":
-        if(config.remoteTargetConfig != null) {
+        if(config.target != null) {
           return new RemoteLaunchSpawnConfig(config);
         }
         return new LaunchSpawnConfig(config);

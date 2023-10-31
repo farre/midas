@@ -182,8 +182,9 @@ class Session:
         run = False
         if kill_tracee:
             session.kill_tracee()
-        elif self.is_rr_session():
+        if self.is_rr_session():
             session.kill_tracee()
+        gdb.execute("disconnect")
 
 
 class Args:
@@ -606,7 +607,7 @@ def launch(args):
     return {}
 
 
-@request("attach", ArbitraryOptionalArgs([], ["pid", "target", "isExtended"]))
+@request("attach", ArbitraryOptionalArgs([], ["pid", "target"]))
 def attach(args):
     global session
     pid = args.get("pid")
@@ -621,10 +622,9 @@ def attach(args):
             }
         )
     else:
-        target = args.get("target")
-        isExtended = args.get("extended")
-        param = "remote" if not isExtended else "extended-remote"
-        cmd = f"target {param} {target}"
+        type = args.get("target")["type"]
+        param = args.get("target")["parameter"]
+        cmd = f"target {type} {param}"
         session.start_session(
             {
                 "type": "attach",
