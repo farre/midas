@@ -216,6 +216,7 @@ class Gdb {
 }
 
 class MidasDAPSession extends DebugAdapter.DebugSession {
+  formatValuesAsHex = false;
   /** @type { Set<number> } */
   formattedVariablesMap = new Set();
   /** @type { Gdb } */
@@ -244,6 +245,11 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       if(!response.success) {
         const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
         this.sendErrorResponse(response, 0, err);
+      }
+      switch(response.command) {
+        case "variables":
+          this.performHexFormat(response.body.variables);
+          break;
       }
       this.sendResponse(response);
     });
@@ -295,6 +301,16 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       this.#defaultLogger(output);
     } else {
       logger.appendLine(output);
+    }
+  }
+
+  performHexFormat(variables) {
+    if(this.formatValuesAsHex) {
+      for(let v of variables) {
+        if (!isNaN(v.value)) {
+          v.value = toHexString(v.value);
+        }
+      }
     }
   }
 
@@ -527,6 +543,16 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
   // eslint-disable-next-line no-unused-vars
   evaluateRequest(response, args, request) {
+    args.format = { hex: false };
+    switch(args.context) {
+      case "watch": {
+        const ishex_pos = args.expression.lastIndexOf(",x");
+        if(ishex_pos != -1) {
+          args.expression = args.expression.substring(0, ishex_pos);
+          args.format = { hex: true };
+        }
+      } break;
+    }
     this.gdb.sendRequest(request, args);
   }
 
@@ -581,10 +607,17 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    */
   // eslint-disable-next-line no-unused-vars
   customRequest(command, response, args, request) {
-    request.type = "request";
-    request.arguments = args ?? {};
-    request.command = command;
-    this.gdb.sendRequest(request);
+    switch(command) {
+      case "toggle-hex":
+        this.formatValuesAsHex = !this.formatValuesAsHex;
+        this.sendEvent(new DebugAdapter.InvalidatedEvent(["variables"]));
+        break;
+      default:
+        request.type = "request";
+        request.arguments = args ?? {};
+        request.command = command;
+        this.gdb.sendRequest(request);
+    }
   }
 
   /**
