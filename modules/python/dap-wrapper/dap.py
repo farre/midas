@@ -284,8 +284,12 @@ def evaluate(args):
                 res["result"] = res.pop("value")
                 return res
             else:
+                if args.get("format") and bool(args.get("format")["hex"]):
+                    result = value.format_string(format="x")
+                else:
+                    result = str(value)
                 return {
-                    "result": f"{value}",
+                    "result": result,
                     "variablesReference": 0,
                     "memoryReference": hex(int(value.address)),
                 }
