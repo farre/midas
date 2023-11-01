@@ -5,7 +5,7 @@ const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
-const { which } = require("./utils/sysutils");
+const { which, getExtensionPathOf } = require("./utils/sysutils");
 const {
   getRR,
   strEmpty,
@@ -175,7 +175,7 @@ class MidasAPI {
     }
   }
 
-  notifyUserOfBreakingChanges() {
+  async notifyUserOfBreakingChanges() {
     let cfg = sanitize_config(this.get_config());
     const recorded_semver = parseSemVer(cfg.midas_version);
     const new_changes = (semver) => {
@@ -185,8 +185,13 @@ class MidasAPI {
       // eslint-disable-next-line max-len
       const list = breaking_changes.filter(semver => semverIsNewer(semver, recorded_semver)).map(sem => `- ${sem.major}.${sem.minor}.${sem.patch}`).join("\n");
       // eslint-disable-next-line max-len
-      const detail = `Some breaking changes has been introduced in recent versions.\nBe sure to read the NEWS section in the README, to see what has changed. (click the extension in your list of extensions).\n\nVersions that introduced breaking changes:\n ${list}`;
-      vscode.window.showWarningMessage("Midas: Breaking changes", {detail: detail, modal: true})
+      const detail = `Some breaking changes has been introduced in recent versions.\nBe sure to read the NEWS section in the README, to see what has changed.\n\nVersions that introduced breaking changes:\n ${list}`;
+      vscode.window.showWarningMessage("Midas: Breaking changes", {detail: detail, modal: true}, "Show readme").then(async res => {
+        if(res == "Show readme") {
+          const doc = await vscode.workspace.openTextDocument(getExtensionPathOf("README.md"));
+          await vscode.window.showTextDocument(doc, { preview: true });
+        }
+      })
     }
     cfg.midas_version = this.#context.extension.packageJSON["version"];
   }
@@ -440,7 +445,7 @@ async function init_midas(api) {
     }
   }
   api.setup_env_vars();
-  api.notifyUserOfBreakingChanges();
+  await api.notifyUserOfBreakingChanges();
   api.write_midas_version();
 }
 
