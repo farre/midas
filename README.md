@@ -24,15 +24,16 @@ which consists of connecting to a remote target machine to debug there.
 
 ## NEWS
 
-### 0.20.0
+### Changes to 0.19.0 pre-release (and coming 0.20.0 release)
 #### New interpreter
-Starting with this version all `midas-rr` sessions (RR sessions) will have the configuration go from `launch` to `attach` type. See [launch.json example](#replayable-rr-debug-session) for example.
-
 In the coming releases, Midas will start using it's custom DAP implementation inside GDB, as a polyfill for those who can't use the very newest GDB, which itself will have a built in DAP interpreter (hopefully) in release 14.0. This pretty major refactor aims to achieve 2 things, the aforementioned polyfill as well as being a more stable debug adapter as this relieves Midas of much it's responsibility since we don't have to work around some of the more quirky parts of GDB to maintain an acceptable debugging experience as far as performance goes.
 
-As such, users can (should) set the `use-dap` flag in launch.json to true. Only if Midas stops working, should you turn this off (please, file an issue on [github](https://github.com/farre/midas), whether or not you can determine what is not working).
+As such, users can (should) set the `use-dap` flag in launch.json (for all session types) to true. Only if Midas stops working, should you turn this off (please, file an issue on [github](https://github.com/farre/midas), whether or not you can determine what is not working). See [normal debug session](#normal-debug-session), [attach session](#attach-session) etc.
 
-#### Attach configuration
+#### RR session configuration change
+Starting with this version all `midas-rr` sessions (RR sessions) will have the configuration go from `launch` to `attach` type. See [launch.json example](#replayable-rr-debug-session) for example.
+
+#### Attach configuration change
 Debugging remote targets has changed to look more like how one would do it naturally in GDB. As such the `remoteTargetConfig` has been removed in favor of `target`. See [example](#remote-debug-sessions) below.
 
 ## Q & A
@@ -100,6 +101,7 @@ The quickest way to configure is to open up the `launch.json` file and hit the a
   "name": "Launch Debug",
   "program": "/path/to/binary",
   "cwd": "${workspaceFolder}",
+  "use-dap": true, // set to false only if Midas stops working.
   "gdbPath": "gdb", // if GDB is on $PATH, this field is not required
   "stopOnEntry": true,
   "trace": "Off",
@@ -184,6 +186,7 @@ Configuration example, for a rr debug session of for example a `firefox` test:
   "request": "attach",
   "name": "Launch replay debug session",
   "cwd": "${workspaceFolder}",
+  "use-dap": true,
   "stopOnEntry": true,
   "trace": "Off",
   "gdbPath": "gdb",
@@ -206,6 +209,7 @@ Attaching to a running process is basically done and setup the same way. Midas w
   "request": "attach",
   "name": "Attach",
   "program": "${workspaceFolder}",
+  "use-dap": true,
   "cwd": "${workspaceFolder}",
   "trace": "Off",
   "pid": "${command:getPid}",
@@ -228,6 +232,7 @@ To use Midas to debug an application running on a remote target, the user must h
   "request": "attach",
   "name": "Attach to remote debug session hosted by gdbserver",
   "setupCommands": [], // set of GDB commands you want executed before debugging starts.
+  "use-dap": true,
   "target": {
     "type": "remote", // "extended-remote" or "remote"
     "parameter": "127.0.0.1:12345" // the parameter to the `target remote/extended-remote` command on the GDB CLI.
@@ -250,6 +255,7 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
   "name": "Launch Debug",
   "program": "${workspaceFolder}/path/binary",
   "cwd": "${workspaceFolder}",
+  "use-dap": true,
   "stopOnEntry": true,
   "trace": "Off",
   "allStopMode": true,
