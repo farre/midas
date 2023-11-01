@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.18.0",
+  "version": "0.19.0",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -360,7 +360,10 @@
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute"
                   }
                 },
-                "required": [ "type", "parameter" ]
+                "required": [
+                  "type",
+                  "parameter"
+                ]
               }
             }
           }
@@ -561,7 +564,10 @@
                     "description": "How to substitute paths so that GDB can recognize where the source files are. If target file system matches identically, you don't have to substitute"
                   }
                 },
-                "required": [ "type", "parameter" ]
+                "required": [
+                  "type",
+                  "parameter"
+                ]
               }
             }
           }
