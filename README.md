@@ -36,6 +36,8 @@ Starting with this version all `midas-rr` sessions (RR sessions) will have the c
 #### Attach configuration change
 Debugging remote targets has changed to look more like how one would do it naturally in GDB. As such the `remoteTargetConfig` has been removed in favor of `target`. See [example](#remote-debug-sessions) below.
 
+[back to top](#contents)
+
 ## Q & A
 
 Join the matrix room [https://chat.mozilla.org/#/room/#midas:mozilla.org](https://chat.mozilla.org/#/room/#midas:mozilla.org) for questions. Office hours are every waking moment of the day ;)
