@@ -233,7 +233,9 @@ To use Midas to debug an application running on a remote target, the user must h
   "type": "midas-gdb",
   "request": "attach",
   "name": "Attach to remote debug session hosted by gdbserver",
-  "setupCommands": [], // set of GDB commands you want executed before debugging starts.
+  "setupCommands": [
+    "set substitute-path /home/foo/dev/remote-path /home/foo/dev/local-path"
+  ], // set of GDB commands you want executed before debugging starts.
   "use-dap": true,
   "target": {
     "type": "remote", // "extended-remote" or "remote"
