@@ -1132,8 +1132,12 @@ def start_command_thread():
     finally:
         unlink(commandSocketPath)
 
+def ensure_stopped_handler_last():
+    gdb.events.stop.disconnect(stopped)
+    gdb.events.stop.connect(stopped)
 
 def continued_event(evt):
+    ensure_stopped_handler_last()
     send_event(
         "continued",
         {
