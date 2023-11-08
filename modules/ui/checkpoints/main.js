@@ -7,7 +7,7 @@ function setupUI(protocol) {
     const vscode = acquireVsCodeApi();
     function create_row(container, cp) {
       let name = document.createElement("span");
-      name.textContent = cp.when;
+      name.textContent = `${cp.when}`;
       name.className = "checkpoints-list-when";
 
       container.appendChild(name);

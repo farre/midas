@@ -1,0 +1,10 @@
+define restart
+  run c$arg0
+end
+document restart
+restart at checkpoint N
+checkpoints are created with the 'checkpoint' command
+end
+
+set unwindonsignal on
+handle SIGURG stop

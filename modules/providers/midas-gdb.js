@@ -108,14 +108,13 @@ class DebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
+    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if(config["use-dap"]) {
       let terminal = null;
       const midas_session = new MidasDAPSession(this.spawnConfig(config), terminal, null);
-      vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
       return new vscode.DebugAdapterInlineImplementation(midas_session);
     } else {
       let dbg_session = new MidasDebugSession(true, false, fs, this.spawnConfig(config));
-      vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }

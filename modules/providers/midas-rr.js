@@ -114,7 +114,6 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
         throw new Error("You did not pick a trace.");
       }
     }
-    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     return config;
   }
 
@@ -179,6 +178,7 @@ class RRDebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
+    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     if (config.remoteTargetConfig != null) {
       let dbg_session = new MidasDebugSession(
         true,

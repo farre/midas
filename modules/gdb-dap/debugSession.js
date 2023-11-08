@@ -5,12 +5,11 @@ const { spawn } = require("child_process");
 const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
-const fs = require("fs");
 const net = require("node:net");
-const { isNothing, toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
+const { toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
 const { TerminatedEvent, OutputEvent, InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
-let server;
+const { CustomRequests } = require("../debugSessionCustomRequests");
 
 /**
  * Serialize request, preparing it to be sent over the wire to GDB
@@ -223,6 +222,9 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   gdb;
   /** @type {import("../terminalInterface").TerminalInterface} */
   #terminal;
+
+  // The Checkpoints UI
+  #checkpointsUI;
   #defaultLogger = (output) => {
     console.log(output);
   };
@@ -236,6 +238,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   constructor(spawnConfig, terminal, checkpointsUI) {
     super();
     this.#spawnConfig = spawnConfig;
+    this.#checkpointsUI = checkpointsUI;
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
     this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? []);
@@ -249,6 +252,10 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       switch(response.command) {
         case "variables":
           this.performHexFormat(response.body.variables);
+          break;
+        case CustomRequests.DeleteCheckpoint:
+        case CustomRequests.SetCheckpoint:
+          this.#checkpointsUI.updateCheckpoints(response.body.checkpoints);
           break;
       }
       this.sendResponse(response);
@@ -502,7 +509,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   setExpressionRequest(response, args, request) {
-    this.gdb.sendRequest(request, args); 
+    this.gdb.sendRequest(request, args);
   }
 
   parse_subscript(expr) {
@@ -590,7 +597,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   breakpointLocationsRequest(response, args, request) {
-    this.gdb.sendRequest(request, args);  
+    this.gdb.sendRequest(request, args);
   }
 
   setInstructionBreakpointsRequest(response, args, request) {
@@ -607,15 +614,21 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    */
   // eslint-disable-next-line no-unused-vars
   customRequest(command, response, args, request) {
+    request.type = "request";
+    request.command = command;
     switch(command) {
       case "toggle-hex":
         this.formatValuesAsHex = !this.formatValuesAsHex;
         this.sendEvent(new DebugAdapter.InvalidatedEvent(["variables"]));
         break;
+      case CustomRequests.RestartCheckpoint:
+      case CustomRequests.DeleteCheckpoint: {
+        request.arguments = { id: args };
+        this.gdb.sendRequest(request);
+        break;
+      }
       default:
-        request.type = "request";
         request.arguments = args ?? {};
-        request.command = command;
         this.gdb.sendRequest(request);
     }
   }
