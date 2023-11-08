@@ -24,6 +24,8 @@ stdlibpath = path.dirname(path.realpath(__file__))
 if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
+from init_rr import initialize_rr
+
 from variables_reference import (
     can_var_ref,
     variableReferences,
@@ -127,6 +129,9 @@ class Session:
     def __init__(self, type):
         self.type = type
         self.started = False
+        if self.type == "midas-rr":
+            initialize_rr()
+
 
     def is_rr_session(self):
         return self.type == "midas-rr"
@@ -535,7 +540,7 @@ def initialize(args):
     if args.get("type") is not None:
         sessionType = args.get("type")
 
-    session = Session(sessionType)
+    session = Session(args.get("adapterID"))
 
     if args.get("trace") == "Full":
         logger.init_perf_log("perf.log")
@@ -702,6 +707,50 @@ def reverse_continue(args):
     gdb.execute("reverse-continue")
     # RR will always resume all threads - at least from the perspective of the user (it doesn't really do it)
     return { "allThreadsContinued": True }
+
+@request("reverse-finish", ArbitraryOptionalArgs())
+def reverse_finish(args):
+    gdb.execute("reverse-finish")
+    return {}
+
+def get_checkpoints():
+    result_str = gdb.execute("info checkpoints", to_string=True)
+    cps = result_str.splitlines()[1:]
+    result = []
+    for cp_line in cps:
+        [id, when, where] = cp_line.split("\t")
+        sep = where.rfind(":")
+        path = where[0:sep].strip()
+        line = where[(sep+1):]
+        result.append({"id": int(id), "when": int(when), "where": { "path": path, "line": int(line) }})
+    return result
+
+@request("set-checkpoint", ArbitraryOptionalArgs())
+def set_checkpoint(args):
+    gdb.execute("checkpoint")
+    return { "checkpoints": get_checkpoints() }
+
+# Used to check if we should suppress "exited" event
+is_checkpoint_restarting = False
+
+@request("restart-checkpoint", Args(["id"]))
+def restart_checkpoint(args):
+    global is_checkpoint_restarting
+    has_cp = int(args["id"]) in [ cp["id"] for cp in get_checkpoints() ]
+    if not has_cp:
+        raise Exception(f"Checkpoint {args['id']} was not found")
+    is_checkpoint_restarting = True
+    gdb.execute(f"restart {args['id']}")
+    return {}
+
+@request("delete-checkpoint", Args(["id"]))
+def delete_checkpoint(args):
+    id = int(args["id"])
+    current_cps = [ cp["id"] for cp in get_checkpoints() ]
+    if id in current_cps:
+      gdb.execute(f"delete checkpoint {id}")
+
+    return { "checkpoints": get_checkpoints() }
 
 
 @request("setBreakpoints", Args(["source"], ["breakpoints", "lines", "sourceModified"]))
@@ -1206,12 +1255,15 @@ def bp_to_ui(bp):
 
     return obj
 
+def on_exit(evt):
+    global is_checkpoint_restarting
+    if is_checkpoint_restarting:
+        is_checkpoint_restarting = False
+    else:
+      send_event("exited", {"exitCode": evt.exit_code if hasattr(evt, "exit_code") else 0})
 
-gdb.events.exited.connect(
-    lambda evt: send_event(
-        "exited", {"exitCode": evt.exit_code if hasattr(evt, "exit_code") else 0}
-    )
-)
+gdb.events.exited.connect(on_exit)
+
 gdb.events.new_thread.connect(
     lambda evt: send_event(
         "thread", {"reason": "started", "threadId": evt.inferior_thread.global_num}

@@ -1,0 +1,64 @@
+# The gdbinit stuff - however, some of this stuff makes Midas unstable. So this file is not source (only rrinit is)
+define hookpost-back
+maintenance flush register-cache
+frame
+end
+
+define hookpost-forward
+maintenance flush register-cache
+frame
+end
+define restart
+  run c$arg0
+end
+document restart
+restart at checkpoint N
+checkpoints are created with the 'checkpoint' command
+end
+define seek-ticks
+  run t$arg0
+end
+document seek-ticks
+restart at given ticks value
+end
+define jump
+  rr-denied jump
+end
+define hook-run
+  rr-hook-run
+end
+define hookpost-continue
+  rr-set-suppress-run-hook 1
+end
+define hookpost-step
+  rr-set-suppress-run-hook 1
+end
+define hookpost-stepi
+  rr-set-suppress-run-hook 1
+end
+define hookpost-next
+  rr-set-suppress-run-hook 1
+end
+define hookpost-nexti
+  rr-set-suppress-run-hook 1
+end
+define hookpost-finish
+  rr-set-suppress-run-hook 1
+end
+define hookpost-reverse-continue
+  rr-set-suppress-run-hook 1
+end
+define hookpost-reverse-step
+  rr-set-suppress-run-hook 1
+end
+define hookpost-reverse-stepi
+  rr-set-suppress-run-hook 1
+end
+define hookpost-reverse-finish
+  rr-set-suppress-run-hook 1
+end
+define hookpost-run
+  rr-set-suppress-run-hook 0
+end
+set unwindonsignal on
+handle SIGURG stop
