@@ -84,11 +84,21 @@ class Logger:
     def init_debug_log(self, log_name):
         self.debug = LogFile(log_name)
 
-    def log_request(self, fn, args, res):
+    def log_request(self, fn, args):
         if self.debug is not None:
             self.debug.log(
-                msg=f"[req]: [{fn}] <- {json.dumps(args)}\n[res]: [{fn}] -> {json.dumps(res)}\n"
+                msg=f"[req]: [{fn}] <- {json.dumps(args)}\n"
             )
+
+    def log_response(self, fn, res):
+        if self.debug is not None:
+            self.debug.log(
+                msg=f"[res]: [{fn}] -> {json.dumps(res)}\n"
+            )
+
+    def log_exception(self, fn, exc):
+        if self.debug is not None:
+            self.debug.log(msg=f"[req exception]: [{fn}] -> {exc}\nStacktrace:\n{traceback.format_exc()}")
 
     def log_msg(self, msg):
         if self.debug is not None:
@@ -232,8 +242,13 @@ def request(name, req_args=Args()):
         def wrap(args):
             global logger
             req_args.check_args(args)
-            result = fn(args)
-            logger.log_request(name, args, result)
+            logger.log_request(name, args)
+            try:
+                result = fn(args)
+            except Exception as e:
+                logger.log_exception(name, e)
+                raise e
+            logger.log_response(name, result)
             return result
 
         commands[name] = wrap
@@ -917,6 +932,7 @@ def event_thread():
     global seq
     while run:
         res = eventsQueue.get()
+        logger.log_msg(msg=f"[evt]: {json.dumps(res)}\n")
         packet = prep_event(seq, res)
         seq += 1
         event_connection.sendall(bytes(packet, "utf-8"))
