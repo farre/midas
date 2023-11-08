@@ -8,3 +8,4 @@ end
 
 set unwindonsignal on
 handle SIGURG stop
+set tcp connect-timeout 10000

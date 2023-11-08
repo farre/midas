@@ -1181,12 +1181,12 @@ def start_command_thread():
     finally:
         unlink(commandSocketPath)
 
-def ensure_stopped_handler_last():
+def ensure_stopped_handler_last(evt):
     gdb.events.stop.disconnect(stopped)
     gdb.events.stop.connect(stopped)
 
 def continued_event(evt):
-    ensure_stopped_handler_last()
+    ensure_stopped_handler_last(evt)
     send_event(
         "continued",
         {
@@ -1197,6 +1197,8 @@ def continued_event(evt):
         },
     )
 
+gdb.events.new_objfile.connect(ensure_stopped_handler_last)
+gdb.events.new_inferior.connect(ensure_stopped_handler_last)
 
 def stopped(evt):
     global exceptionInfos
