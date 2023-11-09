@@ -157,7 +157,7 @@ def value_ui_data(name, value):
         "variablesReference": 0,
         "namedVariables": None,
         "indexedVariables": None,
-        "memoryReference": hex(int(value.address)),
+        "memoryReference": hex(int(value.address)) if value.address is not None else None,
     }
 
 
