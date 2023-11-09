@@ -293,8 +293,11 @@ def iterate_frames(frame, count=None, start=None):
 @request("evaluate", Args(["expression", "context"], ["frameId", "format"]))
 def evaluate(args):
     if args["context"] == "repl":
-        result = gdb.execute(args["expression"], from_tty=False, to_string=True)
-        return {"result": result, "variablesReference": 0}
+        try:
+          result = gdb.execute(args["expression"], from_tty=False, to_string=True)
+          return {"result": result, "variablesReference": 0}
+        except Exception as e:
+          return {"result": f"{e}", "variablesReference": 0}
     elif args["context"] == "watch":
         try:
             value = gdb.parse_and_eval(args["expression"])

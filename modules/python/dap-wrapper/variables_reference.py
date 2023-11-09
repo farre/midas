@@ -239,8 +239,8 @@ class VariableValueReference(VariablesReference):
                     else:
                         res.append(value_ui_data(field.name, value[field]))
                 return res
-        except gdb.MemoryError as mem_err:
-            return [{"name": "error", "value": f"{mem_err}", "variablesReference": 0}]
+        except gdb.error as mem_exception:
+            return [{"name": "error", "value": f"{mem_exception}", "variablesReference": 0}]
 
     def find_value(self, find_name):
         value = self.get_value()
@@ -257,6 +257,17 @@ class VariableValueReference(VariablesReference):
             f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}"
         )
 
+def opt_out(symbol):
+    return {
+        "name": symbol.name,
+        "value": "<optimized out>",
+        "type": f"{symbol.type}",
+        "evaluateName": symbol.name,
+        "variablesReference": 0,
+        "namedVariables": None,
+        "indexedVariables": None,
+        "memoryReference": None,
+    }
 
 # Midas defines some scopes: Args, Locals, Registers
 # TODO(simon): Add Statics, Globals
@@ -272,6 +283,10 @@ class ScopesReference(VariablesReference):
         res = []
         for symbol in self.variables(block):
             gdbValue = frame.read_var(symbol, block)
+            if gdbValue.is_optimized_out:
+                res.append(opt_out(symbol))
+                continue
+
             if can_var_ref(gdbValue):
                 ref = create_deferred_scopes_ref(name=symbol.name, value=gdbValue)
                 res.append(ref.ui_data())
