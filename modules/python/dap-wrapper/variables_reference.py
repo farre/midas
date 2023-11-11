@@ -57,8 +57,16 @@ class StackFrame(VariablesReference):
         self.gdbFrame = gdbFrame
         self.thread = thread
         self._scopes = [
-            ScopesReference("Args", self, args),
-            ScopesReference("Locals", self, locals),
+            ScopesReference(
+                name="Args",
+                stackFrame=self,
+                symbolValueReader=frame_args
+            ),
+            ScopesReference(
+                name="Locals",
+                stackFrame=self,
+                symbolValueReader=frame_variables
+            ),
         ]
 
     def contents(self):
@@ -157,7 +165,9 @@ def value_ui_data(name, value):
         "variablesReference": 0,
         "namedVariables": None,
         "indexedVariables": None,
-        "memoryReference": hex(int(value.address)) if value.address is not None else None,
+        "memoryReference": hex(int(value.address))
+        if value.address is not None
+        else None,
     }
 
 
@@ -200,7 +210,7 @@ class VariableValueReference(VariablesReference):
     def pp_contents(self, pp, format, start, count):
         res = []
         if hasattr(pp, "children"):
-            for (name, val) in pp.children():
+            for name, val in pp.children():
                 if can_var_ref(val):
                     ref = create_eager_var_ref(name=name, value=val)
                     res.append(ref.ui_data())
@@ -240,13 +250,15 @@ class VariableValueReference(VariablesReference):
                         res.append(value_ui_data(field.name, value[field]))
                 return res
         except gdb.error as mem_exception:
-            return [{"name": "error", "value": f"{mem_exception}", "variablesReference": 0}]
+            return [
+                {"name": "error", "value": f"{mem_exception}", "variablesReference": 0}
+            ]
 
     def find_value(self, find_name):
         value = self.get_value()
         pp = gdb.default_visualizer(value)
         if pp is not None:
-            for (name, val) in pp.children():
+            for name, val in pp.children():
                 if name == find_name:
                     return val
         else:
@@ -256,6 +268,7 @@ class VariableValueReference(VariablesReference):
         raise Exception(
             f"Could not find name {find_name} in variables reference container {self.name} with id {self.id}"
         )
+
 
 def opt_out(symbol):
     return {
@@ -269,35 +282,32 @@ def opt_out(symbol):
         "memoryReference": None,
     }
 
+
 # Midas defines some scopes: Args, Locals, Registers
 # TODO(simon): Add Statics, Globals
 class ScopesReference(VariablesReference):
-    def __init__(self, name, stackFrame, variablesGetter):
+    def __init__(self, name, stackFrame, symbolValueReader):
         super(ScopesReference, self).__init__(name)
         self.stack_frame = stackFrame
-        self.variables = variablesGetter
+        self.symbolValueReader = symbolValueReader
 
     def contents(self, format=None, start=None, count=None):
         frame = self.stack_frame.frame()
-        block = frame_top_block(frame)
         res = []
-        for symbol in self.variables(block):
-            gdbValue = frame.read_var(symbol, block)
-            if gdbValue.is_optimized_out:
+        for symbol, value in self.symbolValueReader(frame):
+            if value.is_optimized_out:
                 res.append(opt_out(symbol))
                 continue
 
-            if can_var_ref(gdbValue):
-                ref = create_deferred_scopes_ref(name=symbol.name, value=gdbValue)
+            if can_var_ref(value):
+                ref = create_deferred_scopes_ref(name=symbol.name, value=value)
                 res.append(ref.ui_data())
             else:
-                address = (
-                    hex(int(gdbValue.address)) if gdbValue.address is not None else None
-                )
+                address = hex(int(value.address)) if value.address is not None else None
                 res.append(
                     {
                         "name": symbol.name,
-                        "value": "{}".format(gdbValue),
+                        "value": "{}".format(value),
                         "type": f"{symbol.type}",
                         "evaluateName": symbol.name,
                         "variablesReference": 0,
@@ -311,7 +321,6 @@ class ScopesReference(VariablesReference):
     def find_value(self, find_name):
         frame = self.stack_frame.frame()
         block = frame_top_block(frame)
-        res = []
         for symbol in self.variables(block):
             if symbol.name == find_name:
                 return frame.read_var(symbol, block)
@@ -319,25 +328,20 @@ class ScopesReference(VariablesReference):
             f"Could not find name {find_name} in scope container {self.name} with id {self.id}"
         )
 
-
-def args(block):
-    if block is None:
-        return
-    for symbol in block:
-        if symbol.is_argument and not (
-            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
-        ):
-            yield symbol
+def frame_args(frame):
+    top = frame_top_block(frame)
+    for symbol in top:
+      if symbol.is_argument and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+            yield (symbol, frame.read_var(symbol, top))
 
 
-def locals(block):
-    if block is None:
-        return None
-    for symbol in block:
-        if symbol.is_variable and not (
-            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
-        ):
-            yield symbol
+def frame_variables(frame):
+    block = frame.block()
+    while not block.is_static:
+        for symbol in block:
+            if symbol.is_variable and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+                yield (symbol, frame.read_var(symbol, block))
+        block = block.superblock
 
 
 class RegistersReference(ScopesReference):
