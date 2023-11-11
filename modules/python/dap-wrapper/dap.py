@@ -141,8 +141,14 @@ class Session:
         if self.started:
             raise Exception("Session already started")
         self.started = True
-
         self.sessionArgs = sessionArgs
+        # These needs to be executed _first_ (otherwise what's the point?)
+        # For instance, `set sysroot /` in RR sessions, make GDB look for the symbols
+        # "locally", instead of having RR serve them to gdb over a serial connection.
+        for opt in iterate_options(self.sessionArgs.get("setupCommands")):
+            logger.log_msg(f"[cfg]: '{opt}'\n")
+            gdb.execute(opt)
+
         if sessionArgs["type"] == "launch":
             if sessionArgs.get("program") is None:
                 raise Exception("No program was provided for gdb to launch")
@@ -151,9 +157,6 @@ class Session:
             gdb.execute(sessionArgs["command"])
         else:
             raise Exception(f"Unknown session type {sessionArgs['type']}")
-        for opt in iterate_options(self.sessionArgs.get("setupCommands")):
-            logger.log_msg(f"[cfg]: '{opt}'\n")
-            gdb.execute(opt)
 
     def start_tracee(self):
         global singleThreadControl
