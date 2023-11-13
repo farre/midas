@@ -17,15 +17,16 @@ gdb.events.cont.connect(clear_variable_references)
 
 
 def can_var_ref(value):
-    actual_type = value.type.strip_typedefs()
-    return (
-        actual_type.code == gdb.TYPE_CODE_STRUCT
-        or actual_type.code == gdb.TYPE_CODE_PTR
-    )
+    return can_var_ref_type(value.type)
 
 
 def can_var_ref_type(type):
-    return type.code == gdb.TYPE_CODE_STRUCT or type.code == gdb.TYPE_CODE_PTR
+    underlying_type = gdb.types.get_basic_type(type)
+    code = underlying_type.code
+    if code == gdb.TYPE_CODE_PTR:
+        code = underlying_type.target().code
+
+    return code == gdb.TYPE_CODE_STRUCT or code == gdb.TYPE_CODE_UNION
 
 
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
@@ -57,15 +58,9 @@ class StackFrame(VariablesReference):
         self.gdbFrame = gdbFrame
         self.thread = thread
         self._scopes = [
+            ScopesReference(name="Args", stackFrame=self, symbolValueReader=frame_args),
             ScopesReference(
-                name="Args",
-                stackFrame=self,
-                symbolValueReader=frame_args
-            ),
-            ScopesReference(
-                name="Locals",
-                stackFrame=self,
-                symbolValueReader=frame_variables
+                name="Locals", stackFrame=self, symbolValueReader=frame_variables
             ),
         ]
 
@@ -138,11 +133,20 @@ def create_deferred_scopes_ref(name, value):
     )
 
 
+def field_name(field):
+    if field.name is not None:
+        return field.name
+    if field.type.code == gdb.TYPE_CODE_UNION:
+        return "union"
+    if field.type.code == gdb.TYPE_CODE_STRUCT:
+        return "struct"
+
+
 # we have to wrap this. Because this gets called in a loop where `value[field]` is created on each iteration
 # For some reason, Python, in it's infinite wisdom, make that value[field] be overwritten to be the same in every lambda
 def create_deferred_var_ref(field, parent_value, address):
     return VariableValueReference(
-        name=field.name,
+        name=field_name(field),
         type=field.type,
         value_getter=lambda: parent_value[field],
         addr=address,
@@ -184,13 +188,21 @@ class VariableValueReference(VariablesReference):
         self.value_cache = None
         self.addr = addr
 
-    def is_pointer(self):
-        return self.type.code == gdb.TYPE_CODE_PTR
+    def is_dereffable_non_primitive(self):
+        return self.value_cache.type.code == gdb.TYPE_CODE_PTR and can_var_ref_type(
+            self.value_cache.type.target()
+        )
+
+    def is_ref_type(self):
+        code = self.value_cache.type.code
+        return code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
 
     def get_value(self):
         if self.value_cache is None:
             self.value_cache = self.value_getter()
-            if self.value_cache.type.code == gdb.TYPE_CODE_PTR:
+            if self.is_dereffable_non_primitive():
+                self.value_cache = self.value_cache.dereference()
+            elif self.is_ref_type():
                 self.value_cache = self.value_cache.referenced_value()
         return self.value_cache
 
@@ -328,10 +340,13 @@ class ScopesReference(VariablesReference):
             f"Could not find name {find_name} in scope container {self.name} with id {self.id}"
         )
 
+
 def frame_args(frame):
     top = frame_top_block(frame)
     for symbol in top:
-      if symbol.is_argument and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+        if symbol.is_argument and not (
+            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+        ):
             yield (symbol, frame.read_var(symbol, top))
 
 
@@ -339,7 +354,9 @@ def frame_variables(frame):
     block = frame.block()
     while not block.is_static:
         for symbol in block:
-            if symbol.is_variable and not (symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT):
+            if symbol.is_variable and not (
+                symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+            ):
                 yield (symbol, frame.read_var(symbol, block))
         block = block.superblock
 

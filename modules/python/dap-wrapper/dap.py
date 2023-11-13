@@ -88,19 +88,17 @@ class Logger:
 
     def log_request(self, fn, args):
         if self.debug is not None:
-            self.debug.log(
-                msg=f"[req]: [{fn}] <- {json.dumps(args)}\n"
-            )
+            self.debug.log(msg=f"[req]: [{fn}] <- {json.dumps(args)}\n")
 
     def log_response(self, fn, res):
         if self.debug is not None:
-            self.debug.log(
-                msg=f"[res]: [{fn}] -> {json.dumps(res)}\n"
-            )
+            self.debug.log(msg=f"[res]: [{fn}] -> {json.dumps(res)}\n")
 
     def log_exception(self, fn, exc):
         if self.debug is not None:
-            self.debug.log(msg=f"[req exception]: [{fn}] -> {exc}\nStacktrace:\n{traceback.format_exc()}")
+            self.debug.log(
+                msg=f"[req exception]: [{fn}] -> {exc}\nStacktrace:\n{traceback.format_exc()}"
+            )
 
     def log_msg(self, msg):
         if self.debug is not None:
@@ -131,7 +129,6 @@ class Session:
         self.started = False
         if self.type == "midas-rr":
             initialize_rr()
-
 
     def is_rr_session(self):
         return self.type == "midas-rr"
@@ -297,10 +294,10 @@ def iterate_frames(frame, count=None, start=None):
 def evaluate(args):
     if args["context"] == "repl":
         try:
-          result = gdb.execute(args["expression"], from_tty=False, to_string=True)
-          return {"result": result, "variablesReference": 0}
+            result = gdb.execute(args["expression"], from_tty=False, to_string=True)
+            return {"result": result, "variablesReference": 0}
         except Exception as e:
-          return {"result": f"{e}", "variablesReference": 0}
+            return {"result": f"{e}", "variablesReference": 0}
     elif args["context"] == "watch":
         try:
             value = gdb.parse_and_eval(args["expression"])
@@ -530,11 +527,16 @@ def exception_info(args):
         raise Exception(f"Exception Info {args['threadId']} not found.")
     return info
 
+
 @request("completions", Args(["text", "column"], ["frameId", "line"]))
 def completions(args):
     replace_len = len(args["text"])
-    result = [ { "label": item, "length": replace_len } for item in gdb.execute(f"complete {args['text']}", to_string=True).splitlines()]
-    return { "targets": result }
+    result = [
+        {"label": item, "length": replace_len}
+        for item in gdb.execute(f"complete {args['text']}", to_string=True).splitlines()
+    ]
+    return {"targets": result}
+
 
 @request("initialize", req_args=ArbitraryOptionalArgs())
 def initialize(args):
@@ -712,12 +714,14 @@ def reverse_continue(args):
     select_thread(args.get("threadId"))
     gdb.execute("reverse-continue")
     # RR will always resume all threads - at least from the perspective of the user (it doesn't really do it)
-    return { "allThreadsContinued": True }
+    return {"allThreadsContinued": True}
+
 
 @request("reverse-finish", ArbitraryOptionalArgs())
 def reverse_finish(args):
     gdb.execute("reverse-finish")
     return {}
+
 
 def get_checkpoints():
     result_str = gdb.execute("info checkpoints", to_string=True)
@@ -727,36 +731,46 @@ def get_checkpoints():
         [id, when, where] = cp_line.split("\t")
         sep = where.rfind(":")
         path = where[0:sep].strip()
-        line = where[(sep+1):]
-        result.append({"id": int(id), "when": int(when), "where": { "path": path, "line": int(line) }})
+        line = where[(sep + 1) :]
+        result.append(
+            {
+                "id": int(id),
+                "when": int(when),
+                "where": {"path": path, "line": int(line)},
+            }
+        )
     return result
+
 
 @request("set-checkpoint", ArbitraryOptionalArgs())
 def set_checkpoint(args):
     gdb.execute("checkpoint")
-    return { "checkpoints": get_checkpoints() }
+    return {"checkpoints": get_checkpoints()}
+
 
 # Used to check if we should suppress "exited" event
 is_checkpoint_restarting = False
 
+
 @request("restart-checkpoint", Args(["id"]))
 def restart_checkpoint(args):
     global is_checkpoint_restarting
-    has_cp = int(args["id"]) in [ cp["id"] for cp in get_checkpoints() ]
+    has_cp = int(args["id"]) in [cp["id"] for cp in get_checkpoints()]
     if not has_cp:
         raise Exception(f"Checkpoint {args['id']} was not found")
     is_checkpoint_restarting = True
     gdb.execute(f"restart {args['id']}")
     return {}
 
+
 @request("delete-checkpoint", Args(["id"]))
 def delete_checkpoint(args):
     id = int(args["id"])
-    current_cps = [ cp["id"] for cp in get_checkpoints() ]
+    current_cps = [cp["id"] for cp in get_checkpoints()]
     if id in current_cps:
-      gdb.execute(f"delete checkpoint {id}")
+        gdb.execute(f"delete checkpoint {id}")
 
-    return { "checkpoints": get_checkpoints() }
+    return {"checkpoints": get_checkpoints()}
 
 
 @request("setBreakpoints", Args(["source"], ["breakpoints", "lines", "sourceModified"]))
@@ -1187,9 +1201,11 @@ def start_command_thread():
     finally:
         unlink(commandSocketPath)
 
+
 def ensure_stopped_handler_last(evt):
     gdb.events.stop.disconnect(stopped)
     gdb.events.stop.connect(stopped)
+
 
 def continued_event(evt):
     ensure_stopped_handler_last(evt)
@@ -1203,8 +1219,10 @@ def continued_event(evt):
         },
     )
 
+
 gdb.events.new_objfile.connect(ensure_stopped_handler_last)
 gdb.events.new_inferior.connect(ensure_stopped_handler_last)
+
 
 def stopped(evt):
     global exceptionInfos
@@ -1263,12 +1281,16 @@ def bp_to_ui(bp):
 
     return obj
 
+
 def on_exit(evt):
     global is_checkpoint_restarting
     if is_checkpoint_restarting:
         is_checkpoint_restarting = False
     else:
-      send_event("exited", {"exitCode": evt.exit_code if hasattr(evt, "exit_code") else 0})
+        send_event(
+            "exited", {"exitCode": evt.exit_code if hasattr(evt, "exit_code") else 0}
+        )
+
 
 gdb.events.exited.connect(on_exit)
 

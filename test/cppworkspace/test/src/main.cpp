@@ -107,29 +107,29 @@ private:
 
 struct ZeroedUint8Memory {
   ZeroedUint8Memory(int size) : items(size) {
-    elements = new uint8_t[size];
-    for(auto i = elements; i < elements+size; i++) *i = 0;
+    elements = new uint8_t[items];
+    int_elements = new int[items];
+    int j = 0;
+    for(auto i = 0; i < size; i++) {
+      elements[i] = i;
+      int_elements[i] = i * 10;
+    }
   }
 
   ~ZeroedUint8Memory() {
-    delete[] elements;
+    delete[] this->int_elements;
+    delete[] this->elements;
   }
+
   int items;
   uint8_t* elements;
+  int* int_elements;
 };
 
 void zeroed_test(int foo, float bar) {
   auto u8mem = ZeroedUint8Memory(32);
-  for(auto i = 0; i < 32; i++) {
-    u8mem.elements[i] = i;
-  }
-
   auto u8mem_ptr = new ZeroedUint8Memory(64);
   auto ref_to_ptr = &u8mem_ptr;
-
-  for(auto i = 0; i < u8mem_ptr->items; i++) {
-    u8mem.elements[i] = i;
-  }
   std::cout << "exiting zeroed_test" << std::endl;
 }
 
@@ -223,6 +223,11 @@ struct Bar_ {
   int bar = 30;
 };
 
+struct Quux {
+  int a, b;
+  const Foo& foo_ref;
+};
+
 int main(int argc, const char **argv) {
   simple_foo(10, 11.1);
   test_pps();
@@ -231,6 +236,9 @@ int main(int argc, const char **argv) {
   use_cstring();
   many_ints();
   Foo foo_{};
+  // test that the DAP implementation returns correct (at least from user perspective) values in
+  // variables & watch variables list
+  Quux q{.a = 1, .b = 2, .foo_ref = foo_ };
   Bar_ ba{};
   std::string foostring{"foobarbaz asadasdasasdsadasd"};
   std::map<int, std::string> mumbojumbo{};
