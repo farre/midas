@@ -26,7 +26,7 @@ def can_var_ref_type(type):
     if code == gdb.TYPE_CODE_PTR:
         code = underlying_type.target().code
 
-    return code == gdb.TYPE_CODE_STRUCT or code == gdb.TYPE_CODE_UNION
+    return code == gdb.TYPE_CODE_STRUCT or code == gdb.TYPE_CODE_UNION or code == gdb.TYPE_CODE_ARRAY
 
 
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
@@ -59,9 +59,11 @@ class StackFrame(VariablesReference):
         self.thread = thread
         self._scopes = [
             ScopesReference(name="Args", stackFrame=self, symbolValueReader=frame_args),
-            ScopesReference(
-                name="Locals", stackFrame=self, symbolValueReader=frame_variables
-            ),
+            ScopesReference(name="Locals", stackFrame=self, symbolValueReader=frame_variables),
+            RegistersReference(name="General Registers", stackFrame=self, group="general"),
+            RegistersReference(name="MMX Registers", stackFrame=self, group="mmx"),
+            RegistersReference(name="SSE Registers", stackFrame=self, group="sse"),
+            RegistersReference(name="Vector Registers", stackFrame=self, group="vector"),
         ]
 
     def contents(self):
@@ -239,6 +241,35 @@ class VariableValueReference(VariablesReference):
             res.append(item)
         return res
 
+    def contents_type(self, value, format, start, count):
+        res = []
+        for field in members(value):
+            if can_var_ref_type(field.type):
+                # since we defer creating values for the members, we calculate actual address in memory by
+                # offset of the member inside the type.
+                if hasattr(field, "bitpos") and value.address is not None:
+                    addr = int(value.address) + (int(field.bitpos) / 8)
+                else:
+                    # Is a static member
+                    addr = None
+                ref = create_deferred_var_ref(field, value, addr)
+                res.append(ref.ui_data())
+            else:
+                res.append(value_ui_data(field.name, value[field]))
+        return res
+
+    def contents_array(self, value, format, start, count):
+        (lo, high) = value.type.range()
+        type = value.type.target()
+        res = []
+        for n in range(lo, high+1):
+            if can_var_ref_type(type):
+                ref = create_deferred_var_ref(n, value, None)
+                res.append(ref.ui_data())
+            else:
+                res.append(value_ui_data(f"[{n}]", value[n]))
+        return res
+
     def contents(self, format=None, start=None, count=None):
         try:
             value = self.get_value()
@@ -246,21 +277,10 @@ class VariableValueReference(VariablesReference):
             if pp is not None:
                 return self.pp_contents(pp, format, start, count)
             else:
-                res = []
-                for field in members(value):
-                    if can_var_ref_type(field.type):
-                        # since we defer creating values for the members, we calculate actual address in memory by
-                        # offset of the member inside the type.
-                        if hasattr(field, "bitpos"):
-                            addr = int(value.address) + (int(field.bitpos) / 8)
-                        else:
-                            # Is a static member
-                            addr = None
-                        ref = create_deferred_var_ref(field, value, addr)
-                        res.append(ref.ui_data())
-                    else:
-                        res.append(value_ui_data(field.name, value[field]))
-                return res
+                if value.type.code == gdb.TYPE_CODE_ARRAY:
+                    return self.contents_array(value=value, format=format, start=start, count=count)
+                else:
+                    return self.contents_type(value=value, format=format, start=start, count=count)
         except gdb.error as mem_exception:
             return [
                 {"name": "error", "value": f"{mem_exception}", "variablesReference": 0}
@@ -361,9 +381,21 @@ def frame_variables(frame):
         block = block.superblock
 
 
-class RegistersReference(ScopesReference):
-    def __init__(self, stackFrame):
-        super(RegistersReference, self).__init__("Registers", stackFrame, lambda: None)
+class RegistersReference(VariablesReference):
+    def __init__(self, name, stackFrame, group):
+        super(RegistersReference, self).__init__(name)
+        self.group = group
+        self.stackFrame = stackFrame
 
-    def contents(self):
-        return []
+    def contents(self, format=None, start=None, count=None):
+        res = []
+        frame = self.stackFrame.frame()
+        for reg in frame.architecture().registers(self.group):
+            value = frame.read_register(reg)
+            if can_var_ref(value):
+                ref = create_eager_var_ref(reg.name, value)
+                res.append(ref.ui_data())
+            else:
+                res.append({ "name": reg.name, "value": f"{value}", "variablesReference": 0 })
+
+        return res
