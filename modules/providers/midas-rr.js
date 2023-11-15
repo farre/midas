@@ -193,7 +193,12 @@ class RRDebugAdapterFactory {
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
     const { address, port } = getAddrSetting(config);
-    const cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+    let cmd_str = null;
+    if(config.replay.noexec) {
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${traceWorkspace}`;
+    } else {
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+    }
 
     if (config.externalConsole) {
       const rrArgs = { path: config.rrPath, address, port, pid, traceWorkspace };

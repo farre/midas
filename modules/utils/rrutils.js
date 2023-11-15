@@ -49,7 +49,7 @@ function* get_field(line) {
 
 /**
  * @param { string } data
- * @returns { { pid: string, ppid: string, exit: string, cmd: string }[] }
+ * @returns { { pid: string, ppid: string, exit: string, cmd: string, noexec: boolean }[] }
  */
 function fallbackParseOfrrps(data) {
   return data
@@ -58,14 +58,14 @@ function fallbackParseOfrrps(data) {
     .filter((line) => line.length > 2)
     .map((line) => {
       const [pid, ppid, exit, cmd] = [...get_field(line)];
-      return { pid, ppid, exit, cmd };
+      return { pid, ppid, exit, cmd, noexec: REGEXES.ForkedNoExec.test(line) };
     });
 }
 
 /**
  * @param { string } rr - path to RR
  * @param { string } trace - trace directory
- * @returns { Promise<{ value: string, label: string, description: string, detail: string, binary: string }[]> }
+ * @returns { Promise<{ value: string, label: string, description: string, detail: string, binary: string, noexec: boolean }[]> }
  */
 async function getTraceInfo(rr, trace) {
   return new Promise((resolve, reject) => {
@@ -78,7 +78,7 @@ async function getTraceInfo(rr, trace) {
       }
     });
   }).then((picks) => {
-    return picks.map(({ pid, ppid, exit, cmd }, index) => {
+    return picks.map(({ pid, ppid, exit, cmd, noexec }, index) => {
       let binary = cmd.trim();
       try {
         // if forked, RR doesn't provide us with a binary, scan backwards in list to find forked-from process
@@ -99,6 +99,7 @@ async function getTraceInfo(rr, trace) {
         description: `PID: ${pid}, PPID: ${ppid === "--" ? "--" : +ppid}, EXIT: ${exit}`,
         detail: cmd.trim(),
         binary,
+        noexec,
       };
     });
   });
@@ -125,7 +126,7 @@ const tracePicked = async (rr, traceWorkspace) => {
   };
   return await vscode.window.showQuickPick(getTraceInfo(rr, traceWorkspace), options).then((selection) => {
     if (selection) {
-      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.binary };
+      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.binary, noexec: selection.noexec };
       return replay_parameters;
     }
     return null;

@@ -131,6 +131,7 @@ function getAPI() {
 const REGEXES = {
   MajorMinorPatch: /(\d+)\.(\d+)\.*((\d+))?/,
   WhiteSpace: /\s/,
+  ForkedNoExec: /forked without exec/
 };
 
 const ContextKeys = {
