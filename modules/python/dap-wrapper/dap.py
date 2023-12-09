@@ -8,7 +8,6 @@ import sys
 import random
 import string
 import threading
-import time
 
 # Decorator functions
 import functools
@@ -25,6 +24,9 @@ if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
 from init_rr import initialize_rr
+import logger as logmodule
+
+logger = logmodule.logger
 
 from variables_reference import (
     can_var_ref,
@@ -57,63 +59,6 @@ eventsQueue = Queue()
 session = None
 eventSocketPath = "/tmp/midas-events"
 commandSocketPath = "/tmp/midas-commands"
-
-
-class LogFile:
-    def __init__(self, name):
-        global stdlibpath
-        self.name = name
-        self.path = f"{stdlibpath}/{name}"
-        self.file = open(self.path, "w")
-
-    def log(self, msg):
-        self.file.write(msg)
-
-    def __del__(self):
-        print(f"Flushing contents to {self.path}")
-        self.file.flush()
-        self.file.close()
-
-
-class Logger:
-    def __init__(self):
-        self.perf = None
-        self.debug = None
-
-    def init_perf_log(self, log_name):
-        self.perf = LogFile(log_name)
-
-    def init_debug_log(self, log_name):
-        self.debug = LogFile(log_name)
-
-    def log_request(self, fn, args):
-        if self.debug is not None:
-            self.debug.log(msg=f"[req]: [{fn}] <- {json.dumps(args)}\n")
-
-    def log_response(self, fn, res):
-        if self.debug is not None:
-            self.debug.log(msg=f"[res]: [{fn}] -> {json.dumps(res)}\n")
-
-    def log_exception(self, fn, exc):
-        if self.debug is not None:
-            self.debug.log(
-                msg=f"[req exception]: [{fn}] -> {exc}\nStacktrace:\n{traceback.format_exc()}"
-            )
-
-    def log_msg(self, msg):
-        if self.debug is not None:
-            self.debug.log(msg)
-
-    def perf_log(self, fn, msg):
-        start = time.perf_counter_ns()
-        res = fn()
-        end = time.perf_counter_ns()
-        self.perf.log(msg=f"[{msg}]: {(end-start) / (1000 * 1000)} ms\n")
-        return res
-
-
-logger = Logger()
-
 
 def iterate_options(opts):
     if opts is not None:
@@ -584,7 +529,7 @@ def initialize(args):
         "supportsGotoTargetsRequest": False,
         "supportsStepInTargetsRequest": False,
         "supportsCompletionsRequest": True,
-        "completionTriggerCharacters": None,
+        "completionTriggerCharacters": ["."],
         "supportsModulesRequest": False,
         "additionalModuleColumns": False,
         "supportedChecksumAlgorithms": False,
@@ -1341,12 +1286,9 @@ socket_manager_thread.start()
 
 import atexit
 
-
 def clean_up():
     global eventSocketPath
     global commandSocketPath
-    global logger
-    del logger
     try:
         unlink(eventSocketPath)
     except:

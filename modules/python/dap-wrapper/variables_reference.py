@@ -1,9 +1,14 @@
 import gdb
 from os import path
-import traceback
+import sys
 
 variableReferences = {}
 exceptionInfos = {}
+
+# Add "this" to the path, so we can import variables_reference module
+stdlibpath = path.dirname(path.realpath(__file__))
+if sys.path.count(stdlibpath) == 0:
+    sys.path.append(stdlibpath)
 
 
 def clear_variable_references(evt):
@@ -15,9 +20,11 @@ def clear_variable_references(evt):
 
 gdb.events.cont.connect(clear_variable_references)
 
-
 def can_var_ref(value):
-    return can_var_ref_type(value.type)
+    if hasattr(value, "type"):
+        return can_var_ref_type(value.type)
+    else:
+        return False
 
 
 def can_var_ref_type(type):
@@ -104,7 +111,7 @@ def is_primitive(type):
 
 
 def members(value):
-    type = value.type
+    type = value.type.strip_typedefs()
     if type.code == gdb.TYPE_CODE_PTR:
         try:
             type = value.type.target()
@@ -136,6 +143,8 @@ def create_deferred_scopes_ref(name, value):
 
 
 def field_name(field):
+    if isinstance(field, int):
+        return f"[{field}]"
     if field.name is not None:
         return field.name
     if field.type.code == gdb.TYPE_CODE_UNION:
@@ -146,10 +155,10 @@ def field_name(field):
 
 # we have to wrap this. Because this gets called in a loop where `value[field]` is created on each iteration
 # For some reason, Python, in it's infinite wisdom, make that value[field] be overwritten to be the same in every lambda
-def create_deferred_var_ref(field, parent_value, address):
+def create_deferred_var_ref(type, field, parent_value, address):
     return VariableValueReference(
         name=field_name(field),
-        type=field.type,
+        type=type,
         value_getter=lambda: parent_value[field],
         addr=address,
     )
@@ -166,7 +175,7 @@ def value_ui_data(name, value):
     return {
         "name": name,
         "value": "{}".format(value),
-        "type": "{}".format(value.type),
+        "type": "{}".format(value.type) if hasattr(value, "type") else None,
         "evaluateName": None,
         "variablesReference": 0,
         "namedVariables": None,
@@ -252,19 +261,19 @@ class VariableValueReference(VariablesReference):
                 else:
                     # Is a static member
                     addr = None
-                ref = create_deferred_var_ref(field, value, addr)
+                ref = create_deferred_var_ref(field.type, field, value, addr)
                 res.append(ref.ui_data())
             else:
                 res.append(value_ui_data(field.name, value[field]))
         return res
 
     def contents_array(self, value, format, start, count):
-        (lo, high) = value.type.range()
-        type = value.type.target()
+        (lo, high) = value.type.strip_typedefs().range()
+        target_type = value.type.strip_typedefs().target()
         res = []
         for n in range(lo, high+1):
-            if can_var_ref_type(type):
-                ref = create_deferred_var_ref(n, value, None)
+            if can_var_ref_type(target_type):
+                ref = create_deferred_var_ref(target_type, n, value, None)
                 res.append(ref.ui_data())
             else:
                 res.append(value_ui_data(f"[{n}]", value[n]))
@@ -277,7 +286,7 @@ class VariableValueReference(VariablesReference):
             if pp is not None:
                 return self.pp_contents(pp, format, start, count)
             else:
-                if value.type.code == gdb.TYPE_CODE_ARRAY:
+                if value.type.strip_typedefs().code == gdb.TYPE_CODE_ARRAY:
                     return self.contents_array(value=value, format=format, start=start, count=count)
                 else:
                     return self.contents_type(value=value, format=format, start=start, count=count)
@@ -362,12 +371,13 @@ class ScopesReference(VariablesReference):
 
 
 def frame_args(frame):
-    top = frame_top_block(frame)
-    for symbol in top:
+    block = frame.block()
+    for symbol in block:
         if symbol.is_argument and not (
             symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
         ):
-            yield (symbol, frame.read_var(symbol, top))
+            yield (symbol, frame.read_var(symbol, block))
+
 
 
 def frame_variables(frame):
