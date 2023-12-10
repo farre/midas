@@ -371,7 +371,7 @@ class ScopesReference(VariablesReference):
 
 
 def frame_args(frame):
-    block = frame.block()
+    block = frame_top_block(frame)
     for symbol in block:
         if symbol.is_argument and not (
             symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
