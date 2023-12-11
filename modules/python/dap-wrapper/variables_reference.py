@@ -181,8 +181,7 @@ def value_ui_data(name, value):
         "namedVariables": None,
         "indexedVariables": None,
         "memoryReference": hex(int(value.address))
-        if value.address is not None
-        else None,
+        if hasattr(value, "address") else None
     }
 
 
