@@ -9,6 +9,7 @@ const { TerminalInterface } = require("../terminalInterface");
 const { run_install, InstallerExceptions } = require("./installerProgress");
 const { which, resolveCommand, getExtensionPathOf, sudo, sanitizeEnvVariables, getAllPidsForQuickPick } = require("./sysutils");
 const process = require("process");
+const { getReleaseNotes } = require("./releaseNotes");
 
 const RR_GITHUB_URL = "https://api.github.com/repos/rr-debugger/rr/commits/master";
 
@@ -886,6 +887,25 @@ async function getRR() {
   }
 }
 
+const scheme = "midas-notes";
+
+async function showReleaseNotes() {
+  const uri = vscode.Uri.parse(`${scheme}:Midas Release Notes`);
+  await vscode.commands.executeCommand("markdown.showPreview", uri);
+}
+
+function releaseNotesProvider() {
+  const eventEmitter = new vscode.EventEmitter();
+  return vscode.workspace.registerTextDocumentContentProvider(scheme, {
+    async provideTextDocumentContent(uri) {
+      return `# ${uri.path}
+${await getReleaseNotes()}`;
+    },
+
+    onDidChange: eventEmitter.event,
+  });
+}
+
 /**
  * Returns latest version and url to the package (without file extension). Append .deb or .rpm to get full url.
  * @param {string | "x86_64" | "i686"} arch
@@ -1021,6 +1041,8 @@ module.exports = {
   requiresMinimum,
   getPid,
   getRR,
+  showReleaseNotes,
+  releaseNotesProvider,
   strEmpty,
   strValueOr,
   getAPI,

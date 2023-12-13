@@ -20,7 +20,8 @@
     "onStartupFinished",
     "onDebug",
     "onCommand:midas.issue-report",
-    "onCommand:midas.get-rr"
+    "onCommand:midas.get-rr",
+    "onFileSystem:midas-notes"
   ],
   "main": "./extension.js",
   "publisher": "farrese",
@@ -118,6 +119,11 @@
         "command": "midas.get-rr",
         "title": "Midas: Get rr",
         "shortTitle": "Get rr"
+      },
+      {
+        "command": "midas.show-release-notes",
+        "title": "Midas: Show Release Notes",
+        "shortTitle": "Show Release Notes"
       },
       {
         "command": "midas.clear-checkpoints",

@@ -16,6 +16,7 @@ const {
   guessInstaller,
   parseSemVer,
   semverIsNewer,
+  releaseNotesProvider,
 } = require("./utils/utils");
 const fs = require("fs");
 const Path = require("path");
@@ -489,6 +490,8 @@ function registerRRType(context) {
 async function activateExtension(context) {
   vscode.debug.registerDebugAdapterTrackerFactory("*", new MidasDebugAdapterTrackerFactory());
   context.subscriptions.push(...getVSCodeCommands());
+
+  context.subscriptions.push(releaseNotesProvider());
 
   registerMidasType(context);
   registerRRType(context);
