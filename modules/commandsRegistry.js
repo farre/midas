@@ -1,7 +1,7 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid, getVersion, isNothing, getRR } = require("./utils/utils");
+const { getPid, getVersion, isNothing, getRR, showReleaseNotes } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
@@ -114,6 +114,8 @@ function getVSCodeCommands() {
 
   const getRR_ = registerCommand("midas.get-rr", getRR);
 
+  const showReleaseNotes_ = registerCommand("midas.show-release-notes", showReleaseNotes);
+
   return [
     rrRecord,
     continueAll,
@@ -124,7 +126,8 @@ function getVSCodeCommands() {
     issueGithubReport,
     getPid_,
     getRR_,
-    toggleHexFormatting
+    showReleaseNotes_,
+    toggleHexFormatting,
   ];
 }
 
