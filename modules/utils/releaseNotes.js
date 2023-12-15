@@ -122,7 +122,7 @@ function render(version, notes) {
   let keys = Object.keys(notes);
   keys.sort().reverse();
   for (let key of keys) {
-    renderedNotes = `### ${key}
+    renderedNotes = `\n### ${key}
 
 ${notes[key].join("\n")}${renderedNotes}`;
   }
