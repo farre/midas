@@ -186,12 +186,14 @@ class MidasAPI {
       const list = breaking_changes.filter(semver => semverIsNewer(semver, recorded_semver)).map(sem => `- ${sem.major}.${sem.minor}.${sem.patch}`).join("\n");
       // eslint-disable-next-line max-len
       const detail = `Some breaking changes has been introduced in recent versions.\nBe sure to read the NEWS section in the README, to see what has changed.\n\nVersions that introduced breaking changes:\n ${list}`;
-      vscode.window.showWarningMessage("Midas: Breaking changes", {detail: detail, modal: true}, "Show readme").then(async res => {
-        if(res == "Show readme") {
-          const doc = await vscode.workspace.openTextDocument(getExtensionPathOf("README.md"));
-          await vscode.window.showTextDocument(doc, { preview: true });
-        }
-      })
+      vscode.window
+        .showWarningMessage("Midas: Breaking changes", { detail: detail, modal: true }, "Show readme")
+        .then(async (res) => {
+          if (res == "Show readme") {
+            const uri = vscode.Uri.parse(`file://${getExtensionPathOf("README.md")}`);
+            await vscode.commands.executeCommand("markdown.showPreview", uri);
+          }
+        });
     }
     cfg.midas_version = this.#context.extension.packageJSON["version"];
   }
