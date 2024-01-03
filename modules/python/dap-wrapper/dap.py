@@ -746,8 +746,6 @@ def set_bps(args):
             else:
                 bp = gdb.Breakpoint(source=path, line=int(bp_req.get("line")))
                 bp.condition = bp_req.get("condition")
-                # if bp_req.get("hitCondition") is not None:
-                # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
                 breakpoints[path][bp_key] = bp
 
         diff = set(previous_bp_state.keys()) - set(breakpoints[path].keys())
@@ -1253,11 +1251,6 @@ gdb.events.breakpoint_created.connect(
 gdb.events.breakpoint_modified.connect(
     lambda bp: send_event(
         "breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)}
-    )
-)
-gdb.events.breakpoint_deleted.connect(
-    lambda bp: send_event(
-        "breakpoint", {"reason": "removed", "breakpoint": {"id": bp.number}}
     )
 )
 
