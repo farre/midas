@@ -172,16 +172,23 @@ def create_eager_var_ref(name, value):
 
 # Create UI data for a value that is not VariableReference'able (i.e. VariableReference = 0)
 def value_ui_data(name, value):
+    memoryReference = None
+    if hasattr(value, "address") and value.address is not None:
+        memoryReference = hex(int(value.address))
+
+    varType = None
+    if hasattr(value, "type") and value.type is not None:
+        varType = "{}".format(value.type)
+
     return {
         "name": name,
         "value": "{}".format(value),
-        "type": "{}".format(value.type) if hasattr(value, "type") else None,
+        "type": varType,
         "evaluateName": None,
         "variablesReference": 0,
         "namedVariables": None,
         "indexedVariables": None,
-        "memoryReference": hex(int(value.address))
-        if hasattr(value, "address") else None
+        "memoryReference": memoryReference
     }
 
 
