@@ -881,12 +881,19 @@ def source(args):
 def step_back(args):
     select_thread(args["threadId"])
     granularity = args.get("granularity")
+
     if granularity == "instruction":
         cmd = "reverse-stepi"
-    elif granularity == "line":
-        cmd = "reverse-next"
-    else:
+    elif granularity == "statement":
+        # this is actually not "next statement" because GDB doesn't understand what that means
+        # even though it has the power to do so, or a similar variant of it. Unfortunately my patch is in limbo.
         cmd = "reverse-step"
+    else:
+        # default to next, although spec says explicitly statement is default. Gdb doesn't understand statements
+        # and I sent a patch that made it the equivalent of understanding statements.
+        # It wasn't accepted because they couldn't understand it.
+        cmd = "reverse-next"
+
     gdb.execute(cmd)
     return {}
 
