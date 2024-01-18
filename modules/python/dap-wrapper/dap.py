@@ -242,11 +242,15 @@ def iterate_frames(frame, count=None, start=None):
 
 @request("evaluate", Args(["expression", "context"], ["frameId", "format"]))
 def evaluate(args):
+    global running_to_event_or_restarting_checkpoint
     if args["context"] == "repl":
         try:
+            if args["expression"][0:4] == "run ":
+                running_to_event_or_restarting_checkpoint = True
             result = gdb.execute(args["expression"], from_tty=False, to_string=True)
             return {"result": result, "variablesReference": 0}
         except Exception as e:
+            running_to_event_or_restarting_checkpoint = False
             return {"result": f"{e}", "variablesReference": 0}
     elif args["context"] == "watch":
         try:
@@ -340,6 +344,19 @@ def continue_(args):
 def continueAll(args):
     gdb.execute("continue -a")
     return {"allThreadsContinued": True}
+
+
+# Not defined by the DAP spec
+@request("run-to-event", Args(["event"]))
+def runToEvent(args):
+    global running_to_event_or_restarting_checkpoint
+    running_to_event_or_restarting_checkpoint = True
+    try:
+        gdb.execute(f"run {args['event']}")
+    except:
+        running_to_event_or_restarting_checkpoint = False
+        raise
+    return {}
 
 
 @request("dataBreakpointInfo", Args(["name", "variablesReference"], ["frameId"]))
@@ -695,16 +712,16 @@ def set_checkpoint(args):
 
 
 # Used to check if we should suppress "exited" event
-is_checkpoint_restarting = False
+running_to_event_or_restarting_checkpoint = False
 
 
 @request("restart-checkpoint", Args(["id"]))
 def restart_checkpoint(args):
-    global is_checkpoint_restarting
+    global running_to_event_or_restarting_checkpoint
     has_cp = int(args["id"]) in [cp["id"] for cp in get_checkpoints()]
     if not has_cp:
         raise Exception(f"Checkpoint {args['id']} was not found")
-    is_checkpoint_restarting = True
+    running_to_event_or_restarting_checkpoint = True
     gdb.execute(f"restart {args['id']}")
     return {}
 
@@ -1189,7 +1206,7 @@ def stopped(evt):
         body["reason"] = "breakpoint"
         body["hitBreakpointIds"] = [bp.number for bp in evt.breakpoints]
         if evt.breakpoint.type == gdb.BP_CATCHPOINT:
-            for (k, bp) in exceptionBreakpoints.items():
+            for k, bp in exceptionBreakpoints.items():
                 if bp == evt.breakpoint:
                     exc_info = {
                         "exceptionId": f"{k}",
@@ -1234,9 +1251,9 @@ def bp_to_ui(bp):
 
 
 def on_exit(evt):
-    global is_checkpoint_restarting
-    if is_checkpoint_restarting:
-        is_checkpoint_restarting = False
+    global running_to_event_or_restarting_checkpoint
+    if running_to_event_or_restarting_checkpoint:
+        running_to_event_or_restarting_checkpoint = False
     else:
         send_event(
             "exited", {"exitCode": evt.exit_code if hasattr(evt, "exit_code") else 0}
@@ -1286,6 +1303,7 @@ dap_thread.start()
 socket_manager_thread.start()
 
 import atexit
+
 
 def clean_up():
     global eventSocketPath

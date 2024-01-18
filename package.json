@@ -135,6 +135,12 @@
         "category": "Midas Checkpoints",
         "title": "Set Checkpoint",
         "icon": "$(device-camera)"
+      },
+      {
+        "command": "midas.run-to-event",
+        "category": "Midas RR",
+        "title": "Run to event",
+        "icon": "$(run-below)"
       }
     ],
     "menus": {
@@ -169,6 +175,11 @@
         },
         {
           "command": "midas.set-checkpoint",
+          "group": "midas",
+          "when": "midas.rrSession == true && midas.debugType == midas-rr"
+        },
+        {
+          "command": "midas.run-to-event",
           "group": "midas",
           "when": "midas.rrSession == true && midas.debugType == midas-rr"
         }
