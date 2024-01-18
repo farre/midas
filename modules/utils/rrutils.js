@@ -133,8 +133,38 @@ const tracePicked = async (rr, traceWorkspace) => {
   });
 };
 
+/**
+ * 
+ * @param {*} rr
+ * @returns { Promise<String> }
+ */
+function getGdbInit(rr) {
+  return new Promise((res, rej) => {
+    subprocess.exec(`${rr} gdbinit`, (error, stdout, stderr) => {
+      if(error) rej(error);
+      else res(stdout.toString())
+    })
+  });
+}
+
+async function generateGdbInit(rr) {
+  return await getGdbInit(rr).then(data => {
+    // this is ugly copying. But... I don't care. This is run once on each update & build of RR
+    // and involves at most a kb or two.
+    const lines = data.split("\n");
+    let i = 0;
+    for(; i < lines.length; ++i) {
+      if(lines[i].includes("set prompt (rr)"))
+        break;
+    }
+    const kept_lines = lines.splice(0, i);
+    return kept_lines.join("\n");
+  })
+}
+
 module.exports = {
   tracePicked,
   getTraces,
   parseProgram,
+  generateGdbInit
 };

@@ -3,12 +3,13 @@ const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 
 const { getFreeRandomPort } = require("../utils/netutils");
-const { tracePicked, getTraces, parseProgram } = require("../utils/rrutils");
+const { tracePicked, getTraces, parseProgram, generateGdbInit } = require("../utils/rrutils");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getAPI } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
 const { MidasDAPSession } = require("../gdb-dap/debugSession");
+const { getExtensionPathOf } = require("../utils/sysutils");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -194,6 +195,9 @@ class RRDebugAdapterFactory {
     const traceWorkspace = config.replay.traceWorkspace;
     const { address, port } = getAddrSetting(config);
     let cmd_str = null;
+    const rrInitData = await generateGdbInit(config.rrPath);
+    const rrInitFilePath = getExtensionPathOf("rrinit");
+    fs.writeFileSync(rrInitFilePath, rrInitData);
     if(config.replay.noexec) {
       cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${traceWorkspace}`;
     } else {

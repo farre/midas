@@ -23,7 +23,6 @@ stdlibpath = path.dirname(path.realpath(__file__))
 if sys.path.count(stdlibpath) == 0:
     sys.path.append(stdlibpath)
 
-from init_rr import initialize_rr
 import logger as logmodule
 
 logger = logmodule.logger
@@ -60,20 +59,25 @@ session = None
 eventSocketPath = "/tmp/midas-events"
 commandSocketPath = "/tmp/midas-commands"
 
+
 def iterate_options(opts):
     if opts is not None:
         for opt in opts:
             yield opt
     return
 
+def loadRRConfiguration(path):
+    gdb.execute(f"source {path}")
 
 # All requests use post_event; so here we _must_ use gdb.execute, so that we don't create weird out-of-order scenarios.
 class Session:
-    def __init__(self, type):
-        self.type = type
+    def __init__(self, initArgs):
+        self.type = initArgs["adapterID"]
         self.started = False
         if self.type == "midas-rr":
-            initialize_rr()
+            if initArgs.get("rrinit") is None:
+                raise Exception("Path to RR init script not provided. This initialization needs to happen before we setup the RR session.")
+            loadRRConfiguration(initArgs["rrinit"])
 
     def is_rr_session(self):
         return self.type == "midas-rr"
@@ -183,7 +187,8 @@ class ArbitraryOptionalArgs(Args):
 
 def request(name, req_args=Args()):
     """Wraps a request and verifies that the required parameters have been passed into the dictionary `args`.
-    Only optional parameters need to be checked if they're None or not (using args.get(..))"""
+    Only optional parameters need to be checked if they're None or not (using args.get(..))
+    """
 
     def dec(fn):
         global commands
@@ -489,11 +494,7 @@ def initialize(args):
     global Handler
     global session
 
-    sessionType = "midas-gdb"
-    if args.get("type") is not None:
-        sessionType = args.get("type")
-
-    session = Session(args.get("adapterID"))
+    session = Session(args)
 
     if args.get("trace") == "Full":
         logger.init_perf_log("perf.log")
