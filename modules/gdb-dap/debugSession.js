@@ -10,6 +10,7 @@ const { toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils")
 const { TerminatedEvent, OutputEvent, InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 const { CustomRequests } = require("../debugSessionCustomRequests");
+const vscode = require("vscode");
 
 /**
  * Serialize request, preparing it to be sent over the wire to GDB
@@ -569,7 +570,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   gotoTargetsRequest(response, args, request) {
-    this.gdb.sendRequest(request, args);  
+    this.gdb.sendRequest(request, args);
   }
 
   completionsRequest(response, args, request) {
@@ -614,7 +615,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
    * Override this hook to implement custom requests.
    */
   // eslint-disable-next-line no-unused-vars
-  customRequest(command, response, args, request) {
+  async customRequest(command, response, args, request) {
     request.type = "request";
     request.command = command;
     switch(command) {
@@ -625,6 +626,17 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       case CustomRequests.RestartCheckpoint:
       case CustomRequests.DeleteCheckpoint: {
         request.arguments = { id: args };
+        this.gdb.sendRequest(request);
+        break;
+      }
+      case CustomRequests.RunToEvent: {
+        const event_number = await vscode.window.showInputBox();
+        const num = Number.parseInt(event_number);
+        if(Number.isNaN(num)) {
+          this.sendErrorResponse(response, 0, "Run To Event requires a number as input.");
+          return;
+        }
+        request.arguments = { event: num }
         this.gdb.sendRequest(request);
         break;
       }

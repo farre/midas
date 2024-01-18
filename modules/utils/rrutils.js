@@ -154,7 +154,8 @@ async function generateGdbInit(rr) {
     const lines = data.split("\n");
     let i = 0;
     for(; i < lines.length; ++i) {
-      if(lines[i].includes("set prompt (rr)"))
+      // remove everything after `define hook-run` as this stuff messes with us.
+      if(lines[i].includes("define hook-run"))
         break;
     }
     const kept_lines = lines.splice(0, i);
