@@ -332,6 +332,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.gdb.initialize().then(() => {
       args["trace"] = this.#spawnConfig.trace;
       args["rr-session"] = this.#spawnConfig.isRRSession();
+      args["rrinit"] = getExtensionPathOf("rrinit");
       this.gdb.sendRequest({ seq: response.request_seq, command: response.command }, args);
     }).catch(err => {
       this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}`});
