@@ -194,14 +194,16 @@ class RRDebugAdapterFactory {
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
     const { address, port } = getAddrSetting(config);
-    let cmd_str = null;
     const rrInitData = await generateGdbInit(config.rrPath);
     const rrInitFilePath = getExtensionPathOf("rrinit");
     fs.writeFileSync(rrInitFilePath, rrInitData);
+
+    let cmd_str = null;
+    const rrOptions = (config.rrOptions ?? []).join(" ");
     if(config.replay.noexec) {
-      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${traceWorkspace}`;
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${rrOptions} ${traceWorkspace}`;
     } else {
-      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${traceWorkspace}`;
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${rrOptions} ${traceWorkspace}`;
     }
 
     if (config.externalConsole) {
