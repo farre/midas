@@ -482,13 +482,13 @@ function parseSemVer(string) {
 }
 
 /**
- * @param {SemVer} semver 
- * @param {SemVer} compare 
+ * @param {SemVer} lhs
+ * @param {SemVer} rhs
  * @returns {boolean}
  */
-function semverIsNewer(semver, compare) {
-  const bits = (semver.major << 16) | (semver.minor) << 8 | semver.patch;
-  const cmp_bits = (compare.major << 16) | (compare.minor << 8) | compare.patch;
+function semverIsNewer(lhs, rhs) {
+  const bits = (lhs.major << 16) | (lhs.minor) << 8 | lhs.patch;
+  const cmp_bits = (rhs.major << 16) | (rhs.minor << 8) | rhs.patch;
   return bits > cmp_bits;
 }
 

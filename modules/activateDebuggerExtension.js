@@ -17,6 +17,7 @@ const {
   parseSemVer,
   semverIsNewer,
   releaseNotesProvider,
+  showReleaseNotes,
 } = require("./utils/utils");
 const fs = require("fs");
 const Path = require("path");
@@ -48,6 +49,7 @@ function cloneNonExistingSubProperties(obj) {
   };
 }
 
+/** @returns {MidasConfig} */
 const sanitize_config = (cfg) => {
   return JSON.parse(JSON.stringify(cfg, cloneNonExistingSubProperties(default_config_contents())));
 };
@@ -176,25 +178,13 @@ class MidasAPI {
     }
   }
 
-  async notifyUserOfBreakingChanges() {
+  maybeDisplayReleaseNotes() {
     let cfg = sanitize_config(this.get_config());
-    const recorded_semver = parseSemVer(cfg.midas_version);
-    const new_changes = (semver) => {
-      return semverIsNewer(semver, recorded_semver);
-    };
-    if (breaking_changes.some(new_changes)) {
-      // eslint-disable-next-line max-len
-      const list = breaking_changes.filter(semver => semverIsNewer(semver, recorded_semver)).map(sem => `- ${sem.major}.${sem.minor}.${sem.patch}`).join("\n");
-      // eslint-disable-next-line max-len
-      const detail = `Some breaking changes has been introduced in recent versions.\nBe sure to read the NEWS section in the README, to see what has changed.\n\nVersions that introduced breaking changes:\n ${list}`;
-      vscode.window.showWarningMessage("Midas: Breaking changes", {detail: detail, modal: true}, "Show readme").then(async res => {
-        if(res == "Show readme") {
-          const doc = await vscode.workspace.openTextDocument(getExtensionPathOf("README.md"));
-          await vscode.window.showTextDocument(doc, { preview: true });
-        }
-      })
+    const recordedSemVer = parseSemVer(cfg.midas_version);
+    const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
+    if(semverIsNewer(currentlyLoadedSemVer, recordedSemVer)) {
+      showReleaseNotes();
     }
-    cfg.midas_version = this.#context.extension.packageJSON["version"];
   }
 
   /** @param { MidasConfig } cfg */
@@ -252,7 +242,7 @@ class MidasAPI {
   /**
    * Write Midas version to config file
    */
-  write_midas_version() {
+  serializeMidasVersion() {
     let cfg = sanitize_config(this.get_config());
     cfg.midas_version = this.#context.extension.packageJSON["version"];
     this.#write_config(cfg);
@@ -446,8 +436,8 @@ async function init_midas(api) {
     }
   }
   api.setup_env_vars();
-  await api.notifyUserOfBreakingChanges();
-  api.write_midas_version();
+  api.maybeDisplayReleaseNotes();
+  api.serializeMidasVersion();
 }
 
 function registerMidasType(context) {
@@ -502,8 +492,6 @@ async function activateExtension(context) {
 }
 
 function deactivateExtension() {}
-
-const breaking_changes = [{ major: 0, minor: 19, patch: 0 }];
 
 module.exports = {
   activateExtension,
