@@ -228,6 +228,7 @@ class RRSpawnConfig extends SpawnConfig {
   serverAddress;
   constructor(launchJson) {
     super(launchJson);
+    this.rrOptions = launchJson.rrOptions ?? [];
     this.serverAddress = launchJson.serverAddress;
   }
 

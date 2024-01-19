@@ -514,6 +514,10 @@
                 "type": "array",
                 "description": "GDB Arguments."
               },
+              "rrOptions": {
+                "type": "array",
+                "description": "RR Command Line Options"
+              },
               "cwd": {
                 "type": "string",
                 "description": "Current working directory of GDB",
