@@ -6,60 +6,77 @@ function setupUI(protocol) {
   (function () {
     const vscode = acquireVsCodeApi();
     function create_row(container, cp) {
-      let name = document.createElement("span");
-      name.textContent = `${cp.when}`;
-      name.className = "checkpoints-list-when";
+      const checkpointEventNumber = document.createElement("span");
+      checkpointEventNumber.textContent = `${cp.when}`;
+      checkpointEventNumber.className = "checkpoints-list-when";
+      container.appendChild(checkpointEventNumber);
 
-      container.appendChild(name);
+      const checkpointName = document.createElement("span");
+      checkpointName.textContent = cp.name;
+      checkpointName.className = "file-path";
+      checkpointName.addEventListener("click", () => {
+        const sourceLocPath = cp.where.path.split(" at ")[1];
 
-      let path = document.createElement("span");
-      path.textContent = cp.where.path;
-      path.className = "file-path";
-      container.appendChild(path);
+        if(sourceLocPath)
+          vscode.postMessage({ type: UI_REQUESTS.GotoSourceLoc, value: { path: sourceLocPath, line: cp.where.line }});
+      });
 
-      let action_bar = document.createElement("div");
-      action_bar.className = "checkpoints-action-bar";
-      let action_container = document.createElement("ul");
+      checkpointName.addEventListener("keydown", (event) => {
+        if (event.keyCode === 13) {
+          checkpointName.contentEditable = false;
+          event.target.blur();
+        }
+      });
 
-      let play_button = document.createElement("li");
-      play_button.className = "row-button codicon codicon-debug-continue";
+      checkpointName.addEventListener("blur", (event) => {
+        const payload = { checkpointId: cp.id, name: event.target.textContent };
+        vscode.postMessage({ type: UI_MESSAGES.NameCheckpoint, value: payload });
+      });
 
-      play_button.addEventListener("click", () => {
+      checkpointName.id = `cp-${cp.id}`;
+
+      container.appendChild(checkpointName);
+
+      const actionBar = document.createElement("div");
+      actionBar.className = "checkpoints-action-bar";
+      let actionContainer = document.createElement("ul");
+
+      const editButton = document.createElement("li");
+      editButton.className = "row-button codicon codicon-edit";
+
+      editButton.addEventListener("click", () => {
+        checkpointName.contentEditable = true;
+        checkpointName.focus();
+      });
+
+      const playButton = document.createElement("li");
+      playButton.className = "row-button codicon codicon-debug-continue";
+
+      playButton.addEventListener("click", () => {
         vscode.postMessage({ type: UI_REQUESTS.RunToCheckpoint, value: container.dataset.checkpointId });
       });
 
-      let remove_button = document.createElement("li");
-      remove_button.className = "row-button codicon codicon-chrome-close";
+      const removeButton = document.createElement("li");
+      removeButton.className = "row-button codicon codicon-chrome-close";
 
-      remove_button.addEventListener("click", () => {
+      removeButton.addEventListener("click", () => {
         vscode.postMessage({ type: UI_REQUESTS.DeleteCheckpoint, value: container.dataset.checkpointId });
       });
 
-      action_container.appendChild(play_button);
-      action_container.appendChild(remove_button);
-      action_bar.appendChild(action_container);
-      container.appendChild(action_bar);
-
-      let line = document.createElement("span");
-      line.textContent = +cp.where.line;
-      line.className = "checkpoints-count-badge";
-      container.appendChild(line);
-      // div.appendChild(container);
-      // return div;
+      actionContainer.appendChild(editButton);
+      actionContainer.appendChild(playButton);
+      actionContainer.appendChild(removeButton);
+      actionBar.appendChild(actionContainer);
+      container.appendChild(actionBar);
     }
-    const oldState = { checkpoints: [] };
-    /** @type {Array<CheckpointInfo>} */
-    let checkpoints = oldState.checkpoints;
 
-    updateCheckpointsList(checkpoints);
 
     // Handle messages sent from the extension to the webview
     window.addEventListener("message", (event) => {
       const message = event.data; // The json data that the extension sent
       switch (message.type) {
         case UI_MESSAGES.ClearCheckpoints: {
-          checkpoints = [];
-          updateCheckpointsList(checkpoints);
+          updateCheckpointsList([]);
           break;
         }
         case UI_MESSAGES.RemovedCheckpoint: {
@@ -83,20 +100,17 @@ function setupUI(protocol) {
       for (const cp of checkpoints) {
         const row = document.createElement("div");
         row.className = "checkpoints-list-row";
-        // row.role = "checkbox";
-        //row.ariaChecked = true;
         row.dataIndex = idx;
         row.dataLastElement = idx == checkpoints.length - 1;
         row.dataset.index = idx;
         row.dataset.checkpointId = cp.id;
         row.ariaPosInSet = idx + 1;
+        row.id = `cp-row-${cp.id}`;
         create_row(row, cp);
         cp_list.appendChild(row);
 
         idx += 1;
       }
-      // Update the saved state
-      vscode.setState({ checkpoints: checkpoints });
     }
 
     function removeCheckpoint(checkpointId) {
