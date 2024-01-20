@@ -224,7 +224,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   /** @type {import("../terminalInterface").TerminalInterface} */
   #terminal;
 
-  // The Checkpoints UI
+  /** @type {import("../ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
   #checkpointsUI;
   #defaultLogger = (output) => {
     console.log(output);
@@ -244,7 +244,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.setDebuggerColumnsStartAt1(true);
     this.gdb = new Gdb(spawnConfig.path, spawnConfig.options ?? []);
     this.#terminal = terminal;
-
     this.gdb.response_connect((response) => {
       if(!response.success) {
         const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
@@ -279,7 +278,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     });
 
     this.on("exit", (evt) => {
-      this.disposeTerminal();
+      this.dispose();
     });
 
     this.on("error", (event) => {
@@ -288,12 +287,22 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   }
 
+  dispose() {
+    this.#checkpointsUI.tearDown();
+    this.disposeTerminal();
+    super.dispose();
+  }
+
   atExitCleanUp(signal) {
     this.gdb.gdb.kill(signal);
     if (this.#spawnConfig.disposeOnExit()) this.disposeTerminal();
     else {
       if (this.#terminal) this.#terminal.disposeChildren();
     }
+  }
+
+  shutdown() {
+    console.log(`SHUTDOWN CALLED`);
   }
 
   /**
@@ -459,6 +468,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   disconnectRequest(response, args, request) {
+    this.#checkpointsUI.tearDown();
     this.gdb.sendRequest(request, args);
   }
 
