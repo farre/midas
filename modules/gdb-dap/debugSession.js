@@ -6,7 +6,7 @@ const EventEmitter = require("events");
 
 // eslint-disable-next-line no-unused-vars
 const net = require("node:net");
-const { toHexString, getAPI, uiSetAllStopComponent } = require("../utils/utils");
+const { toHexString, getAPI, uiSetAllStopComponent, ContextKeys } = require("../utils/utils");
 const { TerminatedEvent, OutputEvent, InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 const { CustomRequests } = require("../debugSessionCustomRequests");
@@ -277,10 +277,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
       }
     });
 
-    this.on("exit", (evt) => {
-      this.dispose();
-    });
-
     this.on("error", (event) => {
       this.sendEvent(new DebugAdapter.OutputEvent(event.body, "console", event));
     });
@@ -288,7 +284,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
   }
 
   dispose() {
-    this.#checkpointsUI.tearDown();
+    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
     this.disposeTerminal();
     super.dispose();
   }
@@ -468,7 +464,6 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   disconnectRequest(response, args, request) {
-    this.#checkpointsUI.tearDown();
     this.gdb.sendRequest(request, args);
   }
 

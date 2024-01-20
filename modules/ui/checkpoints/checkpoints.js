@@ -13,6 +13,8 @@ class CheckpointsViewProvider {
    */
   constructor(extensionContext) {
     this.#extensionUri = extensionContext.extensionUri;
+    this.checkpointIdToNameMap = new Map();
+
     let setCheckpoint = registerCommand("midas.set-checkpoint", () => {
       vscode.debug.activeDebugSession.customRequest(CustomRequests.SetCheckpoint);
     });
@@ -33,18 +35,14 @@ class CheckpointsViewProvider {
 
   updateCheckpoints(checkpoints, show = true) {
     if (this.#view) {
-      if (show) this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-
+      if (show) this.#view.show?.(true);
+      for(let cp of checkpoints) {
+        cp.name = this.checkpointIdToNameMap.get(cp.id) ?? `${cp.where.path}:${cp.where.line}`;
+      }
       this.#view.webview.postMessage({ type: UI_MESSAGES.UpdateCheckpoints, payload: checkpoints });
     }
   }
 
-  addCheckpoint(checkpoint) {
-    if (this.#view) {
-      this.#view.show?.(true); // `show` is not implemented in 1.49 but is for 1.50 insiders
-      this.#view.webview.postMessage({ type: UI_MESSAGES.AddCheckpoint, payload: checkpoint });
-    }
-  }
   /**
    * Gets resource `resource` from the Checkpoints UI module.
    * @param {string} resource
@@ -69,6 +67,9 @@ class CheckpointsViewProvider {
   // eslint-disable-next-line no-unused-vars
   async resolveWebviewView(webviewView, context, token) {
     this.#view = webviewView;
+    this.#view.onDidDispose(() => {
+      this.checkpointIdToNameMap.clear();
+    });
     webviewView.webview.options = {
       // Allow scripts in the webview
       enableScripts: true,
@@ -77,14 +78,26 @@ class CheckpointsViewProvider {
 
     webviewView.webview.html = this.#createHTMLForWebView(webviewView.webview);
 
-    webviewView.webview.onDidReceiveMessage((data) => {
+    webviewView.webview.onDidReceiveMessage(async (data) => {
       switch (data.type) {
         case UI_REQUESTS.DeleteCheckpoint: {
+          this.checkpointIdToNameMap.delete(data.value);
           vscode.debug.activeDebugSession.customRequest(CustomRequests.DeleteCheckpoint, data.value);
           break;
         }
         case UI_REQUESTS.RunToCheckpoint:
           vscode.debug.activeDebugSession.customRequest(CustomRequests.RestartCheckpoint, data.value);
+          break;
+        case UI_REQUESTS.NameCheckpoint:
+          const { checkpointId, name } = data.value;
+          this.checkpointIdToNameMap.set(checkpointId, name);
+          break;
+        case UI_REQUESTS.GotoSourceLoc:
+          const { path, line } = data.value;
+          const doc = await vscode.workspace.openTextDocument(path);
+          const editor = await vscode.window.showTextDocument(doc, { preview: false });
+          const position = new vscode.Position(line, 0);
+          editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
           break;
       }
     });
