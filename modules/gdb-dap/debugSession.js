@@ -247,7 +247,7 @@ class MidasDAPSession extends DebugAdapter.DebugSession {
     this.gdb.response_connect((response) => {
       if(!response.success) {
         const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-        this.sendErrorResponse(response, 0, err);
+        console.log(`[request error]: ${response.command} failed\n${err}`);
       }
       switch(response.command) {
         case "variables":
