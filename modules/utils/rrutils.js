@@ -13,7 +13,7 @@ async function getTraces(rr) {
       if (err) {
         reject(stderr);
       } else {
-        let lines = stdout.split("\n").splice(1);
+        let lines = stdout.split("\n");
         const traces = lines.map((line) => line.split(" ")[0].trim()).filter((trace) => trace.length > 0 && trace != "cpu_lock");
         if(traces.length == 1 && traces[0] == "latest-trace") {
           reject(`No traces found by rr ps command`);
