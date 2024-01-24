@@ -889,8 +889,11 @@ async function getRR() {
 
 const scheme = "midas-notes";
 
-async function showReleaseNotes() {
-  const uri = vscode.Uri.parse(`${scheme}:Midas Release Notes`);
+async function showReleaseNotes(from, to) {
+  let extension = vscode.extensions.getExtension("farrese.midas");
+  from = from ?? extension.packageJSON.version;
+  to = to ?? extension.packageJSON.version;
+  const uri = vscode.Uri.parse(`${scheme}:Midas Release Notes?from=${from}&to=${to}`);
   await vscode.commands.executeCommand("markdown.showPreview", uri);
 }
 
@@ -898,8 +901,9 @@ function releaseNotesProvider() {
   const eventEmitter = new vscode.EventEmitter();
   return vscode.workspace.registerTextDocumentContentProvider(scheme, {
     async provideTextDocumentContent(uri) {
+      let params = new URLSearchParams(uri.query);
       return `# ${uri.path}
-${await getReleaseNotes()}`;
+${await getReleaseNotes(params.get("from"), params.get("to"))}`;
     },
 
     onDidChange: eventEmitter.event,

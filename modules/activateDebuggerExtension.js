@@ -182,8 +182,8 @@ class MidasAPI {
     let cfg = sanitize_config(this.get_config());
     const recordedSemVer = parseSemVer(cfg.midas_version);
     const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
-    if(semverIsNewer(currentlyLoadedSemVer, recordedSemVer)) {
-      showReleaseNotes();
+    if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer)) {
+      showReleaseNotes(cfg.midas_version, this.#context.extension.packageJSON["version"]);
     }
   }
 
