@@ -9,7 +9,7 @@ const { REGEXES } = require("./utils");
  */
 async function getTraces(rr) {
   return new Promise((resolve, reject) => {
-    subprocess.exec(`${rr} ls`, (err, stdout, stderr) => {
+    subprocess.exec(`${rr} ls -t -r`, (err, stdout, stderr) => {
       if (err) {
         reject(stderr);
       } else {
