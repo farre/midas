@@ -100,6 +100,8 @@ class Session:
                 raise Exception("No program was provided for gdb to launch")
             gdb.execute(f"file {sessionArgs['program']}")
         elif sessionArgs["type"] == "attach":
+            gdb.execute("set remotetimeout 10000")
+            gdb.execute("set tcp connect-timeout 10000")
             gdb.execute(sessionArgs["command"])
         else:
             raise Exception(f"Unknown session type {sessionArgs['type']}")

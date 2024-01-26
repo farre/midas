@@ -234,7 +234,7 @@ class RRSpawnConfig extends SpawnConfig {
 
   typeSpecificParameters(session) {
     const commandList = new CommandList("RR Settings");
-    commandList.addImmediateCommand("set tcp connect-timeout 180");
+    commandList.addImmediateCommand("set tcp connect-timeout 10000");
     commandList.addImmediateCommand("set non-stop off");
     commandList.addCommand(`target extended-remote ${this.serverAddress}`);
     return [
