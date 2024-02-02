@@ -764,7 +764,18 @@ async function getRR() {
   const rr = getAPI().get_toolchain().rr;
   // We let midas figure this shit out at boot up instead. double installing requires extra error handling as it will fail due to dirs
   // existing etc;
-  if(rr.managed) return;
+  if(rr.managed) {
+    const choice = await vscode.window.showInformationMessage(
+      "Toolchain: RR is being managed by midas already. Do you want to update RR?",
+      "Yes",
+      "No"
+    );
+    if (choice == "Yes") {
+      await getAPI().updateRR();
+    }
+
+    return;
+  }
   const answers = [
     { title: "No", isCloseAffordance: true },
     { title: "Yes", isCloseAffordance: false },
