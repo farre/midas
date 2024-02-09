@@ -59,18 +59,46 @@ def frame_name(frame):
         return "unknown frame"
 
 
+def frame_args(frame):
+    block = frame_top_block(frame)
+    for symbol in block:
+        if symbol.is_argument and not (
+            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+        ):
+            yield (symbol.name, symbol.type, symbol.name, frame.read_var(symbol, block))
+
+
+def frame_variables(frame):
+    block = frame.block()
+    while not block.is_static:
+        for symbol in block:
+            if symbol.is_variable and not (
+                symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
+            ):
+                yield (symbol.name, symbol.type, symbol.name, frame.read_var(symbol, block))
+        block = block.superblock
+
 class StackFrame(VariablesReference):
-    def __init__(self, gdbFrame, thread):
+
+    def __init__(self, gdbFrame, thread, argsValueReader=frame_args, localsValueReader=frame_variables):
         super(StackFrame, self).__init__(frame_name(gdbFrame))
         self.gdbFrame = gdbFrame
         self.thread = thread
         self._scopes = [
-            ScopesReference(name="Args", stackFrame=self, symbolValueReader=frame_args),
-            ScopesReference(name="Locals", stackFrame=self, symbolValueReader=frame_variables),
-            RegistersReference(name="General Registers", stackFrame=self, group="general"),
+            ScopesReference(
+                name="Args", stackFrame=self, symbolValueReader=argsValueReader
+            ),
+            ScopesReference(
+                name="Locals", stackFrame=self, symbolValueReader=localsValueReader
+            ),
+            RegistersReference(
+                name="General Registers", stackFrame=self, group="general"
+            ),
             RegistersReference(name="MMX Registers", stackFrame=self, group="mmx"),
             RegistersReference(name="SSE Registers", stackFrame=self, group="sse"),
-            RegistersReference(name="Vector Registers", stackFrame=self, group="vector"),
+            RegistersReference(
+                name="Vector Registers", stackFrame=self, group="vector"
+            ),
         ]
 
     def contents(self):
@@ -136,9 +164,9 @@ def frame_top_block(frame):
 
 # we have to wrap this. Because this gets called in a loop where `value` is created on each iteration
 # For some reason, Python, in it's infinite wisdom, make that value be overwritten to be the same in every lambda
-def create_deferred_scopes_ref(name, value):
+def create_deferred_scopes_ref(name, value, evaluateRoot):
     return VariableValueReference(
-        name=name, type=value.type, value_getter=lambda: value, addr=value.address
+        name=name, type=value.type, value_getter=lambda: value, addr=value.address, evaluateName=evaluateRoot
     )
 
 
@@ -155,23 +183,24 @@ def field_name(field):
 
 # we have to wrap this. Because this gets called in a loop where `value[field]` is created on each iteration
 # For some reason, Python, in it's infinite wisdom, make that value[field] be overwritten to be the same in every lambda
-def create_deferred_var_ref(type, field, parent_value, address):
+def create_deferred_var_ref(type, field, parent_value, address, evaluateName=None):
     return VariableValueReference(
         name=field_name(field),
         type=type,
         value_getter=lambda: parent_value[field],
         addr=address,
+        evaluateName=evaluateName
     )
 
 
-def create_eager_var_ref(name, value):
+def create_eager_var_ref(name, value, evaluateName):
     return VariableValueReference(
-        name=name, type=value.type, value_getter=lambda: value, addr=value.address
+        name=name, type=value.type, value_getter=lambda: value, addr=value.address, evaluateName=evaluateName
     )
 
 
 # Create UI data for a value that is not VariableReference'able (i.e. VariableReference = 0)
-def value_ui_data(name, value):
+def value_ui_data(name, value, evaluateName=None):
     memoryReference = None
     if hasattr(value, "address") and value.address is not None:
         memoryReference = hex(int(value.address))
@@ -184,7 +213,7 @@ def value_ui_data(name, value):
         "name": name,
         "value": "{}".format(value),
         "type": varType,
-        "evaluateName": None,
+        "evaluateName": evaluateName,
         "variablesReference": 0,
         "namedVariables": None,
         "indexedVariables": None,
@@ -198,12 +227,13 @@ def value_ui_data(name, value):
 # refers to actual *variables* and their "children" we have to name it VariableValueReference to make
 # any distinction between this and the base class
 class VariableValueReference(VariablesReference):
-    def __init__(self, name, type, value_getter, addr):
+    def __init__(self, name, type, value_getter, addr, evaluateName):
         super(VariableValueReference, self).__init__(name)
         self.type = type
         self.value_getter = value_getter
         self.value_cache = None
         self.addr = addr
+        self.evaluateName = evaluateName
 
     def is_dereffable_non_primitive(self):
         return self.value_cache.type.code == gdb.TYPE_CODE_PTR and can_var_ref_type(
@@ -225,11 +255,12 @@ class VariableValueReference(VariablesReference):
 
     def ui_data(self):
         addr = hex(int(self.addr)) if self.addr is not None else None
+        evalName = self.evaluateName
         return {
             "name": self.name,
             "value": f"{self.type}",
             "type": f"{self.type.name}",
-            "evaluateName": None,
+            "evaluateName": evalName,
             "variablesReference": self.id,
             "namedVariables": None,
             "indexedVariables": None,
@@ -240,11 +271,12 @@ class VariableValueReference(VariablesReference):
         res = []
         if hasattr(pp, "children"):
             for name, val in pp.children():
+                evalName = f"(({val.type}*){val.address})" if self.evaluateName is not None else None
                 if can_var_ref(val):
-                    ref = create_eager_var_ref(name=name, value=val)
+                    ref = create_eager_var_ref(name=name, value=val, evaluateName=evalName)
                     res.append(ref.ui_data())
                 else:
-                    res.append(value_ui_data(name, val))
+                    res.append(value_ui_data(name, val, evaluateName=evalName))
         else:
             v = pp.to_string()
             # If to_string returns a lazy string, we want to get the actual string.
@@ -261,16 +293,18 @@ class VariableValueReference(VariablesReference):
         for field in members(value):
             if can_var_ref_type(field.type):
                 # since we defer creating values for the members, we calculate actual address in memory by
-                # offset of the member inside the type.
+                # offset of the member inside the type.ja
                 if hasattr(field, "bitpos") and value.address is not None:
                     addr = int(value.address) + (int(field.bitpos) / 8)
                 else:
                     # Is a static member
                     addr = None
-                ref = create_deferred_var_ref(field.type, field, value, addr)
+                evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
+                ref = create_deferred_var_ref(field.type, field, value, addr, evaluateName=evalName)
                 res.append(ref.ui_data())
             else:
-                res.append(value_ui_data(field.name, value[field]))
+                evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
+                res.append(value_ui_data(field.name, value[field], evaluateName=evalName))
         return res
 
     def contents_array(self, value, format, start, count):
@@ -278,11 +312,13 @@ class VariableValueReference(VariablesReference):
         target_type = value.type.strip_typedefs().target()
         res = []
         for n in range(lo, high+1):
+            evaluateName = f"*({self.evaluateName}+{n})@1" if self.evaluateName is not None else None
             if can_var_ref_type(target_type):
-                ref = create_deferred_var_ref(target_type, n, value, None)
+                ref = create_deferred_var_ref(target_type, n, value, None, evaluateName=evaluateName)
                 res.append(ref.ui_data())
             else:
-                res.append(value_ui_data(f"[{n}]", value[n]))
+                sub_value = value[n]
+                res.append(value_ui_data(f"@{n}", sub_value, evaluateName))
         return res
 
     def contents(self, format=None, start=None, count=None):
@@ -317,12 +353,12 @@ class VariableValueReference(VariablesReference):
         )
 
 
-def opt_out(symbol):
+def opt_out(name, type):
     return {
-        "name": symbol.name,
+        "name": name,
         "value": "<optimized out>",
-        "type": f"{symbol.type}",
-        "evaluateName": symbol.name,
+        "type": f"{type}",
+        "evaluateName": name,
         "variablesReference": 0,
         "namedVariables": None,
         "indexedVariables": None,
@@ -341,22 +377,22 @@ class ScopesReference(VariablesReference):
     def contents(self, format=None, start=None, count=None):
         frame = self.stack_frame.frame()
         res = []
-        for symbol, value in self.symbolValueReader(frame):
+        for name, type, evaluateName, value in self.symbolValueReader(frame):
             if value.is_optimized_out:
-                res.append(opt_out(symbol))
+                res.append(opt_out(name, type))
                 continue
 
             if can_var_ref(value):
-                ref = create_deferred_scopes_ref(name=symbol.name, value=value)
+                ref = create_deferred_scopes_ref(name=name, value=value, evaluateRoot=evaluateName)
                 res.append(ref.ui_data())
             else:
                 address = hex(int(value.address)) if value.address is not None else None
                 res.append(
                     {
-                        "name": symbol.name,
+                        "name": name,
                         "value": "{}".format(value),
-                        "type": f"{symbol.type}",
-                        "evaluateName": symbol.name,
+                        "type": f"{type}",
+                        "evaluateName": evaluateName,
                         "variablesReference": 0,
                         "namedVariables": None,
                         "indexedVariables": None,
@@ -376,27 +412,6 @@ class ScopesReference(VariablesReference):
         )
 
 
-def frame_args(frame):
-    block = frame_top_block(frame)
-    for symbol in block:
-        if symbol.is_argument and not (
-            symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
-        ):
-            yield (symbol, frame.read_var(symbol, block))
-
-
-
-def frame_variables(frame):
-    block = frame.block()
-    while not block.is_static:
-        for symbol in block:
-            if symbol.is_variable and not (
-                symbol.addr_class == gdb.SYMBOL_LOC_OPTIMIZED_OUT
-            ):
-                yield (symbol, frame.read_var(symbol, block))
-        block = block.superblock
-
-
 class RegistersReference(VariablesReference):
     def __init__(self, name, stackFrame, group):
         super(RegistersReference, self).__init__(name)
@@ -409,7 +424,7 @@ class RegistersReference(VariablesReference):
         for reg in frame.architecture().registers(self.group):
             value = frame.read_register(reg)
             if can_var_ref(value):
-                ref = create_eager_var_ref(reg.name, value)
+                ref = create_eager_var_ref(reg.name, value, None)
                 res.append(ref.ui_data())
             else:
                 res.append({ "name": reg.name, "value": f"{value}", "variablesReference": 0 })

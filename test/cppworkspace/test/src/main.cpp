@@ -226,6 +226,7 @@ struct Bar_ {
 struct Quux {
   int a, b;
   const Foo& foo_ref;
+  int array[3];
 };
 
 int main(int argc, const char **argv) {
@@ -238,7 +239,7 @@ int main(int argc, const char **argv) {
   Foo foo_{};
   // test that the DAP implementation returns correct (at least from user perspective) values in
   // variables & watch variables list
-  Quux q{.a = 1, .b = 2, .foo_ref = foo_ };
+  Quux q{.a = 1, .b = 2, .foo_ref = foo_, .array = {9, 8, 7}};
   Bar_ ba{};
   std::string foostring{"foobarbaz asadasdasasdsadasd"};
   std::map<int, std::string> mumbojumbo{};

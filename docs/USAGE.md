@@ -27,22 +27,10 @@ a debugging session and click "Toggle hex formatting":
 
 ![Toggle hex](./toggle_hex.gif)
 
-## Watch variable subscript
+## Watch variables
 
-This feature has been disabled for now. For normal pointers, you can use `foo[0]@10` to get 10 elements of foo (starting at position 0) - i.e. the same way you would, using GDB from the command line. Due to re-factor, subscripting into pretty printed values has been disabled to be able to re-introduce it in newer versions. Documentation is left in, as I expect this feature to work exactly the same in future versions.
-
-The best approach to analyze arrays (of type `T[]`) using Midas debug adapter is to add them to the watch variables list with the desired range. This is achieved by writing
-`foo[N:M]` (or `foo[N]` for single elements). VSCode currently does not honor the "paging" of variables but even if it did, this is still the preferable approach, since paging in variables still would mean you would have to expand until you reach `N:M`.
-
-![Example of subscript watch variable](./watch_variable_subscript.png)
-
-This feature comes with some limitations and can even cause GDB to hang due to how pretty printers work. This is described in [bugs](./BUGS.MD). If it does, use the `cancel` command described below.
-Pretty printers read values from the type, and thus, if the user enters a range of values where some doesn't exist, the Python Pretty printer might interpret arbitrary data as that type
-and can produce all kinds of strange behaviors, like for instance thinking a `std::vector` has billions of elements.
-
-This feature is _particularly_ useful in use with variable length types. Below is an example from working on some GDB code:
-
-![Another example of subscript operator](./gdb_variable_length_struct.png)
+To add a contiguous set of variables to to watch (for instance they're behind some pointer or array), the syntax is the same as in GDB's command line: `*foo@10` (dereference foo and take 10 elements).
+![Here's an example](./array-vars.gif)
 
 ## Debug Console - Midas Specific commands
 

@@ -8,6 +8,7 @@ import sys
 import random
 import string
 import threading
+import re
 
 # Decorator functions
 import functools
@@ -34,6 +35,7 @@ from variables_reference import (
     StackFrame,
     clear_variable_references,
     create_eager_var_ref,
+    frame_variables
 )
 
 
@@ -54,6 +56,7 @@ watchpoints = {}
 singleThreadControl = False
 responsesQueue = Queue()
 eventsQueue = Queue()
+currentReturnValue = {}
 
 session = None
 eventSocketPath = "/tmp/midas-events"
@@ -258,7 +261,7 @@ def evaluate(args):
         try:
             value = gdb.parse_and_eval(args["expression"])
             if can_var_ref(value):
-                ref = create_eager_var_ref(args["expression"], value)
+                ref = create_eager_var_ref(args["expression"], value, args["expression"])
                 res = ref.ui_data()
                 res["result"] = res.pop("value")
                 return res
@@ -289,18 +292,42 @@ def threads_request(args):
         res.append({"id": t.global_num, "name": f"{thr_name} (#{t.global_num})"})
     return {"threads": res}
 
+def artificial_values(thread):
+    global currentReturnValue
+    rv = currentReturnValue.get(thread)
+    if rv is not None:
+        # artificial values will have no evaluateName.
+        yield ("(Return Value)", rv.type, None, rv)
+
+
+def locals_with_artificials(frame, thread):
+    for (a,b,c,d) in frame_variables(frame):
+        yield (a,b,c,d)
+
+    for (a,b,c,d) in artificial_values(thread):
+        yield (a,b,c,d)
+
 
 @request("stackTrace", Args(["threadId"], ["levels", "startFrame"]))
 def stacktrace(args):
+    global currentReturnValue
     res = []
     thread = select_thread(args["threadId"])
+    addReturnValue = currentReturnValue.get(thread.global_num) is not None
     for frame in iterate_frames(
         frame=gdb.newest_frame(),
         count=args.get("levels"),
         start=args.get("startFrame"),
     ):
-        sf = StackFrame(frame, thread)
-        res.append(sf.contents())
+        sf = None
+        if addReturnValue:
+            # override localsValueReader to also provide a 'Return value' in 'Locals' scope.
+            sf = StackFrame(frame, thread, localsValueReader=lambda frame: locals_with_artificials(frame, thread.global_num))
+            addReturnValue = False
+            res.append(sf.contents())
+        else:
+            sf = StackFrame(frame, thread)
+            res.append(sf.contents())
     return {"stackFrames": res}
 
 
@@ -763,6 +790,10 @@ def set_bps(args):
             )
             if bp_key in previous_bp_state:
                 breakpoints[path][bp_key] = previous_bp_state[bp_key]
+            elif bp_req.get("logMessage") is not None:
+                bp = LogPoint(source=path, line=int(bp_req.get("line")),logString=bp_req.get("logMessage"))
+                bp.condition = bp_req.get("condition")
+                breakpoints[path][bp_key] = bp
             else:
                 bp = gdb.Breakpoint(source=path, line=int(bp_req.get("line")))
                 bp.condition = bp_req.get("condition")
@@ -928,8 +959,15 @@ def step_in(args):
 
 @request("stepOut", Args(["threadId"], ["singleThread", "granularity"]))
 def step_out(args):
+    global logger
     select_thread(args["threadId"])
-    gdb.execute("finish")
+    gdb.FinishBreakpoint(gdb.selected_frame())
+    if singleThreadControl:
+      gdb.execute("continue")
+    else:
+      cmd = "continue -a" if singleThreadControl else "continue"
+      gdb.execute(cmd)
+
     return {}
 
 
@@ -975,6 +1013,33 @@ def event_thread():
         packet = prep_event(seq, res)
         seq += 1
         event_connection.sendall(bytes(packet, "utf-8"))
+
+interpolationPattern = r'\{([^}]+)\}'
+
+class LogPoint (gdb.Breakpoint):
+    def __init__(self, source, line, logString):
+        super(LogPoint, self).__init__(source=source, line=line)
+        global interpolationPattern
+        self.logString = logString
+        self.evaluations = [(match.group(1), match.start(), match.end()) for match in re.finditer(interpolationPattern, logString)]
+
+    def stop (self):
+        buffer = StringIO()
+        current_start = 0
+        try:
+          for (expr, start, end) in self.evaluations:
+              value = gdb.parse_and_eval(expr)
+              buffer.write(self.logString[current_start:start])
+              buffer.write(f"{value}")
+              current_start = end
+
+          buffer.write(self.logString[current_start:])
+          buffer.write("\n")
+          buffer.flush()
+          send_event("output", { "category": "console", "output": buffer.getvalue() })
+        except Exception as e:
+          send_event("output", { "category": "console", "output": f"Exception in logpoint: {e}" })
+        return False
 
 
 def send_event(evt, body):
@@ -1179,6 +1244,8 @@ def ensure_stopped_handler_last(evt):
 
 def continued_event(evt):
     ensure_stopped_handler_last(evt)
+    global currentReturnValue
+    currentReturnValue.clear()
     send_event(
         "continued",
         {
@@ -1193,11 +1260,12 @@ def continued_event(evt):
 gdb.events.new_objfile.connect(ensure_stopped_handler_last)
 gdb.events.new_inferior.connect(ensure_stopped_handler_last)
 
-
 def stopped(evt):
     global exceptionInfos
     global exceptionBreakpoints
     global singleThreadControl
+    global currentReturnValue
+    stoppedThread = evt.inferior_thread if evt.inferior_thread is not None else gdb.selected_thread()
     body = {
         "threadId": gdb.selected_thread().global_num,
         "allThreadsStopped": not singleThreadControl,
@@ -1217,6 +1285,8 @@ def stopped(evt):
                     }
                     exceptionInfos[gdb.selected_thread().global_num] = exc_info
             body["reason"] = "exception"
+        if isinstance(evt.breakpoint, gdb.FinishBreakpoint):
+            currentReturnValue[stoppedThread.global_num] = evt.breakpoint.return_value
     elif isinstance(evt, gdb.SignalEvent):
         exc_info = {
             "exceptionId": f"{evt.stop_signal}",
@@ -1272,14 +1342,22 @@ gdb.events.new_thread.connect(
 
 gdb.events.cont.connect(continued_event)
 
-gdb.events.breakpoint_created.connect(
-    lambda bp: send_event("breakpoint", {"reason": "new", "breakpoint": bp_to_ui(bp)})
-)
-gdb.events.breakpoint_modified.connect(
-    lambda bp: send_event(
-        "breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)}
-    )
-)
+
+def bkpt_created(bp):
+    if not isinstance(bp, gdb.FinishBreakpoint):
+        send_event("breakpoint", {"reason": "new", "breakpoint": bp_to_ui(bp)})
+
+
+gdb.events.breakpoint_created.connect(bkpt_created)
+
+
+def bkpt_modified(bp):
+    if not isinstance(bp, gdb.FinishBreakpoint):
+        send_event("breakpoint", {"reason": "changed", "breakpoint": bp_to_ui(bp)})
+
+
+gdb.events.breakpoint_modified.connect(bkpt_modified)
+
 
 # thread_exited event doesn't exist in version 13.2, but will exist in future versions
 if hasattr(gdb.events, "thread_exited"):
