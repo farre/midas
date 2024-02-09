@@ -207,7 +207,7 @@
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB. If Midas stops working - set this to false.",
-                "default": false
+                "default": true
               },
               "program": {
                 "type": "string",
@@ -308,7 +308,7 @@
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB",
-                "default": false
+                "default": true
               },
               "pid": {
                 "type": "string",
@@ -484,7 +484,7 @@
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB",
-                "default": false
+                "default": true
               },
               "trace": {
                 "type": [
