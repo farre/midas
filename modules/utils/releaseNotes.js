@@ -11,17 +11,59 @@ class Version {
     this.major = major;
     this.minor = minor;
     this.patch = patch;
-    this.pre = +minor % 2 == 1;
   }
 
   toString() {
-    return this.pre
+    return this.isPreRelease()
       ? `${this.major}.pre${+this.minor + 1}.patch${this.patch}`
       : `${this.major}.${this.minor}.${this.patch}`;
   }
 
   includePreRelease() {
-    return new Version(this.major, !this.pre ? this.minor - 1 : this.minor, 0);
+    return new Version(this.major, this.isPreRelease() ? this.minor : this.minor - 1, 0);
+  }
+
+  previousRelease() {
+    let { minor, major, patch } = this;
+    if (minor - 1 < 0) {
+      major = Math.max(major - 1, 0);
+      minor = Number.MAX_SAFE_INTEGER;
+      patch = Number.MAX_SAFE_INTEGER;
+    } else {
+      --minor;
+      patch = Number.MAX_SAFE_INTEGER;
+    }
+
+    return new Version(major, minor, patch);
+  }
+
+  isPreRelease() {
+    return !!(+this.minor % 2);
+  }
+
+  compare(other) {
+    const order = ["major", "minor", "patch"];
+    let res = 0;
+    for (let ord of order) {
+      res = Math.sign(this[ord] - other[ord]);
+      if (res) {
+        return res;
+      }
+    }
+
+    return res;
+  }
+
+  equal(other) {
+    return !this.compare(other);
+  }
+
+  greater(other) {
+    return this.compare(other) > 0;
+  }
+
+  less(other) {
+    return this.compare(other) < 0;
   }
 }
 
@@ -30,22 +72,12 @@ function toVersion(version) {
   return new Version(major, minor, patch);
 }
 
-function compare(version, other) {
-  let order = ["major", "minor", "patch"];
-  let res = 0;
-  for (let ord of order) {
-    res = Math.sign(version[ord] - other[ord]);
-    if (res) {
-      return res;
-    }
+async function findReleaseNotes(folder, version, previous) {
+  let decoder = new TextDecoder();
+  if (previous.isPreRelease()) {
+    previous = previous.previousRelease();
   }
 
-  return res;
-}
-
-async function findReleaseNotes(folder, version) {
-  let decoder = new TextDecoder();
-  const preVersion = version.includePreRelease();
   let files = (await vscode.workspace.fs.readDirectory(folder))
     .filter(([name, type]) => {
       if (type != vscode.FileType.File) {
@@ -53,11 +85,11 @@ async function findReleaseNotes(folder, version) {
       }
 
       const fileVersion = toVersion(name);
-      return compare(version, fileVersion) > -1 && compare(fileVersion, preVersion) > -1;
+      return !version.less(fileVersion) && fileVersion.greater(previous);
     })
     .map(([fileName]) => fileName);
 
-  files.sort((x, y) => compare(toVersion(y), toVersion(x)));
+  files.sort((x, y) => toVersion(y).compare(toVersion(x)));
 
   let content = files.map(async (fileName) => {
     let filePath = vscode.Uri.joinPath(folder, fileName);
@@ -83,17 +115,21 @@ function addReleaseNote(entry, notes) {
   return entry;
 }
 
-async function getReleaseNotes() {
+async function getReleaseNotes(from, to) {
+  let version = toVersion(to);
+  let previous = from ? toVersion(from) : version.previousRelease();
+  if (previous.equal(version)) {
+    previous = previous.previousRelease();
+  }
   let extension = vscode.extensions.getExtension("farrese.midas");
-  let version = toVersion(extension.packageJSON.version);
   let extensionPath = extension.extensionUri.fsPath;
   let notesPath = vscode.Uri.file(path.normalize(path.join(extensionPath, "release_notes")));
-  let entries = await findReleaseNotes(notesPath, version);
+  let entries = await findReleaseNotes(notesPath, version, previous);
 
   let releaseNotes = entries.reduceRight(
     (accumulator, current) => {
-      if (compare(current.version, accumulator.version) > 0) {
-        if (Object.keys(accumulator.entry).length && !accumulator.version.pre) {
+      if (current.version.compare(accumulator.version) > 0) {
+        if (Object.keys(accumulator.entry).length && !accumulator.version.isPreRelease()) {
           accumulator.notes.unshift({ ...accumulator.entry, version: accumulator.version });
           accumulator.entry = {};
         }
