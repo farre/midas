@@ -76,7 +76,7 @@ class Tool {
   errors() { return this.error; }
 
   errorMessage() {
-    return `could not find any of '${this.error.map(v => v.variant).join(", ")}' on $PATH. One of these are required to be installed on your system`
+    return `could not find any of '${ToolList[this.name].variants.join(", ")}' on $PATH. One of these are required to be installed on your system`
   }
 }
 
