@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.22.1",
+  "version": "0.22.2",
   "engines": {
     "vscode": "^1.74.0"
   },
