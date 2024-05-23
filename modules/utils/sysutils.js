@@ -74,13 +74,20 @@ function whereis(binary) {
  * Executes `command` using sudo
  * @param {string[]} command - command to execute in sudo. Command and parameters passed as an array
  * @param {string} pass - password to sudo
+ * @param {(...args: any[]) => void} exitCodeCallback - callback that runs on process exit
  * @returns
  */
-async function sudo(command, pass) {
+async function sudo(command, pass, exitCodeCallback = null) {
   try {
     let _sudo = await which("sudo");
     const args = ["-S", ...command];
     let sudo = _spawn(_sudo, args, { stdio: "pipe", shell: true, env: sanitizeEnvVariables() });
+    sudo.on("error", (code) => {
+      throw new Error(`Sudo failed`);
+    })
+    if(exitCodeCallback != null) {
+      sudo.on("exit", exitCodeCallback);
+    }
     sudo.stderr.on("data", (data) => {
       if (data.includes("[sudo]")) {
         sudo.stdin.write(pass + "\n");

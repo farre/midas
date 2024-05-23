@@ -76,6 +76,11 @@
         "shortTitle": "Format: Hex"
       },
       {
+        "command": "midas.zen-workaround",
+        "title": "Run RR Zen Workaround",
+        "shortTitle": "Zen Workaround"
+      },
+      {
         "command": "midas.issue-report",
         "title": "Midas: Create github issue log",
         "shortTitle": "Midas: Create github issue log"

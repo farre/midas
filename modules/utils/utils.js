@@ -705,7 +705,7 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
       async (progressReporter, token) => {
         return new Promise(async (progress_resolve, reject) => {
           if(build_path == null)
-            build_path = getAPI().get_storage_path_of(`rr-${version}`);
+            build_path = getAPI().getStoragePathOf(`rr-${version}`);
           unzipTodir(unzip, path, build_path, logger);
           await cmakeConfigure(cmake, build_path, has_ninja, logger).then(() => {
             const cmake_build = _spawn(cmake, ["--build", build_path, "-j"], {
@@ -728,7 +728,7 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
               if (code == 0) {
                 logger.appendLine(`Build completed successfully...`);
                 progress_resolve({
-                  install_dir: getAPI().get_storage_path_of(`rr-${version}`),
+                  install_dir: getAPI().getStoragePathOf(`rr-${version}`),
                   build_dir: build_path,
                   path: `${build_path}/bin/rr`,
                   version,
@@ -761,7 +761,7 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
 }
 
 async function getRR() {
-  const rr = getAPI().get_toolchain().rr;
+  const rr = getAPI().getToolchain().rr;
   // We let midas figure this shit out at boot up instead. double installing requires extra error handling as it will fail due to dirs
   // existing etc;
   if(rr.managed) {
@@ -771,7 +771,7 @@ async function getRR() {
       "No"
     );
     if (choice == "Yes") {
-      await getAPI().updateRR();
+      await getAPI().updateRr();
     }
 
     return;
@@ -849,7 +849,7 @@ async function getRR() {
         else {
           vscode.window.showInformationMessage("Installation succeeded");
           const { git, install_dir, managed,path, version } = res;
-          getAPI().write_rr({root_dir: install_dir, git, managed, path, version});
+          getAPI().writeRr({root_dir: install_dir, git, managed, path, version});
         }
       } catch(err) {
         console.log(`[Exception ${err.type}]: ${err.message}`);
@@ -958,7 +958,7 @@ function resolveLatestVersion(arch) {
  * @returns {Promise<{path: string, status: "success" | "cancelled" }>} `path` of saved file and `status` indicates if it
  */
 async function http_download(url, file_name) {
-  const path = getAPI().get_storage_path_of(file_name);
+  const path = getAPI().getStoragePathOf(file_name);
   if (fs.existsSync(path)) {
     fs.unlinkSync(path);
   }

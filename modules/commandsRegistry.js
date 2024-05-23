@@ -1,8 +1,8 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
-const { getPid, getVersion, isNothing, getRR, showReleaseNotes } = require("./utils/utils");
-const { getExtensionPathOf } = require("./utils/sysutils");
+const { getPid, getVersion, isNothing, getRR, showReleaseNotes, getAPI } = require("./utils/utils");
+const { getExtensionPathOf, sudo } = require("./utils/sysutils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -58,6 +58,22 @@ function getVSCodeCommands() {
 
   let toggleHexFormatting = registerCommand("midas.toggle-hex-formatting", (/** item */) => {
     vscode.debug.activeDebugSession.customRequest("toggle-hex")
+  });
+
+  const zenWorkaround = registerCommand("midas.zen-workaround", async (/** item */) => {
+    const path = require("path")
+    const fs = require("fs")
+    const script = path.join(getAPI().getToolchain().rr.root_dir, "rr-master", "scripts", "zen_workaround.py");
+    if(fs.existsSync(script)) {
+      let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
+      await sudo(["python", script], pass, (code) => {
+        if(code == 0) {
+          vscode.window.showInformationMessage("Zen Workaround is active");
+        } else {
+          vscode.window.showInformationMessage("Zen Workaround failed");
+        }
+      })
+    }
   });
 
   let runToEvent = registerCommand("midas.run-to-event", () => {
@@ -131,7 +147,8 @@ function getVSCodeCommands() {
     getRR_,
     showReleaseNotes_,
     toggleHexFormatting,
-    runToEvent
+    runToEvent,
+    zenWorkaround
   ];
 }
 

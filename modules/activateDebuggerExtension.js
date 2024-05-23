@@ -157,17 +157,17 @@ class MidasAPI {
   constructor(ctx) {
     this.#context = ctx;
 
-    if (!fs.existsSync(this.get_storage_path_of())) {
-      fs.mkdirSync(this.get_storage_path_of(), { recursive: true });
+    if (!fs.existsSync(this.getStoragePathOf())) {
+      fs.mkdirSync(this.getStoragePathOf(), { recursive: true });
     }
-    let cfg_path = this.get_storage_path_of(this.#CFG_NAME);
+    let cfg_path = this.getStoragePathOf(this.#CFG_NAME);
     if (!fs.existsSync(cfg_path)) {
       fs.writeFileSync(cfg_path, JSON.stringify(default_config_contents()));
     }
   }
 
-  setup_env_vars() {
-    const cfg = this.get_config();
+  setupEnvVars() {
+    const cfg = this.getConfig();
     if (!this.#toolchainAddedToEnv) {
       if (!strEmpty(cfg.toolchain.rr.path)) {
         const path = Path.dirname(cfg.toolchain.rr.path);
@@ -179,7 +179,7 @@ class MidasAPI {
   }
 
   maybeDisplayReleaseNotes() {
-    let cfg = sanitize_config(this.get_config());
+    let cfg = sanitize_config(this.getConfig());
     const recordedSemVer = parseSemVer(cfg.midas_version);
     const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
     if(semverIsNewer(currentlyLoadedSemVer, recordedSemVer)) {
@@ -191,7 +191,7 @@ class MidasAPI {
   #write_config(cfg) {
     try {
       const data = JSON.stringify(cfg, null, 2);
-      fs.writeFileSync(this.get_storage_path_of(this.#CFG_NAME), data);
+      fs.writeFileSync(this.getStoragePathOf(this.#CFG_NAME), data);
       console.log(`Wrote configuration ${data}`);
     } catch (err) {
       console.log(`Failed to write configuration. Error: ${err}`);
@@ -199,8 +199,8 @@ class MidasAPI {
   }
 
   /** @returns {MidasConfig} */
-  get_config() {
-    const cfg_path = this.get_storage_path_of(this.#CFG_NAME);
+  getConfig() {
+    const cfg_path = this.getStoragePathOf(this.#CFG_NAME);
     if (!fs.existsSync(cfg_path)) {
       let default_cfg = default_config_contents();
       default_cfg.midas_version = this.#context.extension.packageJSON["version"];
@@ -214,8 +214,8 @@ class MidasAPI {
   }
 
   /** @returns { Toolchain } */
-  get_toolchain() {
-    const cfg = this.get_config();
+  getToolchain() {
+    const cfg = this.getConfig();
     return cfg.toolchain;
   }
 
@@ -223,8 +223,8 @@ class MidasAPI {
    * Write RR settings to config file
    * @param { Tool } rr
    */
-  write_rr(rr) {
-    let cfg = this.get_config();
+  writeRr(rr) {
+    let cfg = this.getConfig();
     cfg.toolchain.rr = rr;
     this.#write_config(cfg);
   }
@@ -233,8 +233,8 @@ class MidasAPI {
    * Write GDB settings to config file
    * @param { Tool } gdb
    */
-  write_gdb(gdb) {
-    let cfg = this.get_config();
+  writeGdb(gdb) {
+    let cfg = this.getConfig();
     cfg.toolchain.gdb = gdb;
     this.#write_config(cfg);
   }
@@ -243,7 +243,7 @@ class MidasAPI {
    * Write Midas version to config file
    */
   serializeMidasVersion() {
-    let cfg = sanitize_config(this.get_config());
+    let cfg = sanitize_config(this.getConfig());
     cfg.midas_version = this.#context.extension.packageJSON["version"];
     this.#write_config(cfg);
   }
@@ -252,7 +252,7 @@ class MidasAPI {
    * @param {string | null} fileOrDir
    * @returns {string} - directory or file path in global storage
    */
-  get_storage_path_of(fileOrDir = null) {
+  getStoragePathOf(fileOrDir = null) {
     if (fileOrDir != null) {
       if (fileOrDir[0] == "/") {
         fileOrDir = fileOrDir.substring(1);
@@ -272,11 +272,11 @@ class MidasAPI {
    * @param { "rr" | "gdb" } tool
    * @returns { Promise<string?> }
    */
-  async resolve_tool_path(tool) {
+  async resolveToolPath(tool) {
     const cfg = vscode.workspace.getConfiguration("midas");
     if (!strEmpty(cfg.get(tool))) return cfg.get(tool);
 
-    const toolchain = this.get_toolchain();
+    const toolchain = this.getToolchain();
 
     if (!strEmpty(toolchain[tool].path)) return toolchain[tool].path;
 
@@ -286,7 +286,7 @@ class MidasAPI {
   }
 
   log() {
-    let cfg = this.get_config();
+    let cfg = this.getConfig();
     console.log(`Current settings: ${JSON.stringify(cfg, null, 2)}`);
   }
 
@@ -323,7 +323,7 @@ class MidasAPI {
   }
 
   async checkRRUpdates() {
-    const { rr } = this.get_toolchain();
+    const { rr } = this.getToolchain();
     if (rr.managed) {
       try {
         const { sha, date } = await queryGit();
@@ -334,7 +334,7 @@ class MidasAPI {
             .showInformationMessage("A newer version of RR can be built. Do you want to build it?", ...["yes", "no"])
             .then(async (res) => {
               if (res == "yes") {
-                await this.updateRR();
+                await this.updateRr();
               }
             });
         }
@@ -344,10 +344,10 @@ class MidasAPI {
     }
   }
 
-  async updateRR() {
+  async updateRr() {
     let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
     logger.show();
-    let cfg = this.get_toolchain();
+    let cfg = this.getToolchain();
     logger.appendLine(`Current toolchain: ${JSON.stringify(cfg)}`);
     const requiredTools = ["cmake", "python", "unzip"];
     const requirements = verifyPreRequistesExists(requiredTools);
@@ -369,7 +369,7 @@ class MidasAPI {
     for (const tool of requiredTools) {
       args[tool] = requirements[tool].path;
     }
-    const tmp_build_path = this.get_storage_path_of("rr-tmp-update");
+    const tmp_build_path = this.getStoragePathOf("rr-tmp-update");
     logger.appendLine(`Temporary RR build directory: ${tmp_build_path}`);
     try {
       await guessInstaller(args["python"], logger);
@@ -402,7 +402,7 @@ class MidasAPI {
       }
       fs.renameSync(build_dir, install_directory);
       cfg.rr = { root_dir: install_directory, version, git, managed, path: `${install_directory}/bin/rr` };
-      this.write_rr(cfg.rr);
+      this.writeRr(cfg.rr);
     } catch (ex) {
       logger.appendLine(`Couldn't update RR: ${ex}`);
       fs.rmSync(cfg.rr.root_dir, { force: true, recursive: true });
@@ -414,8 +414,8 @@ class MidasAPI {
  * Run first time midas runs.
  * @param { MidasAPI } api
  */
-async function init_midas(api) {
-  const cfg = api.get_config();
+async function initMidas(api) {
+  const cfg = api.getConfig();
   // the first time we read config, this will be empty.
   // this can't be guaranteed with vscode mementos. They just live their own life of which we
   // have 0 oversight over.
@@ -435,7 +435,7 @@ async function init_midas(api) {
       }
     }
   }
-  api.setup_env_vars();
+  api.setupEnvVars();
   api.maybeDisplayReleaseNotes();
   api.serializeMidasVersion();
 }
@@ -487,7 +487,8 @@ async function activateExtension(context) {
   registerRRType(context);
 
   global.API = new MidasAPI(context);
-  await init_midas(global.API);
+  await initMidas(global.API);
+
   await global.API.checkRRUpdates();
 }
 

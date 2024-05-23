@@ -27,13 +27,13 @@ const initializer = async (config) => {
     config.trace = "off";
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = await getAPI().resolve_tool_path("gdb");
+    config.gdbPath = await getAPI().resolveToolPath("gdb");
     if (config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };
     }
   }
   if (!config.hasOwnProperty("rrPath")) {
-    config.rrPath = await getAPI().resolve_tool_path("rr");
+    config.rrPath = await getAPI().resolveToolPath("rr");
     if (config.rrPath == undefined) {
       throw { type: InitExceptionTypes.RRNotFound };
     }
