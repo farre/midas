@@ -4,7 +4,7 @@ const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
-const { MidasDAPSession } = require("../gdb-dap/debugSession");
+const { GdbDAPSession } = require("../dap/gdb");
 
 const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -111,7 +111,7 @@ class DebugAdapterFactory {
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if(config["use-dap"]) {
       let terminal = null;
-      const midas_session = new MidasDAPSession(this.spawnConfig(config), terminal, null);
+      const midas_session = new GdbDAPSession(this.spawnConfig(config), terminal, null);
       return new vscode.DebugAdapterInlineImplementation(midas_session);
     } else {
       let dbg_session = new MidasDebugSession(true, false, fs, this.spawnConfig(config));

@@ -8,7 +8,7 @@ const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./init
 const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getAPI } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
-const { MidasDAPSession } = require("../gdb-dap/debugSession");
+const { GdbDAPSession } = require("../dap/gdb");
 const { getExtensionPathOf } = require("../utils/sysutils");
 
 const initializerPopupChoices = {
@@ -214,7 +214,7 @@ class RRDebugAdapterFactory {
           rrArgs
         );
         if (config["use-dap"]) {
-          let session = new MidasDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
+          let session = new GdbDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
           return new vscode.DebugAdapterInlineImplementation(session);
         } else {
           let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
@@ -229,7 +229,7 @@ class RRDebugAdapterFactory {
       term.sendText(cmd_str);
       term.show(true);
       if (config["use-dap"]) {
-        let dbg_session = new MidasDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
+        let dbg_session = new GdbDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } else {
         let dbg_session = new MidasDebugSession(
