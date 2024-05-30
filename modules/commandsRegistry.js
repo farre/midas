@@ -1,6 +1,7 @@
 "use strict";
 const { execSync } = require("child_process");
 const fs = require("fs");
+const path = require("path");
 const { getPid, getVersion, isNothing, getRR, showReleaseNotes, getAPI } = require("./utils/utils");
 const { getExtensionPathOf, sudo } = require("./utils/sysutils");
 /**
@@ -8,6 +9,7 @@ const { getExtensionPathOf, sudo } = require("./utils/sysutils");
  */
 const vscode = require("vscode");
 const { CustomRequests } = require("./debugSessionCustomRequests");
+const { ProvidedAdapterTypes } = require("./shared");
 const { registerCommand } = require("vscode").commands;
 
 /**
@@ -24,10 +26,22 @@ function getVSCodeCommands() {
 
     const config = vscode.workspace.getConfiguration("launch", vscode.workspace.workspaceFolders[0].uri);
     // retrieve values
+    const isMidasConfig = (cfg) => {
+      switch(cfg.type ?? "") {
+        case ProvidedAdapterTypes.Gdb:
+        case ProvidedAdapterTypes.RR:
+        case ProvidedAdapterTypes.Canonical:
+          return true;
+        default:
+          return false;
+      }
+    };
     const programs = config
       .get("configurations")
-      .filter((cfg) => (cfg.type == "midas" || cfg.type == "midas-rr" || cfg.type == "midas-gdb") && cfg.program !== undefined)
-      .map((cfg) => cfg.program.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath))
+      .filter(
+        (cfg) => isMidasConfig(cfg) && cfg.program !== undefined
+      )
+      .map((cfg) => cfg.program.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
     if (programs.length >= 1) {
       let program = await vscode.window.showQuickPick(programs, {
         canPickMany: false,
@@ -57,28 +71,26 @@ function getVSCodeCommands() {
   });
 
   let toggleHexFormatting = registerCommand("midas.toggle-hex-formatting", (/** item */) => {
-    vscode.debug.activeDebugSession.customRequest("toggle-hex")
+    vscode.debug.activeDebugSession.customRequest("toggle-hex");
   });
 
   const zenWorkaround = registerCommand("midas.zen-workaround", async (/** item */) => {
-    const path = require("path")
-    const fs = require("fs")
     const script = path.join(getAPI().getToolchain().rr.root_dir, "rr-master", "scripts", "zen_workaround.py");
-    if(fs.existsSync(script)) {
+    if (fs.existsSync(script)) {
       let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
       await sudo(["python", script], pass, (code) => {
-        if(code == 0) {
+        if (code == 0) {
           vscode.window.showInformationMessage("Zen Workaround is active");
         } else {
           vscode.window.showInformationMessage("Zen Workaround failed");
         }
-      })
+      });
     }
   });
 
   let runToEvent = registerCommand("midas.run-to-event", () => {
     vscode.debug.activeDebugSession.customRequest(CustomRequests.RunToEvent);
-  })
+  });
 
   const issueGithubReport = registerCommand("midas.issue-report", async () => {
     if (vscode.debug.activeDebugSession) {
@@ -130,7 +142,6 @@ function getVSCodeCommands() {
   });
 
   const getPid_ = registerCommand("midas.getPid", getPid);
-
   const getRR_ = registerCommand("midas.get-rr", getRR);
 
   const showReleaseNotes_ = registerCommand("midas.show-release-notes", showReleaseNotes);

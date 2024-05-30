@@ -4,7 +4,7 @@ const fs = require("fs");
 
 const { getFreeRandomPort } = require("../utils/netutils");
 const { tracePicked, getTraces, parseProgram, generateGdbInit } = require("../utils/rrutils");
-const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
+const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
 const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getAPI } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
@@ -32,6 +32,7 @@ const initializer = async (config) => {
       throw { type: InitExceptionTypes.GdbNotFound };
     }
   }
+  await gdbSettingsOk(config);
   if (!config.hasOwnProperty("rrPath")) {
     config.rrPath = await getAPI().resolveToolPath("rr");
     if (config.rrPath == undefined) {
@@ -122,6 +123,7 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
+
     } catch (err) {
       switch (err.type) {
         case InitExceptionTypes.GdbNotFound:

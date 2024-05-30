@@ -548,6 +548,7 @@ def initialize(args):
         Handler = LoggingCommandHandler
 
     return {
+        "supportsVariableType": True,
         "supportsConfigurationDoneRequest": True,
         "supportsFunctionBreakpoints": True,
         "supportsConditionalBreakpoints": True,

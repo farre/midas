@@ -82,5 +82,6 @@ class MidasRunMode {
 
 module.exports = {
   MidasRunMode,
-  debugLogging
+  debugLogging,
+  DebugLogging
 };

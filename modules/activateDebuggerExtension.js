@@ -4,8 +4,9 @@ const vscode = require("vscode");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
+const { MdbConfigurationProvider, MdbDebugAdapterFactory } = require("./providers/midas-canonical");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
-const { which, getExtensionPathOf } = require("./utils/sysutils");
+const { which } = require("./utils/sysutils");
 const {
   getRR,
   strEmpty,
@@ -21,8 +22,9 @@ const {
 } = require("./utils/utils");
 const fs = require("fs");
 const Path = require("path");
-const { debugLogging } = require("./buildMode");
+const { debugLogging, DebugLogging } = require("./buildMode");
 const { InstallerExceptions } = require("./utils/installerProgress");
+const { ProvidedAdapterTypes } = require("./shared");
 
 /** @typedef { { sha: string, date: Date } } GitMetadata */
 /** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } Tool */
@@ -80,12 +82,24 @@ class MidasDebugAdapterTracker {
   /**
    * The debug adapter is about to receive a Debug Adapter Protocol message from the editor.
    */
-  onWillReceiveMessage(message) {}
+  onWillReceiveMessage(message) {
+    if(message.command) {
+      this.logger.appendLine(`[REQ][${message.command}] ----> ${JSON.stringify(message)}`);
+    } else {
+      this.logger.appendLine(`[EVT][${message.event}] ----> ${JSON.stringify(message)}`);
+    }
+
+  }
   /**
    * The debug adapter has sent a Debug Adapter Protocol message to the editor.
    */
   onDidSendMessage(message) {
-    this.logger.appendLine(`Sent message: ${JSON.stringify(message)}`);
+    if(message.command) {
+      this.logger.appendLine(`[RES][${message.command}] <---- ${JSON.stringify(message)}\n`);
+    } else {
+      this.logger.appendLine(`[EVT][${message.event}] <---- ${JSON.stringify(message)}\n`);
+    }
+
   }
   /**
    * The debug adapter session is about to be stopped.
@@ -116,6 +130,14 @@ class MidasDebugAdapterTrackerFactory {
     this.outputChannel = null;
   }
 
+  initOutputChannel() {
+    if (this.outputChannel == null) {
+      this.outputChannel = getAPI().createLogger("Midas");
+    }
+    this.outputChannel.clear();
+    this.outputChannel.show();
+  }
+
   /**
    * The method 'createDebugAdapterTracker' is called at the start of a debug session in order
    * to return a "tracker" object that provides read-access to the communication between the editor and a debug adapter.
@@ -125,14 +147,24 @@ class MidasDebugAdapterTrackerFactory {
    */
   createDebugAdapterTracker(session) {
     const config = session.configuration;
-    const { trace } = debugLogging(config.trace);
-    if (!trace) return null;
+    switch (config.type) {
+      case ProvidedAdapterTypes.Canonical: {
+        if(config.debug?.logging?.dapMessages) {
+          this.initOutputChannel();
+          return new MidasDebugAdapterTracker(session, this.outputChannel);
+        }
+        break;
+      }
+      case ProvidedAdapterTypes.RR:
+      case ProvidedAdapterTypes.Gdb: {
+        const { trace } = debugLogging(config?.trace ?? DebugLogging.Off);
+        if (!trace) return null;
 
-    if (this.outputChannel == null) {
-      this.outputChannel = getAPI().createLogger("Midas");
+        this.initOutputChannel();
+        return new MidasDebugAdapterTracker(session, this.outputChannel);
+      }
     }
-    this.outputChannel.clear();
-    return new MidasDebugAdapterTracker(session, this.outputChannel);
+    return null;
   }
 }
 
@@ -182,7 +214,7 @@ class MidasAPI {
     let cfg = sanitize_config(this.getConfig());
     const recordedSemVer = parseSemVer(cfg.midas_version);
     const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
-    if(semverIsNewer(currentlyLoadedSemVer, recordedSemVer)) {
+    if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer ?? currentlyLoadedSemVer)) {
       showReleaseNotes();
     }
   }
@@ -440,8 +472,8 @@ async function initMidas(api) {
   api.serializeMidasVersion();
 }
 
-function registerMidasType(context) {
-  let provider = new ConfigurationProvider();
+function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, checkpointProvider = null) {
+  const provider = new ConfigConstructor();
   context.subscriptions.push(
     vscode.debug.registerDebugConfigurationProvider(
       provider.type,
@@ -449,29 +481,16 @@ function registerMidasType(context) {
       vscode.DebugConfigurationProviderTriggerKind.Dynamic
     )
   );
-  context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new DebugAdapterFactory())
-  );
-}
 
-function registerRRType(context) {
-  const cp_provider = new CheckpointsViewProvider(context);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(cp_provider.type, cp_provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    })
-  );
-  const rrProvider = new RRConfigurationProvider();
-  context.subscriptions.push(
-    vscode.debug.registerDebugConfigurationProvider(
-      rrProvider.type,
-      rrProvider,
-      vscode.DebugConfigurationProviderTriggerKind.Dynamic
-    )
-  );
-  context.subscriptions.push(
-    vscode.debug.registerDebugAdapterDescriptorFactory(rrProvider.type, new RRDebugAdapterFactory(cp_provider))
-  );
+  if (checkpointProvider != null) {
+    context.subscriptions.push(
+      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor(checkpointProvider))
+    );
+  } else {
+    context.subscriptions.push(
+      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor())
+    );
+  }
 }
 
 /**
@@ -483,8 +502,20 @@ async function activateExtension(context) {
 
   context.subscriptions.push(releaseNotesProvider());
 
-  registerMidasType(context);
-  registerRRType(context);
+  const checkpointProvider = new CheckpointsViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(checkpointProvider.type, checkpointProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
+  try {
+    registerDebuggerType(context, ConfigurationProvider, DebugAdapterFactory);
+    registerDebuggerType(context, RRConfigurationProvider, RRDebugAdapterFactory, checkpointProvider);
+    registerDebuggerType(context, MdbConfigurationProvider, MdbDebugAdapterFactory, checkpointProvider);
+  } catch (ex) {
+    console.log(`Failed to init Midas`);
+    throw ex;
+  }
 
   global.API = new MidasAPI(context);
   await initMidas(global.API);
