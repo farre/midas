@@ -40,8 +40,12 @@ class GdbSocket extends MidasCommunicationChannel {
     this.type = type;
   }
 
-  resolveInputDataChannel() {
-    return connect_socket(this.name, this.path, MAX_TRIES, 50);
+  /**
+   * @returns { Promise<import("./dap-utils").DataChannel> }
+  */
+  async resolveInputDataChannel() {
+    const sock = await connect_socket(this.name, this.path, MAX_TRIES, 50);
+    return { recv: sock, send: sock };
   }
 }
 
@@ -59,7 +63,8 @@ class GdbProcess extends DebuggerProcessBase {
   }
 
   sendRequest(req, args) {
-    this.commands_socket.write(serializeRequest(req.seq, req.command, args ?? req.arguments));
+    const output = serializeRequest(req.seq, req.command, args ?? req.arguments);
+    this.commands_socket.write(output);
   }
 
   /** overridden */
@@ -79,12 +84,12 @@ class GdbProcess extends DebuggerProcessBase {
 class GdbDAPSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
     super(GdbProcess, spawnConfig, terminal, checkpointsUI, null);
+    this.dbg.messages.on("initResponseSeen", () => {
+      // Deal with VSCode config sequence ordering problems
+      this.sendEvent(new InitializedEvent());
+    })
   }
 
-  /**
-   * @param {import("@vscode/debugprotocol").DebugProtocol.Response} response
-   * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeRequestArguments} args
-   */
   initializeRequest(response, args) {
     this.dbg
       .initialize()
@@ -93,19 +98,10 @@ class GdbDAPSession extends MidasSessionBase {
         args["rr-session"] = this.spawnConfig.isRRSession();
         args["rrinit"] = getExtensionPathOf("rrinit");
         super.initializeRequest(response, args);
-      })
-      .catch((err) => {
-        this.sendErrorResponse(response, { id: 0, format: `Failed to connect to DAP server: ${err}` });
+      }).catch(err => {
+        console.log(`FAILED TO CONNECT TO GDB`);
         throw err;
       })
-      .then(() => {
-        let init = new InitializedEvent();
-        this.sendEvent(init);
-      });
-  }
-
-  launchRequest(response, args, request) {
-    super.launchRequest(response, request, args);
   }
 
   attachRequest(response, args, request) {

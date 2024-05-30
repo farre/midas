@@ -295,6 +295,14 @@ class RemoteRRSpawnConfig extends SpawnConfig {
   get spawnType() { return "remote-rr"; }
 }
 
+class MdbSpawnConfig {
+  constructor(config) {
+    this.path = config.mdbPath ?? "mdb";
+    this.options = config.dbgArgs ?? []
+    this.debug = config.debug;
+  }
+}
+
 /**
  * Spawns a GDB instance with the settings provided by `spawnConfig`
  * @param { SpawnConfig } spawnConfig
@@ -318,4 +326,5 @@ module.exports = {
   RemoteRRSpawnConfig,
   // spawn command
   spawnGdb,
+  MdbSpawnConfig
 };

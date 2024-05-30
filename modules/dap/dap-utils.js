@@ -3,7 +3,7 @@
  * @typedef { import("./dap-base").Event | import("./dap-base").Response } DAPMessage
  * @typedef { ( eventName: string | symbol, listener: (...args: any[]) => void, ) => EventEmitter } EventSubscriber
  * @typedef { ( buffer: string | Uint8Array, cb?: (err?: Error) => void) => boolean } WriteFn
- * @typedef { { on: EventSubscriber, write: WriteFn } } DataChannel
+ * @typedef { { recv : { on: EventSubscriber }, send: { write: WriteFn }}} DataChannel
  * @typedef {{ start: number, end: number, all_received: boolean }} PacketBufferMetaData
  */
 
@@ -97,14 +97,15 @@ class MidasCommunicationChannel {
 
   async connect() {
     this.channel = await this.resolveInputDataChannel().then((channel) => {
-      channel.on("data", (data) => {
+      channel.recv.on("data", (data) => {
         const str = data.toString();
         this.buffer = this.buffer.concat(str);
         const packets = processBuffer(this.buffer).filter((i) => i.all_received);
         const { buffer: remaining_buffer, protocol_messages } = parseBuffer(this.buffer, packets);
         this.buffer = remaining_buffer;
         for (const msg of protocol_messages) {
-          this.emitter.emit(msg.type, msg);
+          const type = msg.type;
+          this.emitter.emit(type, msg);
         }
       });
       return channel;
@@ -112,7 +113,7 @@ class MidasCommunicationChannel {
   }
 
   write(data) {
-    this.channel.write(data, (err) => {
+    this.channel.send.write(data, (err) => {
       if (err) {
         console.error(`Failed to write ${data} to socket: ${err}`);
         throw err;

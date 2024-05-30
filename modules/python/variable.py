@@ -15,6 +15,7 @@ import itertools
 
 def vs_display(name: str,
                value: str,
+               type: str,
                evaluate_name: str,
                variable_reference: int,
                memoryReference = None,
@@ -23,6 +24,7 @@ def vs_display(name: str,
     return {
         "name": name,
         "value": value,
+        "type": type,
         "evaluateName": evaluate_name,
         "variablesReference": variable_reference,
         "namedVariables": namedVariables,
@@ -228,13 +230,14 @@ class Variable(ReferencedValue):
     def to_vs(self):
         v = self.get_value()
         if v.is_optimized_out:
-            return vs_display(name=self.name, value="<optimized out>", evaluate_name=None, variable_reference=0)
+            return vs_display(name=self.name, value="<optimized out>", type=f"{v.type}", evaluate_name=None, variable_reference=0)
 
         variableReference = self.get_variable_reference()
         # type is primitive
         if variableReference == 0:
             return vs_display(name=self.name,
                               value="{}".format(v),
+                              type=f"{v.type}",
                               evaluate_name=self.evaluateName,
                               variable_reference=variableReference,
                               memoryReference=self.memory_reference())
@@ -242,6 +245,7 @@ class Variable(ReferencedValue):
             # type is structured (or an array, etc)
             return vs_display(name=self.name,
                               value="{}".format(v.type),
+                              type=f"{v.type}",
                               evaluate_name=self.evaluateName,
                               variable_reference=variableReference,
                               memoryReference=self.memory_reference())
@@ -263,6 +267,7 @@ class BaseClass(ReferencedValue):
     def to_vs(self):
         return vs_display(name="(base)",
                           value="%s" % self.name,
+                          type=f"{self.name}",
                           evaluate_name=None,
                           variable_reference=self.get_variable_reference())
 
@@ -292,6 +297,7 @@ class StaticVariable(ReferencedValue):
     def to_vs(self):
         return vs_display(name="(static) %s" % self.name,
                           value=self.display,
+                          type=f"{self.display}",
                           evaluate_name="{}.{}".format(self.evaluateName, self.name),
                           variable_reference=self.get_variable_reference())
 
@@ -305,6 +311,7 @@ class StaticVariable(ReferencedValue):
             return [
                 vs_display(name="value",
                            value="{}".format(value),
+                           type=f"{value.type}",
                            evaluate_name=self.evaluateName,
                            variable_reference=0)
             ]

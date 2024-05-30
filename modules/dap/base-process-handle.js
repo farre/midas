@@ -9,12 +9,15 @@ class DebuggerProcessBase {
   /** @type { import("child_process").ChildProcessWithoutNullStreams } */
   #process = null;
 
-  constructor(path, spawnOptions) {
+  constructor(path, spawnOptions, debug) {
     // save it. For debug purposes, really.
     this.#path = path;
     this.options = spawnOptions;
+    this.debug = debug;
     try {
-      this.#process = spawn(this.path(), this.spawnArgs());
+      const p = this.path();
+      const args = this.spawnArgs();
+      this.#process = spawn(p, args);
     } catch (ex) {
       console.log(`Creating instance of ${path} failed: ${ex}`);
       // re-throw exception - this must be a hard error

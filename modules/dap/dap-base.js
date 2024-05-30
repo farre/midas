@@ -1,9 +1,7 @@
 const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
 const { commands, window } = require("vscode");
-const { InitializedEvent } = require("@vscode/debugadapter");
 const { CustomRequests } = require("../debugSessionCustomRequests");
-const { ContextKeys, uiSetAllStopComponent, toHexString, getAPI } = require("../utils/utils");
-const { getExtensionPathOf } = require("../utils/sysutils");
+const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
 
 /**
  *
@@ -48,70 +46,89 @@ class MidasSessionBase extends DebugSession {
     console.log(output);
   };
 
-  /**
-   * @type { SpawnConfig }
-   */
   spawnConfig;
   addressBreakpoints = [];
 
   /**
-   * @param { new (path: string, options: string[]) => DebuggerProcessBase } DebuggerProcessConstructor
+   * @param { new (path: string, options: string[], debug: Object) => DebuggerProcessBase } DebuggerProcessConstructor
    * @param { SpawnConfig } spawnConfig
    * @param { * } terminal
    * @param { * } checkpointsUI
    * @param { {response: (res: Response) => void, events: (evt: Event) => void } | null } callbacks
    */
   constructor(DebuggerProcessConstructor, spawnConfig, terminal, checkpointsUI, callbacks) {
-    super();
+    super(true, false);
     this.spawnConfig = spawnConfig;
     this.#checkpointsUI = checkpointsUI;
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.dbg = new DebuggerProcessConstructor(spawnConfig.path, spawnConfig?.options ?? []);
+    this.dbg = new DebuggerProcessConstructor(spawnConfig.path, spawnConfig?.options ?? [], spawnConfig?.debug);
     this.#terminal = terminal;
+    this.notifiedOfTermination = false;
 
-    if(callbacks) {
+    const { response, events } = callbacks ?? { response: null, events: null };
+
+    if(response) {
       this.dbg.connectResponse(callbacks.response);
-      this.dbg.connectEvents(callbacks.events);
     } else {
-      this.dbg.connectResponse((response) => {
-        if(!response.success) {
-          const err = (response.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-          console.log(`[request error]: ${response.command} failed\n${err}`);
+      this.dbg.connectResponse((res) => {
+        if(!res.success) {
+          const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
+          console.log(`[request error]: ${res.command} failed\n${err}`);
         }
-        switch(response.command) {
+        console.log(`response from debugger: ${JSON.stringify(res, null, 2)}`)
+        switch(res.command) {
+          case "initialize":
+            // some of the variants need to be notified that we've sent the init response
+            // so that we can be sure that VSCode sees that *before* it sees an InitEvent
+            this.sendResponse(res);
+            this.dbg.messages.emit("initResponseSeen", null);
+            return;
           case "variables":
-            this.performHexFormat(response.body.variables);
+            this.hexFormatAllVariables(res.body.variables);
             break;
           case CustomRequests.DeleteCheckpoint:
           case CustomRequests.SetCheckpoint:
-            this.#checkpointsUI.updateCheckpoints(response.body.checkpoints);
+            this.updateCheckpointsView(res.body.checkpoints ?? []);
             break;
         }
-        this.sendResponse(response);
+        this.sendResponse(res);
       });
+    }
 
+    if(events) {
+      this.dbg.connectEvents(callbacks.events);
+    } else {
       this.dbg.connectEvents((evt) => {
         const { event, body } = evt;
         switch (event) {
           case "exited":
-            this.sendEvent(new TerminatedEvent(false));
             this.emit("exit");
             break;
           case "output":
-            this.sendEvent(new OutputEvent(body.output, "console"));
-            break;
-          default:
-            this.sendEvent(evt);
+            this.routeEvent(new OutputEvent(body.output, "console"));
             break;
         }
+        this.sendEvent(evt);
       })
     }
-
 
     this.on("error", (event) => {
       this.sendEvent(new OutputEvent(event.body, "console", event));
     });
+
+
+    for(const evt of ["close", "disconnect", "error", "exit"]) {
+      this.dbg.process.on(evt, () => {
+        if(!this.notifiedOfTermination) {
+          this.sendEvent(new TerminatedEvent());
+          this.notifiedOfTermination = true;
+        }
+      })
+    }
+  }
+
+  routeEvent(event) {
 
   }
 
@@ -131,7 +148,7 @@ class MidasSessionBase extends DebugSession {
   }
 
   shutdown() {
-    console.log(`SHUTDOWN CALLED`);
+    super.shutdown();
   }
 
   /**
@@ -150,7 +167,7 @@ class MidasSessionBase extends DebugSession {
     }
   }
 
-  performHexFormat(variables) {
+  hexFormatAllVariables(variables) {
     if(this.formatValuesAsHex) {
       for(let v of variables) {
         if (!isNaN(v.value)) {
@@ -160,23 +177,16 @@ class MidasSessionBase extends DebugSession {
     }
   }
 
-  /**
-   * As per Mock debug adapter:
-   * The 'initialize' request is the first request called by the frontend
-   * to interrogate the features the debug adapter provides.
-   * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeResponse} response
-   * @param {import("@vscode/debugprotocol").DebugProtocol.InitializeRequestArguments} args
-   */
+  updateCheckpointsView(checkpoints) {
+    this.#checkpointsUI.updateCheckpoints(checkpoints);
+  }
+
+  // REQUESTS \\
+
   initializeRequest(response, args) {
     this.dbg.sendRequest({ seq: response.request_seq, command: response.command }, args);
   }
 
-  /**
-   * Called at the end of the configuration sequence.
-   * Indicates that all breakpoints etc. have been sent to the DA and that the 'launch' can start.
-   * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneResponse} response
-   * @param {import("@vscode/debugprotocol").DebugProtocol.ConfigurationDoneArguments} args
-   */
   configurationDoneRequest(response, args, request) {
     this.dbg.sendRequest(request, args);
   }
@@ -197,15 +207,10 @@ class MidasSessionBase extends DebugSession {
   }
 
   // eslint-disable-next-line no-unused-vars
-  setBreakPointsRequestPython(response, args, request) {
-    this.dbg.sendRequest(request, args);
-  }
-
-  // eslint-disable-next-line no-unused-vars
   dataBreakpointInfoRequest(response, args, request) {
     this.dbg.sendRequest(request, args);
   }
-  
+
   // eslint-disable-next-line no-unused-vars
   setDataBreakpointsRequest(response, args, request) {
     this.dbg.sendRequest(request, args);
@@ -253,6 +258,7 @@ class MidasSessionBase extends DebugSession {
   scopesRequest(response, args, request) {
     this.dbg.sendRequest(request);
   }
+
 
   virtualDispatch(...args) {
     let name;
@@ -436,7 +442,6 @@ class MidasSessionBase extends DebugSession {
    * @returns { number }
    */
   convertClientLineToDebugger(line) {
-    console.log("convertClientLineToDebugger called with " + line);
     return super.convertClientLineToDebugger(line);
   }
   /**
@@ -444,7 +449,6 @@ class MidasSessionBase extends DebugSession {
    * @returns {number}
    */
   convertDebuggerLineToClient(line) {
-    console.log("convertDebuggerLineToClient called with " + line);
     return super.convertDebuggerLineToClient(line);
   }
   /**
@@ -453,7 +457,6 @@ class MidasSessionBase extends DebugSession {
    * @returns {number}
    */
   convertClientColumnToDebugger(column) {
-    console.log("convertClientColumnToDebugger called with " + column);
     return super.convertClientColumnToDebugger(column);
   }
   /**
@@ -461,7 +464,6 @@ class MidasSessionBase extends DebugSession {
    * @returns {number}
    */
   convertDebuggerColumnToClient(column) {
-    console.log("convertDebuggerColumnToClient called with " + column);
     return super.convertDebuggerColumnToClient(column);
   }
   /**
@@ -469,7 +471,6 @@ class MidasSessionBase extends DebugSession {
    * @returns {string}
    */
   convertClientPathToDebugger(clientPath) {
-    console.log("convertClientPathToDebugger called with " + clientPath);
     return super.convertClientPathToDebugger(clientPath);
   }
 
@@ -479,7 +480,6 @@ class MidasSessionBase extends DebugSession {
    * @returns {string}
    */
   convertDebuggerPathToClient(debuggerPath) {
-    console.log("convertDebuggerPathToClient calledf with " + debuggerPath);
     return super.convertDebuggerPathToClient(debuggerPath);
   }
 

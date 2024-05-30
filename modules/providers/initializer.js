@@ -4,8 +4,18 @@ const InitExceptionTypes = {
   GdbNotFound: "GdbNotFound",
   GdbVersionUnknown: "GdbVersionUnknown",
   RRNotFound: "RRNotFound",
-  NullConfig: "NullConfig"
+  NullConfig: "NullConfig",
+  MdbNotFound: "MdbNotFound"
 };
+
+async function gdbSettingsOk(config) {
+  try {
+    const version = await getVersion(config.gdbPath);
+    requiresMinimum(version, { major: 9, minor: 1, patch: 0 });
+  } catch (e) {
+    throw { type: InitExceptionTypes.GdbVersionUnknown, message: `GDB Version could not be determined. ${e}` };
+  }
+}
 
 class ConfigurationProviderInitializer {
   /**
@@ -19,17 +29,11 @@ class ConfigurationProviderInitializer {
       throw { type: InitExceptionTypes.NullConfig, message: "No launch.json found" };
     }
     await initializer(config);
-    let version;
-    try {
-      version = await getVersion(config.gdbPath);
-    } catch (e) {
-      throw { type: InitExceptionTypes.GdbVersionUnknown, message: `GDB Version could not be determined. ${e}` };
-    }
-    requiresMinimum(version, { major: 9, minor: 1, patch: 0 });
   }
 }
 
 module.exports = {
   ConfigurationProviderInitializer,
-  InitExceptionTypes
+  InitExceptionTypes,
+  gdbSettingsOk
 };

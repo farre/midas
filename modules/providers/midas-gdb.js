@@ -1,8 +1,8 @@
 const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
-const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
+const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
+const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI, getVersion, requiresMinimum } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
 
@@ -22,6 +22,7 @@ const initializer = async (config) => {
       throw { type: InitExceptionTypes.GdbNotFound };
     }
   }
+  await gdbSettingsOk(config);
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
