@@ -42,12 +42,12 @@
 			]
 		},
 		{
-			"name": "Firefox",
+			"name": "MDB",
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/cx/mozilla-unified"
+				"/home/cx/dev/cx/dbm"
 			]
 		},
     {
