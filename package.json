@@ -209,6 +209,11 @@
         "configurationAttributes": {
           "launch": {
             "properties": {
+              "prettyPrinterPath": {
+                "type": "string",
+                "description": "Paths from where to import pretty printers",
+                "default": ""
+              },
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB. If Midas stops working - set this to false.",
@@ -485,7 +490,12 @@
         ],
         "configurationAttributes": {
           "attach": {
-            "properties": {
+          "properties": {
+              "prettyPrinterPath": {
+                "type": "string",
+                "description": "Paths from where to import pretty printers",
+                "default": ""
+              },
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB",
