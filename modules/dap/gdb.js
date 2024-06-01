@@ -4,7 +4,7 @@ const { InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 const { serializeRequest, MidasCommunicationChannel } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
-const { MidasSessionBase } = require("./dap-base");
+const DAP = require("./dap-base");
 
 const MAX_TRIES = 10;
 function connect_socket(name, path, attempts, attempt_interval) {
@@ -62,9 +62,8 @@ class GdbProcess extends DebuggerProcessBase {
     await this.events_socket.connect();
   }
 
-  sendRequest(req, args) {
-    const output = serializeRequest(req.seq, req.command, args ?? req.arguments);
-    this.commands_socket.write(output);
+  requestChannel() {
+    return this.commands_socket
   }
 
   /** overridden */
@@ -81,7 +80,7 @@ class GdbProcess extends DebuggerProcessBase {
   }
 }
 
-class GdbDAPSession extends MidasSessionBase {
+class GdbDAPSession extends DAP.MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
     super(GdbProcess, spawnConfig, terminal, checkpointsUI, null);
     this.dbg.messages.on("initResponseSeen", () => {

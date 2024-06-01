@@ -239,7 +239,12 @@ class MidasSessionBase extends DebugSession {
   }
 
   variablesRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);
+    if (this.formatValuesAsHex) {
+      args.format = { hex: true };
+    }
+    this.dbg.waitableSendRequest(request, args).then(response => {
+      this.sendResponse(response)
+    })
   }
 
   checkForHexFormatting(variablesReference, variables) {

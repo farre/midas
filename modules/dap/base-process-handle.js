@@ -1,5 +1,11 @@
 const { EventEmitter } = require("events");
 const { spawn } = require("child_process");
+const { serializeRequest } = require("./dap-utils");
+
+/**
+ * @typedef {import("@vscode/debugprotocol").DebugProtocol.Request } DAPRequest
+ * @typedef {import("@vscode/debugprotocol").DebugProtocol.Response } DAPResponse
+ */
 
 class DebuggerProcessBase {
   /** @type {EventEmitter} */
@@ -22,6 +28,11 @@ class DebuggerProcessBase {
       console.log(`Creating instance of ${path} failed: ${ex}`);
       // re-throw exception - this must be a hard error
       throw ex;
+    }
+
+    // @ts-ignore
+    if(this.requestChannel === undefined) {
+      throw new Error(`Derived type haven't provided 'comms' channel for which we send requests/recv responses over`);
     }
 
     this.messages = new EventEmitter();
@@ -62,7 +73,27 @@ class DebuggerProcessBase {
   }
 
   sendRequest(req, args) {
-    throw new Error("Derived must implement sendRequest");
+    const output = serializeRequest(req.seq, req.command, args ?? req.arguments);
+    this.requestChannel().write(output);
+  }
+
+  /**
+   * Callee can `await` on .waitableSendRequest(...)  for the response
+   * @param { import("./base-process-handle").DAPRequest } req
+   * @param {*} args
+   * @returns { Promise<import("./base-process-handle").DAPResponse> }
+   */
+  waitableSendRequest(req, args) {
+    return new Promise((resolve, reject) => {
+      this.messages.once(`${req.seq}`, (response) => {
+        resolve(response);
+      })
+      try {
+        this.sendRequest(req, args)
+      } catch(ex) {
+        reject(ex);
+      }
+    })
   }
 
   get process() {

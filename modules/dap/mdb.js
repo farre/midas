@@ -2,10 +2,9 @@
 "use strict";
 const { serializeRequest, MidasCommunicationChannel } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
-const { MidasSessionBase } = require("./dap-base");
+const DAP = require("./dap-base");
 const { CustomRequests } = require("../debugSessionCustomRequests");
 const { getAPI } = require("../utils/utils");
-const { InitializedEvent, InvalidatedEvent } = require("@vscode/debugadapter");
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -57,14 +56,12 @@ class MdbProcess extends DebuggerProcessBase {
     await this.socket.connect();
   }
 
-  sendRequest(req, args) {
-    const output = serializeRequest(req.seq, req.command, args ?? req.arguments);
-    console.log(`sending request: ${output}`);
-    this.socket.write(output);
+  requestChannel() {
+    return this.socket;
   }
 }
 
-class MdbSession extends MidasSessionBase {
+class MdbSession extends DAP.MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
     super(MdbProcess, spawnConfig, terminal, checkpointsUI, {
       // callbacks
@@ -99,13 +96,6 @@ class MdbSession extends MidasSessionBase {
   async initializeRequest(response, args) {
     await this.dbg.initialize();
     super.initializeRequest(response, args);
-  }
-
-  variablesRequest(response, args, request) {
-    if (this.formatValuesAsHex) {
-      args.format = { hex: true };
-    }
-    this.dbg.sendRequest(request, args);
   }
 }
 

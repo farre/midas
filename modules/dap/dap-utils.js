@@ -89,10 +89,22 @@ class MidasCommunicationChannel {
 
   constructor(name, emitter) {
     this.name = name;
+    /** @type { EventEmitter } */
     this.emitter = emitter;
     // TODO(simon): Do something much better. For now this is just easy enough, i.e. using a string.
     //  We *really* should do something better here. But until it becomes a problem, let's just be stupid here
     this.buffer = "";
+  }
+
+  /**
+   * If `waitableSendRequest` has been called, this will emit the response to the waiter.
+   * Otherwise it will be handled by the normal sendResponse routine
+   * @param {*} msg
+   */
+  reportResponse(msg) {
+    if(!this.emitter.emit(`${msg.request_seq}`, msg)) {
+      this.emitter.emit("response", msg);
+    }
   }
 
   async connect() {
@@ -105,7 +117,14 @@ class MidasCommunicationChannel {
         this.buffer = remaining_buffer;
         for (const msg of protocol_messages) {
           const type = msg.type;
-          this.emitter.emit(type, msg);
+          switch(type) {
+            case "response":
+              this.reportResponse(msg);
+              break;
+            default:
+              this.emitter.emit(type, msg);
+          }
+
         }
       });
       return channel;
