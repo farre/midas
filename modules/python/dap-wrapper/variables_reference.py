@@ -133,6 +133,9 @@ class StackFrame(VariablesReference):
             res.append(scope_res)
         return res
 
+def is_not_ref(val):
+    code = val.type.strip_typedefs().code
+    return not(code == gdb.TYPE_CODE_PTR or code == gdb.TYPE_CODE_REF)
 
 def is_primitive(type):
     return hasattr(type, "fields")
@@ -200,7 +203,17 @@ def create_eager_var_ref(name, value, evaluateName):
 
 
 # Create UI data for a value that is not VariableReference'able (i.e. VariableReference = 0)
-def value_ui_data(name, value, evaluateName=None):
+def value_ui_data(name, value, evaluateName=None, format=None):
+    displayValue = None
+    try:
+      if(format["hex"] and is_not_ref(value)):
+        displayValue = hex(value)
+      else:
+        displayValue = value
+    except:
+      displayValue = value
+
+
     memoryReference = None
     if hasattr(value, "address") and value.address is not None:
         memoryReference = hex(int(value.address))
@@ -211,7 +224,7 @@ def value_ui_data(name, value, evaluateName=None):
 
     return {
         "name": name,
-        "value": "{}".format(value),
+        "value": f"{displayValue}",
         "type": varType,
         "evaluateName": evaluateName,
         "variablesReference": 0,
@@ -276,7 +289,7 @@ class VariableValueReference(VariablesReference):
                     ref = create_eager_var_ref(name=name, value=val, evaluateName=evalName)
                     res.append(ref.ui_data())
                 else:
-                    res.append(value_ui_data(name, val, evaluateName=evalName))
+                    res.append(value_ui_data(name, val, evaluateName=evalName, format=format))
         else:
             v = pp.to_string()
             # If to_string returns a lazy string, we want to get the actual string.
@@ -304,7 +317,7 @@ class VariableValueReference(VariablesReference):
                 res.append(ref.ui_data())
             else:
                 evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
-                res.append(value_ui_data(field.name, value[field], evaluateName=evalName))
+                res.append(value_ui_data(field.name, value[field], evaluateName=evalName, format=format))
         return res
 
     def contents_array(self, value, format, start, count):
@@ -318,7 +331,7 @@ class VariableValueReference(VariablesReference):
                 res.append(ref.ui_data())
             else:
                 sub_value = value[n]
-                res.append(value_ui_data(f"@{n}", sub_value, evaluateName))
+                res.append(value_ui_data(f"@{n}", sub_value, evaluateName, format=format))
         return res
 
     def contents(self, format=None, start=None, count=None):
@@ -425,7 +438,7 @@ class RegistersReference(VariablesReference):
             value = frame.read_register(reg)
             if can_var_ref(value):
                 ref = create_eager_var_ref(reg.name, value, None)
-                res.append(ref.ui_data())
+                res.append(ref.ui_data(format))
             else:
                 res.append({ "name": reg.name, "value": f"{value}", "variablesReference": 0 })
 

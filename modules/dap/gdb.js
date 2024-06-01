@@ -83,24 +83,17 @@ class GdbProcess extends DebuggerProcessBase {
 class GdbDAPSession extends DAP.MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
     super(GdbProcess, spawnConfig, terminal, checkpointsUI, null);
-    this.dbg.messages.on("initResponseSeen", () => {
-      // Deal with VSCode config sequence ordering problems
-      this.sendEvent(new InitializedEvent());
-    })
   }
 
   initializeRequest(response, args) {
-    this.dbg
-      .initialize()
-      .then(() => {
-        args["trace"] = this.spawnConfig.trace;
-        args["rr-session"] = this.spawnConfig.isRRSession();
-        args["rrinit"] = getExtensionPathOf("rrinit");
-        super.initializeRequest(response, args);
-      }).catch(err => {
-        console.log(`FAILED TO CONNECT TO GDB`);
-        throw err;
-      })
+    this.dbg.initialize().then(async () => {
+      args["trace"] = this.spawnConfig.trace;
+      args["rr-session"] = this.spawnConfig.isRRSession();
+      args["rrinit"] = getExtensionPathOf("rrinit");
+      const res = await this.dbg.waitableSendRequest({ seq: 1, command: "initialize", arguments: args, type: "request"}, args);
+      this.sendResponse(res);
+      this.sendEvent(new InitializedEvent());
+    })
   }
 
   attachRequest(response, args, request) {

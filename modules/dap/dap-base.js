@@ -76,17 +76,7 @@ class MidasSessionBase extends DebugSession {
           const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
           console.log(`[request error]: ${res.command} failed\n${err}`);
         }
-        console.log(`response from debugger: ${JSON.stringify(res, null, 2)}`)
         switch(res.command) {
-          case "initialize":
-            // some of the variants need to be notified that we've sent the init response
-            // so that we can be sure that VSCode sees that *before* it sees an InitEvent
-            this.sendResponse(res);
-            this.dbg.messages.emit("initResponseSeen", null);
-            return;
-          case "variables":
-            this.hexFormatAllVariables(res.body.variables);
-            break;
           case CustomRequests.DeleteCheckpoint:
           case CustomRequests.SetCheckpoint:
             this.updateCheckpointsView(res.body.checkpoints ?? []);
