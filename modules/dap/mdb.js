@@ -21,7 +21,7 @@ class MdbSocket extends MidasCommunicationChannel {
    * @returns { Promise<import("./dap-utils").DataChannel> }
    */
   async resolveInputDataChannel() {
-    return {recv: this.process.stdout, send: this.process.stdin }
+    return { recv: this.process.stdout, send: this.process.stdin };
   }
 }
 
@@ -44,7 +44,7 @@ class MdbProcess extends DebuggerProcessBase {
       const { path: rr } = getAPI().getToolchain().rr;
       // Read MDB "documentation" (the source code): the -r CLI parameter, configures the wait system to use signals
       // (instead of waitpid syscall) to work (properly) while being recorded by RR.
-      const newOptions = [ "record", path, "-r", ...options ];
+      const newOptions = ["record", path, "-r", ...options];
       super(rr, newOptions, debug);
     } else {
       super(path, options, debug);
@@ -66,7 +66,7 @@ class MdbSession extends DAP.MidasSessionBase {
     super(MdbProcess, spawnConfig, terminal, checkpointsUI, {
       // callbacks
       response: (res) => {
-        console.log(`response from debugger: ${JSON.stringify(res, null, 2)}`)
+        console.log(`response from debugger: ${JSON.stringify(res, null, 2)}`);
         if (!res.success) {
           const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
           console.log(`[request error]: ${res.command} failed\n${err}`);
@@ -89,8 +89,7 @@ class MdbSession extends DAP.MidasSessionBase {
   }
 
   setFunctionBreakPointsRequest(response, args, request) {
-    if(this.spawnConfig)
-      this.sendResponse(response);
+    if (this.spawnConfig) this.sendResponse(response);
   }
 
   async initializeRequest(response, args) {

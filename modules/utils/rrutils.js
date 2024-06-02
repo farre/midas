@@ -14,8 +14,10 @@ async function getTraces(rr) {
         reject(stderr);
       } else {
         let lines = stdout.split("\n");
-        const traces = lines.map((line) => line.split(" ")[0].trim()).filter((trace) => trace.length > 0 && trace != "cpu_lock");
-        if(traces.length == 1 && traces[0] == "latest-trace") {
+        const traces = lines
+          .map((line) => line.split(" ")[0].trim())
+          .filter((trace) => trace.length > 0 && trace != "cpu_lock");
+        if (traces.length == 1 && traces[0] == "latest-trace") {
           reject(`No traces found by rr ps command`);
         } else {
           resolve(traces);
@@ -116,7 +118,7 @@ function parseProgram(rr_ps_output_cmd) {
 }
 
 const tracePicked = async (rr, traceWorkspace) => {
-  if(traceWorkspace == null || traceWorkspace == undefined) {
+  if (traceWorkspace == null || traceWorkspace == undefined) {
     throw new Error("You did not pick a trace");
   }
   const options = {
@@ -126,7 +128,12 @@ const tracePicked = async (rr, traceWorkspace) => {
   };
   return await vscode.window.showQuickPick(getTraceInfo(rr, traceWorkspace), options).then((selection) => {
     if (selection) {
-      const replay_parameters = { pid: selection.value, traceWorkspace: traceWorkspace, cmd: selection.binary, noexec: selection.noexec };
+      const replay_parameters = {
+        pid: selection.value,
+        traceWorkspace: traceWorkspace,
+        cmd: selection.binary,
+        noexec: selection.noexec,
+      };
       return replay_parameters;
     }
     return null;
@@ -134,38 +141,37 @@ const tracePicked = async (rr, traceWorkspace) => {
 };
 
 /**
- * 
+ *
  * @param {*} rr
  * @returns { Promise<String> }
  */
 function getGdbInit(rr) {
   return new Promise((res, rej) => {
     subprocess.exec(`${rr} gdbinit`, (error, stdout, stderr) => {
-      if(error) rej(error);
-      else res(stdout.toString())
-    })
+      if (error) rej(error);
+      else res(stdout.toString());
+    });
   });
 }
 
 async function generateGdbInit(rr) {
-  return await getGdbInit(rr).then(data => {
+  return await getGdbInit(rr).then((data) => {
     // this is ugly copying. But... I don't care. This is run once on each update & build of RR
     // and involves at most a kb or two.
     const lines = data.split("\n");
     let i = 0;
-    for(; i < lines.length; ++i) {
+    for (; i < lines.length; ++i) {
       // remove everything after `define hook-run` as this stuff messes with us.
-      if(lines[i].includes("define hook-run"))
-        break;
+      if (lines[i].includes("define hook-run")) break;
     }
     const kept_lines = lines.splice(0, i);
     return kept_lines.join("\n");
-  })
+  });
 }
 
 module.exports = {
   tracePicked,
   getTraces,
   parseProgram,
-  generateGdbInit
+  generateGdbInit,
 };

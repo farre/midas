@@ -31,7 +31,7 @@ class DebuggerProcessBase {
     }
 
     // @ts-ignore
-    if(this.requestChannel === undefined) {
+    if (this.requestChannel === undefined) {
       throw new Error(`Derived type haven't provided 'comms' channel for which we send requests/recv responses over`);
     }
 
@@ -87,13 +87,13 @@ class DebuggerProcessBase {
     return new Promise((resolve, reject) => {
       this.messages.once(`${req.seq}`, (response) => {
         resolve(response);
-      })
+      });
       try {
-        this.sendRequest(req, args)
-      } catch(ex) {
+        this.sendRequest(req, args);
+      } catch (ex) {
         reject(ex);
       }
-    })
+    });
   }
 
   get process() {

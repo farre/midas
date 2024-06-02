@@ -48,7 +48,7 @@ const initializer = async (config) => {
     let choice = await showErrorPopup(
       "perf_event_paranoid not set to <= 1.",
       "rr needs it to be set to 1 to be performant.",
-      initializerPopupChoices.perf_event_paranoid
+      initializerPopupChoices.perf_event_paranoid,
     );
     if (choice) await choice.action();
     throw new Error("Canceled");
@@ -66,9 +66,9 @@ async function setServerAddress() {
 }
 
 function getAddrSetting(config) {
-  if(config.target === null) throw new Error("No RR server address was set or configured");
+  if (config.target === null) throw new Error("No RR server address was set or configured");
   const [addr, port] = config.target.parameter.split(":");
-  return { address: (addr == "localhost" ? "127.0.0.1" : addr), port: port }
+  return { address: addr == "localhost" ? "127.0.0.1" : addr, port: port };
 }
 
 class RRConfigurationProvider extends ConfigurationProviderInitializer {
@@ -82,8 +82,8 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
       throw new Error(`No RR found at ${config.rrPath}`);
     }
     config.target = {
-      "type": "extended-remote",
-      "parameter": await setServerAddress()
+      type: "extended-remote",
+      parameter: await setServerAddress(),
     };
 
     if (config.traceWorkspace && !config.replay.pid) {
@@ -123,18 +123,17 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
     getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
-
     } catch (err) {
       switch (err.type) {
         case InitExceptionTypes.GdbNotFound:
           vscode.window.showErrorMessage(
-            "GDB not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb)."
+            "GDB not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb).",
           );
           break;
         case InitExceptionTypes.RRNotFound:
           // eslint-disable-next-line max-len
           vscode.window.showErrorMessage(
-            "RR not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb). Use Midas:getRR command or install RR on your system"
+            "RR not found in $PATH and no user setting found (Preferences->Settings->Midas->gdb). Use Midas:getRR command or install RR on your system",
           );
           break;
         case InitExceptionTypes.GdbVersionUnknown:
@@ -183,14 +182,7 @@ class RRDebugAdapterFactory {
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     if (config.remoteTargetConfig != null) {
-      let dbg_session = new MidasDebugSession(
-        true,
-        false,
-        fs,
-        new RemoteRRSpawnConfig(config),
-        null,
-        this.#cp_ui
-      );
+      let dbg_session = new MidasDebugSession(true, false, fs, new RemoteRRSpawnConfig(config), null, this.#cp_ui);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
     const pid = config.replay.pid;
@@ -202,7 +194,7 @@ class RRDebugAdapterFactory {
 
     let cmd_str = null;
     const rrOptions = (config.rrOptions ?? []).join(" ");
-    if(config.replay.noexec) {
+    if (config.replay.noexec) {
       cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${rrOptions} ${traceWorkspace}`;
     } else {
       cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${rrOptions} ${traceWorkspace}`;
@@ -213,13 +205,20 @@ class RRDebugAdapterFactory {
       try {
         let terminalInterface = await spawnExternalRrConsole(
           { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },
-          rrArgs
+          rrArgs,
         );
         if (config["use-dap"]) {
           let session = new GdbDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
           return new vscode.DebugAdapterInlineImplementation(session);
         } else {
-          let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
+          let dbg_session = new MidasDebugSession(
+            true,
+            false,
+            fs,
+            new RRSpawnConfig(config),
+            terminalInterface,
+            this.#cp_ui,
+          );
           return new vscode.DebugAdapterInlineImplementation(dbg_session);
         }
       } catch (err) {
@@ -234,14 +233,7 @@ class RRDebugAdapterFactory {
         let dbg_session = new GdbDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       } else {
-        let dbg_session = new MidasDebugSession(
-          true,
-          false,
-          fs,
-          new RRSpawnConfig(config),
-          term,
-          this.#cp_ui
-        );
+        let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), term, this.#cp_ui);
         return new vscode.DebugAdapterInlineImplementation(dbg_session);
       }
     }

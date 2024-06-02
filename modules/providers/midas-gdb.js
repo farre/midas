@@ -2,7 +2,17 @@ const vscode = require("vscode");
 const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
-const { isNothing, resolveCommand, ContextKeys, showErrorPopup, getPid, strEmpty, getAPI, getVersion, requiresMinimum } = require("../utils/utils");
+const {
+  isNothing,
+  resolveCommand,
+  ContextKeys,
+  showErrorPopup,
+  getPid,
+  strEmpty,
+  getAPI,
+  getVersion,
+  requiresMinimum,
+} = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
 
@@ -18,7 +28,7 @@ const initializer = async (config) => {
   }
   if (!config.hasOwnProperty("gdbPath")) {
     config.gdbPath = await getAPI().resolveToolPath("gdb");
-    if(config.gdbPath == undefined) {
+    if (config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };
     }
   }
@@ -26,7 +36,7 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-  if(!config.hasOwnProperty("remoteTargetConfig")) {
+  if (!config.hasOwnProperty("remoteTargetConfig")) {
     config.remoteTargetConfig = null;
   }
   if (!config.hasOwnProperty("externalConsole")) {
@@ -59,7 +69,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      switch(err.type) {
+      switch (err.type) {
         case InitExceptionTypes.GdbVersionUnknown:
           showErrorPopup("Incompatible GDB version", err.message, [
             {
@@ -110,7 +120,7 @@ class DebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
-    if(config["use-dap"]) {
+    if (config["use-dap"]) {
       let terminal = null;
       const midas_session = new GdbDAPSession(this.spawnConfig(config), terminal, null);
       return new vscode.DebugAdapterInlineImplementation(midas_session);
@@ -121,15 +131,15 @@ class DebugAdapterFactory {
   }
 
   spawnConfig(config) {
-    switch(config.request) {
+    switch (config.request) {
       case "attach":
-        if(config.target != null) {
+        if (config.target != null) {
           return new RemoteAttachSpawnConfig(config);
         } else {
           return new AttachSpawnConfig(config);
         }
       case "launch":
-        if(config.target != null) {
+        if (config.target != null) {
           return new RemoteLaunchSpawnConfig(config);
         }
         return new LaunchSpawnConfig(config);

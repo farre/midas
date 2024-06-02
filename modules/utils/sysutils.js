@@ -38,7 +38,7 @@ function which(binary) {
       } else {
         resolve(stdout);
       }
-    })
+    }),
   );
 }
 
@@ -50,23 +50,23 @@ function which(binary) {
 function whereis(binary) {
   return new Promise((resolve, reject) => {
     exec(`whereis ${binary}`, (err, stdout) => {
-      if(err) reject(err);
+      if (err) reject(err);
       try {
         // whereis returns
         // binary: /path/to/first/binary /path/to/second/binary ...
         // therefore, strip `binary:` from output
-        const result =
-          stdout.toString()
-            .substring(binary.length+1)
-            .trim()
-            .split(" ")
-            .filter(s => s != "");
+        const result = stdout
+          .toString()
+          .substring(binary.length + 1)
+          .trim()
+          .split(" ")
+          .filter((s) => s != "");
         resolve(result);
-      } catch(err) {
+      } catch (err) {
         console.log(`could not perform 'whereis': ${err}`);
         reject([]);
       }
-    })
+    });
   });
 }
 
@@ -84,8 +84,8 @@ async function sudo(command, pass, exitCodeCallback = null) {
     let sudo = _spawn(_sudo, args, { stdio: "pipe", shell: true, env: sanitizeEnvVariables() });
     sudo.on("error", (code) => {
       throw new Error(`Sudo failed`);
-    })
-    if(exitCodeCallback != null) {
+    });
+    if (exitCodeCallback != null) {
       sudo.on("exit", exitCodeCallback);
     }
     sudo.stderr.on("data", (data) => {
@@ -123,8 +123,8 @@ function resolveCommand(cmd) {
 
 function sanitizeEnvVariables() {
   let ENV_VARS = { ...process.env };
-  if(ENV_VARS.VIRTUAL_ENV != null) {
-    ENV_VARS.PATH = ENV_VARS.PATH.replaceAll(ENV_VARS.VIRTUAL_ENV.toString(), "")
+  if (ENV_VARS.VIRTUAL_ENV != null) {
+    ENV_VARS.PATH = ENV_VARS.PATH.replaceAll(ENV_VARS.VIRTUAL_ENV.toString(), "");
   }
   return ENV_VARS;
 }
@@ -134,26 +134,26 @@ function sanitizeEnvVariables() {
  */
 async function getAllPidsForQuickPick() {
   const res = (await fsp.readdir("/proc", { withFileTypes: true }))
-    .filter(dirent => {
+    .filter((dirent) => {
       try {
-        if(!dirent.isDirectory()) return false;
+        if (!dirent.isDirectory()) return false;
         const number = Number.parseInt(dirent.name);
         return number.toString() == dirent.name;
-      } catch(ex) {
+      } catch (ex) {
         return false;
       }
     })
-    .map(async dirent => {
-      return await fsp.readFile(`/proc/${dirent.name}/cmdline`).then(buf => {
+    .map(async (dirent) => {
+      return await fsp.readFile(`/proc/${dirent.name}/cmdline`).then((buf) => {
         const label = buf.toString().replace("\u0000", " ");
 
         return {
           detail: dirent.name,
           label: `${label} (${dirent.name})`,
           alwaysShow: true,
-          pid: dirent.name
+          pid: dirent.name,
         };
-      })
+      });
     });
   return Promise.all(res);
 }
@@ -165,5 +165,5 @@ module.exports = {
   sudo,
   resolveCommand,
   sanitizeEnvVariables,
-  getAllPidsForQuickPick
+  getAllPidsForQuickPick,
 };

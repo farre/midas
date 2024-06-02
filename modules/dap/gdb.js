@@ -42,7 +42,7 @@ class GdbSocket extends MidasCommunicationChannel {
 
   /**
    * @returns { Promise<import("./dap-utils").DataChannel> }
-  */
+   */
   async resolveInputDataChannel() {
     const sock = await connect_socket(this.name, this.path, MAX_TRIES, 50);
     return { recv: sock, send: sock };
@@ -63,7 +63,7 @@ class GdbProcess extends DebuggerProcessBase {
   }
 
   requestChannel() {
-    return this.commands_socket
+    return this.commands_socket;
   }
 
   /** overridden */
@@ -90,10 +90,13 @@ class GdbDAPSession extends DAP.MidasSessionBase {
       args["trace"] = this.spawnConfig.trace;
       args["rr-session"] = this.spawnConfig.isRRSession();
       args["rrinit"] = getExtensionPathOf("rrinit");
-      const res = await this.dbg.waitableSendRequest({ seq: 1, command: "initialize", arguments: args, type: "request"}, args);
+      const res = await this.dbg.waitableSendRequest(
+        { seq: 1, command: "initialize", arguments: args, type: "request" },
+        args,
+      );
       this.sendResponse(res);
       this.sendEvent(new InitializedEvent());
-    })
+    });
   }
 
   attachRequest(response, args, request) {

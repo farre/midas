@@ -102,7 +102,7 @@ class MidasCommunicationChannel {
    * @param {*} msg
    */
   reportResponse(msg) {
-    if(!this.emitter.emit(`${msg.request_seq}`, msg)) {
+    if (!this.emitter.emit(`${msg.request_seq}`, msg)) {
       this.emitter.emit("response", msg);
     }
   }
@@ -117,14 +117,13 @@ class MidasCommunicationChannel {
         this.buffer = remaining_buffer;
         for (const msg of protocol_messages) {
           const type = msg.type;
-          switch(type) {
+          switch (type) {
             case "response":
               this.reportResponse(msg);
               break;
             default:
               this.emitter.emit(type, msg);
           }
-
         }
       });
       return channel;

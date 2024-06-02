@@ -3,13 +3,12 @@ const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./init
 const { ContextKeys, showErrorPopup, getAPI } = require("../utils/utils");
 const { MdbSpawnConfig } = require("../spawn");
 const { MdbSession } = require("../dap/mdb");
-const fs = require("fs")
+const fs = require("fs");
 
 const initializer = async (config) => {
-
-  if(config.hasOwnProperty("mdbPath")) {
+  if (config.hasOwnProperty("mdbPath")) {
     const mdbPath = config?.mdbPath ?? "mdb";
-    if(!fs.existsSync(mdbPath)) {
+    if (!fs.existsSync(mdbPath)) {
       throw { type: InitExceptionTypes.MdbNotFound, message: `MDB could not be found using '${mdbPath}'` };
     }
   }
@@ -21,8 +20,6 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
-
-
 };
 
 class MdbConfigurationProvider extends ConfigurationProviderInitializer {
@@ -35,7 +32,7 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
     try {
       await super.defaultInitialize(config, initializer);
     } catch (err) {
-      switch(err.type) {
+      switch (err.type) {
         case InitExceptionTypes.MdbNotFound:
           showErrorPopup(err.message, err.message, [
             {

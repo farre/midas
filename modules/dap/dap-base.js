@@ -1,7 +1,7 @@
 const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
 const { commands, window } = require("vscode");
 const { CustomRequests } = require("../debugSessionCustomRequests");
-const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
+const { ContextKeys, toHexString, getAPI } = require("../utils/utils");
 
 /**
  *
@@ -29,7 +29,7 @@ const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
 /**
  * @typedef { import("./base-process-handle").DebuggerProcessBase } DebuggerProcessBase
  * @typedef { import("../spawn").SpawnConfig } SpawnConfig
-*/
+ */
 
 class MidasSessionBase extends DebugSession {
   formatValuesAsHex = false;
@@ -68,15 +68,15 @@ class MidasSessionBase extends DebugSession {
 
     const { response, events } = callbacks ?? { response: null, events: null };
 
-    if(response) {
+    if (response) {
       this.dbg.connectResponse(callbacks.response);
     } else {
       this.dbg.connectResponse((res) => {
-        if(!res.success) {
+        if (!res.success) {
           const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
           console.log(`[request error]: ${res.command} failed\n${err}`);
         }
-        switch(res.command) {
+        switch (res.command) {
           case CustomRequests.DeleteCheckpoint:
           case CustomRequests.SetCheckpoint:
             this.updateCheckpointsView(res.body.checkpoints ?? []);
@@ -86,7 +86,7 @@ class MidasSessionBase extends DebugSession {
       });
     }
 
-    if(events) {
+    if (events) {
       this.dbg.connectEvents(callbacks.events);
     } else {
       this.dbg.connectEvents((evt) => {
@@ -100,27 +100,24 @@ class MidasSessionBase extends DebugSession {
             break;
         }
         this.sendEvent(evt);
-      })
+      });
     }
 
     this.on("error", (event) => {
       this.sendEvent(new OutputEvent(event.body, "console", event));
     });
 
-
-    for(const evt of ["close", "disconnect", "error", "exit"]) {
+    for (const evt of ["close", "disconnect", "error", "exit"]) {
       this.dbg.process.on(evt, () => {
-        if(!this.notifiedOfTermination) {
+        if (!this.notifiedOfTermination) {
           this.sendEvent(new TerminatedEvent());
           this.notifiedOfTermination = true;
         }
-      })
+      });
     }
   }
 
-  routeEvent(event) {
-
-  }
+  routeEvent(event) {}
 
   dispose() {
     commands.executeCommand("setContext", ContextKeys.RRSession, false);
@@ -158,8 +155,8 @@ class MidasSessionBase extends DebugSession {
   }
 
   hexFormatAllVariables(variables) {
-    if(this.formatValuesAsHex) {
-      for(let v of variables) {
+    if (this.formatValuesAsHex) {
+      for (let v of variables) {
         if (!isNaN(v.value)) {
           v.value = toHexString(v.value);
         }
@@ -232,9 +229,9 @@ class MidasSessionBase extends DebugSession {
     if (this.formatValuesAsHex) {
       args.format = { hex: true };
     }
-    this.dbg.waitableSendRequest(request, args).then(response => {
-      this.sendResponse(response)
-    })
+    this.dbg.waitableSendRequest(request, args).then((response) => {
+      this.sendResponse(response);
+    });
   }
 
   checkForHexFormatting(variablesReference, variables) {
@@ -253,7 +250,6 @@ class MidasSessionBase extends DebugSession {
   scopesRequest(response, args, request) {
     this.dbg.sendRequest(request);
   }
-
 
   virtualDispatch(...args) {
     let name;
@@ -338,20 +334,22 @@ class MidasSessionBase extends DebugSession {
   // eslint-disable-next-line no-unused-vars
   evaluateRequest(response, args, request) {
     args.format = { hex: false };
-    switch(args.context) {
-      case "watch": {
-        const ishex_pos = args.expression.lastIndexOf(",x");
-        if(ishex_pos != -1) {
-          args.expression = args.expression.substring(0, ishex_pos);
-          args.format = { hex: true };
+    switch (args.context) {
+      case "watch":
+        {
+          const ishex_pos = args.expression.lastIndexOf(",x");
+          if (ishex_pos != -1) {
+            args.expression = args.expression.substring(0, ishex_pos);
+            args.format = { hex: true };
+          }
         }
-      } break;
+        break;
     }
     this.dbg.sendRequest(request, args);
   }
 
   stepInTargetsRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);  
+    this.dbg.sendRequest(request, args);
   }
 
   gotoTargetsRequest(response, args, request) {
@@ -367,20 +365,20 @@ class MidasSessionBase extends DebugSession {
   }
 
   loadedSourcesRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);  
+    this.dbg.sendRequest(request, args);
   }
 
   readMemoryRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);  
+    this.dbg.sendRequest(request, args);
   }
 
   writeMemoryRequest(response, args, request) {
-    this.dbg.sendRequest(request, args); 
+    this.dbg.sendRequest(request, args);
   }
 
   // eslint-disable-next-line no-unused-vars
   cancelRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);  
+    this.dbg.sendRequest(request, args);
   }
 
   breakpointLocationsRequest(response, args, request) {
@@ -403,7 +401,7 @@ class MidasSessionBase extends DebugSession {
   customRequest(command, response, args, request) {
     request.type = "request";
     request.command = command;
-    switch(command) {
+    switch (command) {
       case "toggle-hex":
         this.formatValuesAsHex = !this.formatValuesAsHex;
         this.sendEvent(new InvalidatedEvent(["variables"]));
@@ -415,15 +413,15 @@ class MidasSessionBase extends DebugSession {
         break;
       }
       case CustomRequests.RunToEvent: {
-        window.showInputBox().then(event_number => {
+        window.showInputBox().then((event_number) => {
           const num = Number.parseInt(event_number);
-          if(Number.isNaN(num)) {
+          if (Number.isNaN(num)) {
             this.sendErrorResponse(response, 0, "Run To Event requires a number as input.");
             return;
           }
-          request.arguments = { event: num }
+          request.arguments = { event: num };
           this.dbg.sendRequest(request);
-        })
+        });
         break;
       }
       default:
@@ -499,5 +497,5 @@ class MidasSessionBase extends DebugSession {
 }
 
 module.exports = {
-  MidasSessionBase
-}
+  MidasSessionBase,
+};

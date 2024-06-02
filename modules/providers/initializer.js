@@ -5,7 +5,7 @@ const InitExceptionTypes = {
   GdbVersionUnknown: "GdbVersionUnknown",
   RRNotFound: "RRNotFound",
   NullConfig: "NullConfig",
-  MdbNotFound: "MdbNotFound"
+  MdbNotFound: "MdbNotFound",
 };
 
 async function gdbSettingsOk(config) {
@@ -35,5 +35,5 @@ class ConfigurationProviderInitializer {
 module.exports = {
   ConfigurationProviderInitializer,
   InitExceptionTypes,
-  gdbSettingsOk
+  gdbSettingsOk,
 };

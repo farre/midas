@@ -14,7 +14,7 @@ const InstallerExceptions = {
   InstallServiceFailed: "InstallServiceFailed",
   UserCancelled: "UserCancelled",
   PackageManagerError: "PackageManagerError",
-  TerminalCommandNotFound: "TerminalCommandNotFound"
+  TerminalCommandNotFound: "TerminalCommandNotFound",
 };
 
 const comms_address = "/tmp/rr-build-progress";
@@ -97,8 +97,8 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
     if (!pass) {
       pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
     }
-    if(!pass) {
-      ireject({type: InstallerExceptions.UserCancelled });
+    if (!pass) {
+      ireject({ type: InstallerExceptions.UserCancelled });
       return;
     }
     const cancel = async (pid) => {
@@ -109,11 +109,11 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
 
     // starts python installer services application
     const run_installer_services = () => {
-      return sudo([python, repo_type], pass)
+      return sudo([python, repo_type], pass);
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(pkgs, listeners);
-    if(existsSync(comms_address)) {
+    if (existsSync(comms_address)) {
       unlinkSync(comms_address);
     }
     server.listen(comms_address);
@@ -129,7 +129,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
     };
     server.on("error", (err) => {
       unlink_unix_socket();
-      ireject({ type: InstallerExceptions.InstallServiceFailed, message: `Installer service failed: ${err}` })
+      ireject({ type: InstallerExceptions.InstallServiceFailed, message: `Installer service failed: ${err}` });
     });
     server.on("close", unlink_unix_socket);
     server.on("drop", unlink_unix_socket);
@@ -189,7 +189,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
               });
             });
           });
-        }
+        },
       );
     });
 
@@ -233,15 +233,14 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
               reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
             });
           });
-        }
+        },
       );
     });
-    if(!error_or_finished)
-      await run_installer_services();
+    if (!error_or_finished) await run_installer_services();
   });
 }
 
 module.exports = {
   run_install,
-  InstallerExceptions
+  InstallerExceptions,
 };

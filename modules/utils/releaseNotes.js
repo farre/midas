@@ -105,7 +105,7 @@ async function getReleaseNotes() {
 
       return accumulator;
     },
-    { notes: [], entry: {}, version: toVersion("0.0.0") }
+    { notes: [], entry: {}, version: toVersion("0.0.0") },
   );
 
   if (Object.keys(releaseNotes.entry)) {
