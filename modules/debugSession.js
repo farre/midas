@@ -20,7 +20,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   gdb;
 
   _reportProgress;
-  useInvalidetedEvent;
   /** @type {import("./terminalInterface").TerminalInterface} */
   #terminal;
   fnBkptChain = Promise.resolve();
@@ -74,8 +73,6 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
    */
   initializeRequest(response, args) {
     this._reportProgress = args.supportsProgressReporting;
-
-    this.useInvalidetedEvent = args.supportsInvalidatedEvent;
 
     // build and return the capabilities of this debug adapter:
     response.body = response.body || {};

@@ -9,9 +9,7 @@ const {
   showErrorPopup,
   getPid,
   strEmpty,
-  getAPI,
-  getVersion,
-  requiresMinimum,
+  getAPI
 } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
@@ -27,6 +25,7 @@ const initializer = async (config) => {
     config.allStopMode = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
+
     config.gdbPath = await getAPI().resolveToolPath("gdb");
     if (config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };

@@ -4,6 +4,7 @@ const EventEmitter = require("events");
 const { sudo, which } = require("./sysutils");
 const os = require("os");
 const { existsSync, unlinkSync } = require("fs");
+const { getAPI } = require("./utils");
 
 const InstallerExceptions = {
   PackageManagerNotFound: "PkgManNotFound",
@@ -17,7 +18,7 @@ const InstallerExceptions = {
   TerminalCommandNotFound: "TerminalCommandNotFound",
 };
 
-const comms_address = "/tmp/rr-build-progress";
+const INSTALLER_IPC_ADDRESS = "/tmp/rr-build-progress";
 
 function prepare_request(deps) {
   const endinanness = os.endianness();
@@ -49,6 +50,9 @@ function handle_payload(listeners, comms_payload) {
  * @returns
  */
 function create_ipc_server(pkgs, listeners) {
+  if (existsSync(INSTALLER_IPC_ADDRESS)) {
+    unlinkSync(INSTALLER_IPC_ADDRESS);
+  }
   let client_number = 0;
   return net.createServer((client) => {
     if (client_number == 1) {
@@ -79,49 +83,54 @@ function create_ipc_server(pkgs, listeners) {
   });
 }
 
+async function getSudoPassword() {
+  let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
+  // f*** me extension development for VSCode is buggy. I don't want to have to do this.
+  if (!pass) {
+    pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
+  }
+  return pass
+}
+
+async function cancelInstaller(password, pid) {
+  let kill = await which("kill");
+  const args = [kill, "-s", "SIGUSR1", `${pid}`];
+  await sudo(args, password);
+}
+
 /**
- * Run depedency/package installer
- * @param {string} python - path to python
- * @param {string} repo_type - whether we're using apt or dnf
- * @param {string[]} pkgs - list of depedencies to install
+ * Run depedency/package installer. Installs `packages` on system using either DNF or APT
+ * @param {string} repoType - whether we're using apt or dnf
+ * @param {string[]} packages - list of depedencies to install
  * @param {boolean} cancellable - Whether or not the install operation can be cancelled
  * @param {import("vscode").OutputChannel} logger
+ * @returns { Promise<boolean> } returns a promise of a boolean that says if we finished successfully
  */
-function run_install(python, repo_type, pkgs, cancellable, logger) {
-  return new Promise(async (iresolve, ireject) => {
+function systemInstall(repoType, packages, cancellable, logger) {
+  return new Promise(async (installResolve, installReject) => {
     // if some server logic fails, we don't want to actually run the python code
     let error_or_finished = false;
     // eslint-disable-next-line max-len
-    let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
-    // f*** me extension development for VSCode is buggy. I don't want to have to do this.
+    let pass = await getSudoPassword();
     if (!pass) {
-      pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
+      installReject(`Installing dependencies require sudo`);
     }
-    if (!pass) {
-      ireject({ type: InstallerExceptions.UserCancelled });
-      return;
-    }
-    const cancel = async (pid) => {
-      let kill = await which("kill");
-      const args = [kill, "-s", "SIGUSR1", `${pid}`];
-      await sudo(args, pass);
-    };
 
     // starts python installer services application
     const run_installer_services = () => {
-      return sudo([python, repo_type], pass);
+      getAPI().getPython().sudoExecute([repoType], pass)
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
-    const server = create_ipc_server(pkgs, listeners);
-    if (existsSync(comms_address)) {
-      unlinkSync(comms_address);
+    const server = create_ipc_server(packages, listeners);
+    if (existsSync(INSTALLER_IPC_ADDRESS)) {
+      unlinkSync(INSTALLER_IPC_ADDRESS);
     }
-    server.listen(comms_address);
+    server.listen(INSTALLER_IPC_ADDRESS);
     const unlink_unix_socket = () => {
       error_or_finished = true;
       try {
-        if (require("fs").existsSync(comms_address)) {
-          require("fs").unlinkSync(comms_address);
+        if (require("fs").existsSync(INSTALLER_IPC_ADDRESS)) {
+          require("fs").unlinkSync(INSTALLER_IPC_ADDRESS);
         }
       } catch (err) {
         logger.appendLine(`Exception: ${err}`);
@@ -129,7 +138,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
     };
     server.on("error", (err) => {
       unlink_unix_socket();
-      ireject({ type: InstallerExceptions.InstallServiceFailed, message: `Installer service failed: ${err}` });
+      installReject(`Installer service failed: ${err}`);
     });
     server.on("close", unlink_unix_socket);
     server.on("drop", unlink_unix_socket);
@@ -156,10 +165,13 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
         },
         (reporter, token) => {
           return new Promise((resolve) => {
-            listeners.download.on("finish", resolve); // resolve this progress window, but not the installation progress (iresolve)
+            const wasCancelled = true;
+            listeners.download.on("finish", () => {
+              resolve(!wasCancelled); // download was not cancelled
+            }); // resolve this progress window, but not the installation progress (iresolve)
 
             token.onCancellationRequested(async () => {
-              await cancel(processInfo.pid);
+              await cancelInstaller(pass, processInfo.pid);
             });
 
             listeners.download.on("cancel", () => {
@@ -170,7 +182,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
                   logger.appendLine("Could not close InstallingManager connection.");
                 }
               });
-              ireject({ type: InstallerExceptions.UserCancelled, message: "Cancelled installing" });
+              resolve(wasCancelled);
             });
 
             listeners.download.on("done", ({ done }) => {
@@ -190,7 +202,11 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
             });
           });
         },
-      );
+      ).then(wasCancelled => {
+        if(wasCancelled) {
+          installResolve(false);
+        }
+      });
     });
 
     listeners.install.on("start", async () => {
@@ -210,11 +226,10 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
                 }
               });
-              iresolve("Finished installing");
-              resolve();
+              resolve(true);
             });
             canceller.onCancellationRequested(async () => {
-              await cancel(processInfo.pid);
+              await cancelInstaller(pass, processInfo.pid);
             });
 
             listeners.install.on("cancel", () => {
@@ -224,8 +239,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
                   logger.appendLine("Could not close InstallingManager connection. Remove ");
                 }
               });
-              ireject({ type: InstallerExceptions.UserCancelled, message: "Cancelled installing" }); // reject the installer
-              resolve(); // resolve the progress window promise
+              resolve(false); // user cancelled
             });
 
             listeners.install.on("update", (payload) => {
@@ -234,13 +248,15 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
             });
           });
         },
-      );
+      ).then(result => {
+        installResolve(result);
+      });
     });
     if (!error_or_finished) await run_installer_services();
   });
 }
 
 module.exports = {
-  run_install,
+  systemInstall,
   InstallerExceptions,
 };

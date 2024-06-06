@@ -71,24 +71,6 @@ let trace = false;
 let LOG_ID = 0;
 
 /** @typedef { { addr: string, disp: string, enabled: string, file: string, fullname: string, func: string, line: string, number: string, "original-location": string, "thread-groups": string[], times: string, type: string } } GDBBreakpoint */
-/**
- * @param {string} reason
- * @param {string} description
- * @param {boolean} allThreadsStopped
- * @param {number} threadId
- * @returns
- */
-function newStoppedEvent(reason, description, allThreadsStopped, threadId = undefined) {
-  let stopevt = new StoppedEvent(reason, threadId);
-  stopevt.body = {
-    reason,
-    // @ts-ignore
-    allThreadsStopped,
-    description,
-    threadId: threadId,
-  };
-  return stopevt;
-}
 
 /** @constructor */
 let GDBBase = gdbjs.GDB;
