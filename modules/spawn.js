@@ -1,9 +1,7 @@
-const vscode = require("vscode");
 const { MidasRunMode } = require("./buildMode");
 const { spawn } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
 const { ImmediateExecuteCommand, CommandList, ExecuteCommand } = require("./gdbCommand");
-const { OutputEvent } = require("@vscode/debugadapter");
 
 /**
  * Required setup / spawn params for Midas GDB / Midas rr
@@ -301,6 +299,7 @@ class MdbSpawnConfig {
     this.path = config.mdbPath ?? "mdb";
     this.options = config.dbgArgs ?? []
     this.debug = config.debug;
+    this.RRSession = config?.RRSession
   }
 }
 

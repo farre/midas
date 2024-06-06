@@ -9,9 +9,7 @@ const {
   showErrorPopup,
   getPid,
   strEmpty,
-  getAPI,
-  getVersion,
-  requiresMinimum,
+  getAPI
 } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
