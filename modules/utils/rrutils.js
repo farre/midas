@@ -147,7 +147,7 @@ const tracePicked = async (rr, traceWorkspace) => {
  */
 function getGdbInit(rr) {
   return new Promise((res, rej) => {
-    subprocess.exec(`${rr} gdbinit`, (error, stdout, stderr) => {
+    subprocess.exec(`${rr} gdbinit`, (error, stdout) => {
       if (error) rej(error);
       else res(stdout.toString());
     });

@@ -1,60 +1,30 @@
 "use strict";
-const net = require("node:net");
 const { InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
-const { serializeRequest, MidasCommunicationChannel } = require("./dap-utils");
+const { UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
-const DAP = require("./dap-base");
-
-const MAX_TRIES = 10;
-function connect_socket(name, path, attempts, attempt_interval) {
-  return new Promise((res, rej) => {
-    const socket = new net.Socket();
-    socket.connect({ path: path });
-
-    socket.on("connect", () => {
-      res(socket);
-    });
-
-    socket.on("error", (error) => {
-      socket.destroy();
-
-      if (attempts === 0) {
-        rej(error);
-      } else {
-        setTimeout(() => {
-          connect_socket(name, path, attempts - 1, attempt_interval + 50)
-            .then(res)
-            .catch(rej);
-        }, attempt_interval);
-      }
-    });
-  });
-}
-
-class GdbSocket extends MidasCommunicationChannel {
-  constructor(name, path, type, emitter) {
-    super(name, emitter);
-    this.name = name;
-    this.path = path;
-    this.type = type;
-  }
-
-  /**
-   * @returns { Promise<import("./dap-utils").DataChannel> }
-   */
-  async resolveInputDataChannel() {
-    const sock = await connect_socket(this.name, this.path, MAX_TRIES, 50);
-    return { recv: sock, send: sock };
-  }
-}
+const {MidasSessionBase} = require("./dap-base");
+const { spawn } = require("child_process");
 
 class GdbProcess extends DebuggerProcessBase {
-  constructor(path, options) {
-    super(path, options);
 
-    this.commands_socket = new GdbSocket("commands", "/tmp/midas-commands", "response", this.messages);
-    this.events_socket = new GdbSocket("events", "/tmp/midas-events", "event", this.messages);
+  /** @type { import("child_process").ChildProcessWithoutNullStreams } */
+  #process = null;
+  constructor(options) {
+    super(options);
+
+    try {
+      const p = this.path();
+      const args = this.spawnArgs();
+      this.#process = spawn(p, args);
+    } catch (ex) {
+      console.log(`Creating instance of GdbProcess failed: ${ex}`);
+      // re-throw exception - this must be a hard error
+      throw ex;
+    }
+
+    this.commands_socket = new UnixSocketCommunication("/tmp/midas-commands", this.messages)
+    this.events_socket = new UnixSocketCommunication("/tmp/midas-events", this.messages);
   }
 
   async initialize() {
@@ -69,7 +39,7 @@ class GdbProcess extends DebuggerProcessBase {
   /** overridden */
   spawnArgs() {
     const args = [
-      ...this.options,
+      ...this.options.options,
       "-q",
       "-ex",
       `source ${getExtensionPathOf("/modules/python/dap-wrapper/variables_reference.py")}`,
@@ -80,9 +50,10 @@ class GdbProcess extends DebuggerProcessBase {
   }
 }
 
-class GdbDAPSession extends DAP.MidasSessionBase {
+class GdbDAPSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
-    super(GdbProcess, spawnConfig, terminal, checkpointsUI, null);
+    const cleanUpEmitter = null
+    super(GdbProcess, spawnConfig, terminal, checkpointsUI, null, cleanUpEmitter);
   }
 
   initializeRequest(response, args) {

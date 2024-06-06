@@ -2,8 +2,8 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { getPid, getVersion, isNothing, getRR, showReleaseNotes, getAPI } = require("./utils/utils");
-const { getExtensionPathOf, sudo } = require("./utils/sysutils");
+const { getPid, getVersion, isNothing, showReleaseNotes, getAPI } = require("./utils/utils");
+const { getExtensionPathOf } = require("./utils/sysutils");
 /**
  * @typedef { import("vscode").Disposable } Disposable
  */
@@ -75,16 +75,15 @@ function getVSCodeCommands() {
   });
 
   const zenWorkaround = registerCommand("midas.zen-workaround", async (/** item */) => {
-    const script = path.join(getAPI().getToolchain().rr.root_dir, "rr-master", "scripts", "zen_workaround.py");
+    const rrSourceDir = getAPI().getToolchain().getTool("rr").sourceDirectory;
+    const script = path.join(rrSourceDir, "scripts", "zen_workaround.py");
     if (fs.existsSync(script)) {
-      let pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
-      await sudo(["python", script], pass, (code) => {
-        if (code == 0) {
-          vscode.window.showInformationMessage("Zen Workaround is active");
-        } else {
-          vscode.window.showInformationMessage("Zen Workaround failed");
-        }
-      });
+      try {
+        await getAPI().getPython().sudoExecute([script]);
+        vscode.window.showInformationMessage("Zen Workaround is active");
+      } catch(ex) {
+        vscode.window.showInformationMessage("Zen Workaround failed");
+      }
     }
   });
 
@@ -141,8 +140,41 @@ function getVSCodeCommands() {
     }
   });
 
+  const ToolInstaller = async (name) => {
+    const mgr = getAPI().getToolchain();
+    const tool = mgr.getTool(name);
+    mgr.installDependencies(tool).then(async (wasNotCancelled) => {
+      if (wasNotCancelled) {
+        await tool.beginInstallerUI()
+      } else {
+        vscode.window.showInformationMessage("Install cancelled.");
+      }
+    });
+  };
+
   const getPid_ = registerCommand("midas.getPid", getPid);
-  const getRR_ = registerCommand("midas.get-rr", getRR);
+  const getRR_ = registerCommand("midas.get-rr", async () => {
+    try {
+      await ToolInstaller("rr");
+    } catch (ex) {
+      vscode.window.showErrorMessage(`RR install failed: ${ex}`);
+    }
+  });
+  const getMdb = registerCommand("midas.get-mdb", async () => {
+    try {
+      await ToolInstaller("mdb");
+    } catch(ex) {
+      vscode.window.showErrorMessage(`MDB install failed: ${ex}`);
+    }
+  });
+
+  const getGdb = registerCommand("midas.get-gdb", async () => {
+    try {
+      await ToolInstaller("gdb");
+    } catch(ex) {
+      vscode.window.showErrorMessage(`GNU Debugger install failed: ${ex}`);
+    }
+  });
 
   const showReleaseNotes_ = registerCommand("midas.show-release-notes", showReleaseNotes);
 
@@ -156,6 +188,8 @@ function getVSCodeCommands() {
     issueGithubReport,
     getPid_,
     getRR_,
+    getMdb,
+    getGdb,
     showReleaseNotes_,
     toggleHexFormatting,
     runToEvent,

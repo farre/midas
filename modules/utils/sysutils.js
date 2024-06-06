@@ -82,7 +82,7 @@ async function sudo(command, pass, exitCodeCallback = null) {
     let _sudo = await which("sudo");
     const args = ["-S", ...command];
     let sudo = _spawn(_sudo, args, { stdio: "pipe", shell: true, env: sanitizeEnvVariables() });
-    sudo.on("error", (code) => {
+    sudo.on("error", () => {
       throw new Error(`Sudo failed`);
     });
     if (exitCodeCallback != null) {

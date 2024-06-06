@@ -1,3 +1,4 @@
+const net = require("net");
 /**
  * @typedef { import("events").EventEmitter } EventEmitter
  * @typedef { import("./dap-base").Event | import("./dap-base").Response } DAPMessage
@@ -6,6 +7,31 @@
  * @typedef { { recv : { on: EventSubscriber }, send: { write: WriteFn }}} DataChannel
  * @typedef {{ start: number, end: number, all_received: boolean }} PacketBufferMetaData
  */
+
+function connect_socket(name, path, attempts, attempt_interval) {
+  return new Promise((res, rej) => {
+    const socket = new net.Socket();
+    socket.connect({ path: path });
+
+    socket.on("connect", () => {
+      res(socket);
+    });
+
+    socket.on("error", (error) => {
+      socket.destroy();
+
+      if (attempts === 0) {
+        rej(error);
+      } else {
+        setTimeout(() => {
+          connect_socket(name, path, attempts - 1, attempt_interval + 50)
+            .then(res)
+            .catch(rej);
+        }, attempt_interval);
+      }
+    });
+  });
+}
 
 /**
  * Serialize request, preparing it to be sent over the wire to GDB
@@ -147,10 +173,26 @@ class MidasCommunicationChannel {
   }
 }
 
+class UnixSocketCommunication extends MidasCommunicationChannel {
+  constructor(path, emitter) {
+    super(path, emitter)
+  }
+
+  /**
+   * @returns { Promise<DataChannel> }
+   */
+  async resolveInputDataChannel() {
+    const sock = await connect_socket(this.name, this.name, 10, 50);
+    return { recv: sock, send: sock };
+  }
+}
+
 module.exports = {
   MidasCommunicationChannel,
+  UnixSocketCommunication,
   MessageHeader,
   serializeRequest,
   parseBuffer,
   processBuffer,
+  connect_socket
 };

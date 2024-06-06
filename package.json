@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.22.2",
+  "version": "0.23.0",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -108,7 +108,7 @@
         "title": "Reverse finish",
         "shortTitle": "Reverse finish",
         "icon": "$(debug-step-out)",
-        "enablement": "midas.rrSession == true && midas.debugType == midas-rr && midas.Running == false"
+        "enablement": "midas.rrSession == true && midas.Running == false"
       },
       {
         "command": "midas.hot-reload-scripts",
@@ -119,6 +119,16 @@
         "command": "midas.show-logs",
         "title": "Midas: Open logs",
         "shortTitle": "Midas: Open logs"
+      },
+      {
+        "command": "midas.get-mdb",
+        "title": "Midas: Get Midas x86-64 Debugger",
+        "shortTitle": "Get MDB"
+      },
+      {
+        "command": "midas.get-gdb",
+        "title": "Midas: Get GDB",
+        "shortTitle": "Get GDB"
       },
       {
         "command": "midas.get-rr",
@@ -176,17 +186,17 @@
         {
           "command": "midas.reverse-finish",
           "group": "midas",
-          "when": "midas.rrSession == true && midas.debugType == midas-rr"
+          "when": "midas.rrSession == true"
         },
         {
           "command": "midas.set-checkpoint",
           "group": "midas",
-          "when": "midas.rrSession == true && midas.debugType == midas-rr"
+          "when": "midas.rrSession == true"
         },
         {
           "command": "midas.run-to-event",
           "group": "midas",
-          "when": "midas.rrSession == true && midas.debugType == midas-rr"
+          "when": "midas.rrSession == true"
         }
       ],
       "debug/variables/context": [
@@ -811,29 +821,29 @@
                     }
                   }
                 }
-              }
-            },
-            "debug": {
-              "type": "object",
-              "description": "Developer Options (of Midas)",
-              "default": {
-                "recordSession": false,
-                "logging": {
-                  "dapMessages": false
-                }
               },
-              "properties": {
-                "recordSession": {
-                  "type": "boolean",
-                  "description": "Record debug session using RR. This will spawn rr which in turn spawns MDB that we connect to as a debug adapter"
+              "debug": {
+                "type": "object",
+                "description": "Developer Options (of Midas)",
+                "default": {
+                  "recordSession": false,
+                  "logging": {
+                    "dapMessages": false
+                  }
                 },
-                "logging": {
-                  "type": "object",
-                  "description": "Configure various levels of logging",
-                  "properties": {
-                    "dapMessages": {
-                      "type": "boolean",
-                      "description": "Log the messages between the debug adapter and the client"
+                "properties": {
+                  "recordSession": {
+                    "type": "boolean",
+                    "description": "Record debug session using RR. This will spawn rr which in turn spawns MDB that we connect to as a debug adapter"
+                  },
+                  "logging": {
+                    "type": "object",
+                    "description": "Configure various levels of logging",
+                    "properties": {
+                      "dapMessages": {
+                        "type": "boolean",
+                        "description": "Log the messages between the debug adapter and the client"
+                      }
                     }
                   }
                 }

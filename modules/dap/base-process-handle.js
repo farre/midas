@@ -1,35 +1,20 @@
 const { EventEmitter } = require("events");
-const { spawn } = require("child_process");
 const { serializeRequest } = require("./dap-utils");
+const fs = require("fs")
 
 /**
  * @typedef {import("@vscode/debugprotocol").DebugProtocol.Request } DAPRequest
  * @typedef {import("@vscode/debugprotocol").DebugProtocol.Response } DAPResponse
  */
 
+// Represents the type that actually communicates with the debugger, e.g. via stdio or sockets
+// Some derived types may spawn a debugger process, some may just connect to a socket. It's up to the derived type.
 class DebuggerProcessBase {
   /** @type {EventEmitter} */
   messages;
-  /** @type {string} path - the (by config) provided path to the debugger executable. */
-  #path;
-  /** @type { import("child_process").ChildProcessWithoutNullStreams } */
-  #process = null;
 
-  constructor(path, spawnOptions, debug) {
-    // save it. For debug purposes, really.
-    this.#path = path;
-    this.options = spawnOptions;
-    this.debug = debug;
-    try {
-      const p = this.path();
-      const args = this.spawnArgs();
-      this.#process = spawn(p, args);
-    } catch (ex) {
-      console.log(`Creating instance of ${path} failed: ${ex}`);
-      // re-throw exception - this must be a hard error
-      throw ex;
-    }
-
+  constructor(options) {
+    this.options = options
     // @ts-ignore
     if (this.requestChannel === undefined) {
       throw new Error(`Derived type haven't provided 'comms' channel for which we send requests/recv responses over`);
@@ -43,21 +28,6 @@ class DebuggerProcessBase {
     throw new Error("initialize must be overriden by derived type");
   }
 
-  /**
-   * Overridden by derived types when needed
-   * @returns {string} - (possibly processed) path to debugger executable.
-   */
-  path() {
-    return this.#path;
-  }
-
-  /**
-   * Overridden by derived types when needed
-   * @returns { string[] }
-   */
-  spawnArgs() {
-    return this.options;
-  }
   /**
    * @param {(response: import("./dap-base").Response) => void} cb
    */
@@ -77,6 +47,16 @@ class DebuggerProcessBase {
     this.requestChannel().write(output);
   }
 
+  path() {
+    if(this.options.path == null) {
+      throw new Error(`No path to debugger process provided`);
+    }
+    if(!fs.existsSync(this.options.path)) {
+      throw new Error(`${this.options.path} doesn't exist`);
+    }
+    return this.options.path;
+  }
+
   /**
    * Callee can `await` on .waitableSendRequest(...)  for the response
    * @param { import("./base-process-handle").DAPRequest } req
@@ -94,10 +74,6 @@ class DebuggerProcessBase {
         reject(ex);
       }
     });
-  }
-
-  get process() {
-    return this.#process;
   }
 }
 

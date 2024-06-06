@@ -1,10 +1,11 @@
 // @ts-check
 "use strict";
-const { serializeRequest, MidasCommunicationChannel } = require("./dap-utils");
+const { MidasCommunicationChannel, UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
-const DAP = require("./dap-base");
-const { CustomRequests } = require("../debugSessionCustomRequests");
-const { getAPI } = require("../utils/utils");
+const { MidasSessionBase } = require("./dap-base");
+const { getAPI, ContextKeys } = require("../utils/utils");
+const { spawn } = require("child_process");
+const vs = require("vscode")
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -32,24 +33,29 @@ class MdbSocket extends MidasCommunicationChannel {
  */
 
 class MdbProcess extends DebuggerProcessBase {
-  /**
-   * Constructs a MdbProcess of DebuggerProcessBase which is used to execute the actual debugger binary and communicate with it
-   * using the `sendRequest` interface.
-   * @param { string } path
-   * @param { string[] } options
-   * @param { DebugMdb | null } debug
-   */
-  constructor(path, options, debug) {
-    if (debug?.recordSession) {
-      const { path: rr } = getAPI().getToolchain().rr;
+  constructor(options) {
+    super(options)
+    if (this.options?.debug?.recordSession) {
+      const { path: rr } = getAPI().getToolchainConfiguration().rr;
       // Read MDB "documentation" (the source code): the -r CLI parameter, configures the wait system to use signals
       // (instead of waitpid syscall) to work (properly) while being recorded by RR.
-      const newOptions = ["record", path, "-r", ...options];
-      super(rr, newOptions, debug);
+      const newOptions = ["record", this.path(), "-r", ...this.options.options];
+      try {
+        const p = rr;
+        this.process = spawn(p, newOptions);
+      } catch (ex) {
+        console.log(`Creating instance of ${this.path()} failed: ${ex}`);
+        // re-throw exception - this must be a hard error
+        throw ex;
+      }
     } else {
-      super(path, options, debug);
+      this.process = spawn(this.path(), this.spawnArgs());
     }
     this.socket = new MdbSocket("stdio", this.process, this.messages);
+  }
+
+  spawnArgs() {
+    return this.options
   }
 
   async initialize() {
@@ -61,43 +67,59 @@ class MdbProcess extends DebuggerProcessBase {
   }
 }
 
-class MdbSession extends DAP.MidasSessionBase {
-  constructor(spawnConfig, terminal, checkpointsUI) {
-    super(MdbProcess, spawnConfig, terminal, checkpointsUI, {
-      // callbacks
-      response: (res) => {
-        console.log(`response from debugger: ${JSON.stringify(res, null, 2)}`);
-        if (!res.success) {
-          const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-          console.log(`[request error]: ${res.command} failed\n${err}`);
-        }
-        switch (res.command) {
-          case CustomRequests.DeleteCheckpoint:
-          case CustomRequests.SetCheckpoint:
-            this.updateCheckpointsView(res.body.checkpoints);
-            break;
-          case "initialize":
-            this.sendResponse(res);
-            return;
-          default:
-            break;
-        }
-        this.sendResponse(res);
-      },
-      events: null,
-    });
+class MdbChildConnection extends DebuggerProcessBase {
+  constructor(options) {
+    super(options);
+    this.socket = new UnixSocketCommunication(this.path(), this.messages);
   }
 
-  setFunctionBreakPointsRequest(response, args, request) {
-    if (this.spawnConfig) this.sendResponse(response);
+  async initialize() {
+    await this.socket.connect();
+  }
+
+  requestChannel() {
+    return this.socket;
+  }
+}
+
+class MdbSession extends MidasSessionBase {
+  constructor(spawnConfig, terminal, checkpointsUI, cleanUp) {
+    super(MdbProcess, spawnConfig, terminal, checkpointsUI, null, cleanUp);
   }
 
   async initializeRequest(response, args) {
     await this.dbg.initialize();
+    args["RRSession"] = this.spawnConfig?.RRSession ?? false;
     super.initializeRequest(response, args);
+  }
+
+  attachRequest(response, args, request) {
+    const attachArgs = args.attachArguments;
+    if(attachArgs.type == "rr") {
+      vs.commands.executeCommand("setContext", ContextKeys.RRSession, true);
+    }
+    this.dbg.sendRequest(request, attachArgs);
+  }
+}
+
+class MdbChildSession extends MidasSessionBase {
+  constructor(spawnConfig, terminal, cpui) {
+    super(MdbChildConnection, spawnConfig, terminal, cpui, null, null)
+  }
+
+  initializeRequest(response, args) {
+    this.dbg.initialize().then(() => {
+      this.dbg.sendRequest({ seq: response.request_seq, command: response.command }, args);
+    })
+  }
+
+  attachRequest(response, args, request) {
+    // we don't actually attach. We're already attached!
+    this.sendResponse(response);
   }
 }
 
 module.exports = {
   MdbSession,
+  MdbChildSession
 };
