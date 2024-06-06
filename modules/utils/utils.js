@@ -926,7 +926,8 @@ async function getRR() {
             if (process.env.hasOwnProperty("VIRTUAL_ENV")) {
               // eslint-disable-next-line max-len
               show_modal_error(
-                `${err.message}. VIRTUAL_ENV was found: if you are running vscode in a python virtual environment this command will not work. Open VSCode in another folder without it and try this command again.`
+                `${err.message}. VIRTUAL_ENV was found: if you are running vscode in a python virtual environment this command will not work.
+                Open VSCode in another folder without it and try this command again.`
               );
             } else {
               // eslint-disable-next-line max-len
