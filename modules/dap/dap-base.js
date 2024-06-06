@@ -1,5 +1,6 @@
 const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent, } = require("@vscode/debugadapter");
 const { commands, window, Uri } = require("vscode");
+const vs = require("vscode")
 const { CustomRequests } = require("../debugSessionCustomRequests");
 const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
@@ -53,21 +54,23 @@ class MidasSessionBase extends DebugSession {
   // The currently loaded pretty printer.
   #printer;
   /**
-   * @param { new (path: string, options: string[], debug: Object) => DebuggerProcessBase } DebuggerProcessConstructor
+   * @param { new (options) => DebuggerProcessBase } DebuggerProcessConstructor
    * @param { SpawnConfig } spawnConfig
    * @param { * } terminal
    * @param { * } checkpointsUI
    * @param { {response: (res: Response) => void, events: (evt: Event) => void } | null } callbacks
+   * @param { import("events").EventEmitter } cleanUp
    */
-  constructor(DebuggerProcessConstructor, spawnConfig, terminal, checkpointsUI, callbacks) {
+  constructor(DebuggerProcessConstructor, spawnConfig, terminal, checkpointsUI, callbacks, cleanUp) {
     super(true, false);
     this.spawnConfig = spawnConfig;
     this.#checkpointsUI = checkpointsUI;
     this.setDebuggerLinesStartAt1(true);
     this.setDebuggerColumnsStartAt1(true);
-    this.dbg = new DebuggerProcessConstructor(spawnConfig.path, spawnConfig?.options ?? [], spawnConfig?.debug);
+    this.dbg = new DebuggerProcessConstructor(spawnConfig);
     this.#terminal = terminal;
     this.notifiedOfTermination = false;
+    this.rootSessionCleanup = cleanUp
 
     const { response, events } = callbacks ?? { response: null, events: null };
 
@@ -99,15 +102,38 @@ class MidasSessionBase extends DebugSession {
     if (events) {
       this.dbg.connectEvents(callbacks.events);
     } else {
-      this.dbg.connectEvents((evt) => {
+      this.dbg.connectEvents(async (evt) => {
         const { event, body } = evt;
         switch (event) {
+          case "terminated":
+            this.shutdown();
+            break;
           case "exited":
             this.emit("exit");
             break;
-          case "output":
-            this.routeEvent(new OutputEvent(body.output, "console"));
-            break;
+          case "startDebugging":
+            // currently, only midas-canonical supports multiprocessing
+            // via reverse requesting a debug session.
+
+            await vs.debug
+              .startDebugging(
+                vs.workspace.workspaceFolders[0],
+                {
+                  type: "midas-canonical",
+                  name: "forked",
+                  request: "attach",
+                  childConfiguration: {
+                    path: body.configuration.path
+                  }
+                },
+                vs.debug.activeDebugSession
+              )
+              .then((bool) => {
+                if(bool) {
+                  console.log(`child session started`);
+                }
+              });
+            return;
         }
         this.sendEvent(evt);
       });
@@ -117,30 +143,31 @@ class MidasSessionBase extends DebugSession {
       this.sendEvent(new OutputEvent(event.body, "console", event));
     });
 
-    for (const evt of ["close", "disconnect", "error", "exit"]) {
-      this.dbg.process.on(evt, () => {
-        if (!this.notifiedOfTermination) {
-          this.sendEvent(new TerminatedEvent());
-          this.notifiedOfTermination = true;
-        }
-      });
+
+    if(this.hasProcessHandle()) {
+      for (const evt of ["close", "disconnect", "error", "exit"]) {
+        this.dbg.process.on(evt, () => {
+          if (!this.notifiedOfTermination) {
+            this.sendEvent(new TerminatedEvent());
+            this.notifiedOfTermination = true;
+          }
+        });
+      }
     }
   }
 
-  routeEvent(event) {}
+  // If this is a child session, it holds no handle to a process. It's just a connection to a socket
+  hasProcessHandle() {
+    return this.dbg.process != null;
+  }
 
   dispose() {
     commands.executeCommand("setContext", ContextKeys.RRSession, false);
     this.disposeTerminal();
     super.dispose();
-  }
-
-  atExitCleanUp(signal) {
-    this.dbg.process.kill(signal);
-
-    if (this.spawnConfig.disposeOnExit()) this.disposeTerminal();
-    else {
-      if (this.#terminal) this.#terminal.disposeChildren();
+    if(this.rootSessionCleanup) {
+      // Root Session Cleanup
+      this.rootSessionCleanup.emit("shutdown")
     }
   }
 
