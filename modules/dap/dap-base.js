@@ -1,7 +1,8 @@
-const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
-const { commands, window } = require("vscode");
+const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent, } = require("@vscode/debugadapter");
+const { commands, window, Uri } = require("vscode");
 const { CustomRequests } = require("../debugSessionCustomRequests");
-const { ContextKeys, toHexString, getAPI } = require("../utils/utils");
+const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
+const { PrinterFactory } = require("../prettyprinter.js");
 
 /**
  *
@@ -49,6 +50,8 @@ class MidasSessionBase extends DebugSession {
   spawnConfig;
   addressBreakpoints = [];
 
+  // The currently loaded pretty printer.
+  #printer;
   /**
    * @param { new (path: string, options: string[], debug: Object) => DebuggerProcessBase } DebuggerProcessConstructor
    * @param { SpawnConfig } spawnConfig
@@ -67,6 +70,13 @@ class MidasSessionBase extends DebugSession {
     this.notifiedOfTermination = false;
 
     const { response, events } = callbacks ?? { response: null, events: null };
+
+    if (spawnConfig.prettyPrinterPath.length) {
+      const factory = new PrinterFactory(this);
+      factory.loadPrettyPrinters(Uri.file(spawnConfig.prettyPrinterPath)).then((printer) => {
+        this.#printer = printer;
+      });
+    }
 
     if (response) {
       this.dbg.connectResponse(callbacks.response);
@@ -229,9 +239,29 @@ class MidasSessionBase extends DebugSession {
     if (this.formatValuesAsHex) {
       args.format = { hex: true };
     }
-    this.dbg.waitableSendRequest(request, args).then((response) => {
-      this.sendResponse(response);
-    });
+
+    if (!this.#printer) {
+      this.dbg.sendRequest(request, args);
+      return
+    }
+
+    // If no pretty printer is found this initiates the variables request as usual.
+    this.#printer.print(request, args).then(
+      async (response) => {
+        try {
+          if (this.#printer) {
+            for (const variable of response.body.variables) {
+              // If it's already pretty this does nothing.
+              await this.#printer.prettify(variable);
+            }
+          }
+        } catch (e) {
+          console.log(e.message)
+        }
+
+        this.sendResponse(response);
+      }
+    );
   }
 
   checkForHexFormatting(variablesReference, variables) {
@@ -248,6 +278,12 @@ class MidasSessionBase extends DebugSession {
   }
 
   scopesRequest(response, args, request) {
+    // We reset the current recorded interceptions, since de're getting
+    // new scopes and the interceptions have become invalid.
+    if (this.#printer) {
+      this.#printer.reset();
+    }
+
     this.dbg.sendRequest(request);
   }
 

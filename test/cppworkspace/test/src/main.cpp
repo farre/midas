@@ -15,6 +15,7 @@
 #include <number.hpp>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include <stdio.h>
 #include <unistd.h>
@@ -237,6 +238,8 @@ int main(int argc, const char **argv) {
   use_cstring();
   many_ints();
   Foo foo_{};
+  std::optional<int> opt_int;
+  std::optional<int> opt_int_42 = 42;
   // test that the DAP implementation returns correct (at least from user perspective) values in
   // variables & watch variables list
   Quux q{.a = 1, .b = 2, .foo_ref = foo_, .array = {9, 8, 7}};

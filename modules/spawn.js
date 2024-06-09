@@ -57,6 +57,7 @@ class SpawnConfig {
     this.attachOnFork = launchJson.attachOnFork ?? false;
     this.externalConsole = launchJson.externalConsole;
     this.trace = launchJson["trace"];
+    this.prettyPrinterPath = launchJson.prettyPrinterPath;
   }
 
   /**
