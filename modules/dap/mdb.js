@@ -36,7 +36,7 @@ class MdbProcess extends DebuggerProcessBase {
   constructor(options) {
     super(options)
     if (this.options?.debug?.recordSession) {
-      const { path: rr } = getAPI().getToolchain().rr;
+      const { path: rr } = getAPI().getToolchainConfiguration().rr;
       // Read MDB "documentation" (the source code): the -r CLI parameter, configures the wait system to use signals
       // (instead of waitpid syscall) to work (properly) while being recorded by RR.
       const newOptions = ["record", this.path(), "-r", ...this.options.options];
