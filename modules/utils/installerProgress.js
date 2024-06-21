@@ -4,6 +4,7 @@ const EventEmitter = require("events");
 const { sudo, which } = require("./sysutils");
 const os = require("os");
 const { existsSync, unlinkSync } = require("fs");
+const { getAPI } = require("./utils");
 
 const InstallerExceptions = {
   PackageManagerNotFound: "PkgManNotFound",
@@ -109,7 +110,7 @@ function run_install(python, repo_type, pkgs, cancellable, logger) {
 
     // starts python installer services application
     const run_installer_services = () => {
-      return sudo([python, repo_type], pass);
+      getAPI().getPython().sudoExecute([repo_type], pass)
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(pkgs, listeners);

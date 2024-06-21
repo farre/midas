@@ -6,29 +6,26 @@ const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/mida
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
 const { MdbConfigurationProvider, MdbDebugAdapterFactory } = require("./providers/midas-canonical");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
-const { which } = require("./utils/sysutils");
+const { which, sanitizeEnvVariables } = require("./utils/sysutils");
 const {
-  getRR,
   strEmpty,
   getAPI,
-  queryGit,
-  installRRFromSource,
-  verifyPreRequistesExists,
-  guessInstaller,
   parseSemVer,
   semverIsNewer,
   releaseNotesProvider,
   showReleaseNotes,
+  Tool,
 } = require("./utils/utils");
 const fs = require("fs");
 const Path = require("path");
 const { debugLogging, DebugLogging } = require("./buildMode");
-const { InstallerExceptions } = require("./utils/installerProgress");
 const { ProvidedAdapterTypes } = require("./shared");
+const { execSync } = require("child_process");
+const { ManagedToolchain } = require("./toolchain");
 
 /** @typedef { { sha: string, date: Date } } GitMetadata */
-/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } Tool */
-/** @typedef { { rr: Tool, gdb: Tool } } Toolchain */
+/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } ManagedTool */
+/** @typedef { { rr: ManagedTool, gdb: ManagedTool, mdb: ManagedTool } } Toolchain */
 /** @typedef { { midas_version: string, toolchain: Toolchain } } MidasConfig */
 
 /** @returns { MidasConfig } */
@@ -38,6 +35,7 @@ const default_config_contents = () => {
     toolchain: {
       rr: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
       gdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
+      mdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
     },
   };
 };
@@ -185,9 +183,16 @@ class MidasAPI {
   /** @type {Map<String, vscode.OutputChannel>} */
   #channels = new Map();
 
+  /** @type { Map<String, import("./utils/utils").Tool> } */
+  #tools = new Map();
+
   /** @param {import("vscode").ExtensionContext} ctx */
   constructor(ctx) {
     this.#context = ctx;
+
+    const toolConfigureLogger = this.createLogger("Midas: Tool management");
+    toolConfigureLogger.hide();
+    this.toolchain = new ManagedToolchain(ctx, toolConfigureLogger);
 
     if (!fs.existsSync(this.getStoragePathOf())) {
       fs.mkdirSync(this.getStoragePathOf(), { recursive: true });
@@ -196,6 +201,79 @@ class MidasAPI {
     if (!fs.existsSync(cfg_path)) {
       fs.writeFileSync(cfg_path, JSON.stringify(default_config_contents()));
     }
+  }
+
+  initToolsRequired() {
+    this.toolsInitialized = this.toolsInitialized ?? false;
+
+    if(!this.toolsInitialized) {
+      const RequiredTools = {
+        cmake: { variants: ["cmake"] },
+        python: { variants: ["python", "python3", "py"] },
+        unzip: { variants: ["unzip"] },
+        ninja: { variants: ["ninja"] },
+      };
+      for(const prop in RequiredTools) {
+        for(const variant of RequiredTools[prop].variants) {
+          try {
+            const p = execSync(`which ${variant}`, { env: sanitizeEnvVariables() }).toString().trim();
+            this.#tools.set(prop, new Tool(prop, p, null));
+            break;
+          } catch(e) {
+          }
+        }
+      }
+      this.toolsInitialized = true;
+    }
+  }
+
+  /**
+   * @returns { ManagedToolchain }
+   */
+  getToolManager() {
+    return this.toolchain;
+  }
+
+  getSystemTool(name) {
+    this.initToolsRequired();
+    const tool = this.#tools.get(name);
+    return tool;
+  }
+
+  getRequiredSystemTool(name) {
+    const tool = this.getSystemTool(name);
+    if(tool == null) {
+      vscode.window.showErrorMessage(`Failed to find required tool ${name} on $PATH. This may cause Midas toolchain management to not work.`);
+      throw new Error(`Could not determine ${name} existence on system`);
+    }
+    return tool;
+  }
+
+  getPython() {
+    return this.getRequiredSystemTool("python");
+  }
+
+  getCmake() {
+    return this.getRequiredSystemTool("cmake");
+  }
+
+  getUnzip() {
+    return this.getRequiredSystemTool("unzip");
+  }
+
+  getNinja() {
+    return this.getSystemTool("ninja");
+  }
+
+  hasRequiredTools(required) {
+    for(const req of required) {
+      try {
+        const t = this.getRequiredSystemTool(req);
+      } catch(ex) {
+        return false;
+      }
+    }
+    return true;
   }
 
   setupEnvVars() {
@@ -219,7 +297,6 @@ class MidasAPI {
     }
   }
 
-  /** @param { MidasConfig } cfg */
   #write_config(cfg) {
     try {
       const data = JSON.stringify(cfg, null, 2);
@@ -246,14 +323,19 @@ class MidasAPI {
   }
 
   /** @returns { Toolchain } */
-  getToolchain() {
+  getToolchainConfiguration() {
     const cfg = this.getConfig();
     return cfg.toolchain;
   }
 
+  postToolchainUpdate() {
+    const cfg = this.toolchain.serialize();
+    this.#write_config(cfg);
+  }
+
   /**
    * Write RR settings to config file
-   * @param { Tool } rr
+   * @param { ManagedTool } rr
    */
   writeRr(rr) {
     let cfg = this.getConfig();
@@ -261,9 +343,15 @@ class MidasAPI {
     this.#write_config(cfg);
   }
 
+  writeMdb() {
+    let cfg = this.getConfig();
+    cfg.toolchain.mdb = this.toolchain.getTool("mdb").serialize();
+    this.#write_config(cfg);
+  }
+
   /**
    * Write GDB settings to config file
-   * @param { Tool } gdb
+   * @param { ManagedTool } gdb
    */
   writeGdb(gdb) {
     let cfg = this.getConfig();
@@ -308,7 +396,7 @@ class MidasAPI {
     const cfg = vscode.workspace.getConfiguration("midas");
     if (!strEmpty(cfg.get(tool))) return cfg.get(tool);
 
-    const toolchain = this.getToolchain();
+    const toolchain = this.getToolchainConfiguration();
 
     if (!strEmpty(toolchain[tool].path)) return toolchain[tool].path;
 
@@ -354,90 +442,24 @@ class MidasAPI {
     }
   }
 
-  async checkRRUpdates() {
-    const { rr } = this.getToolchain();
-    if (rr.managed) {
+
+  async checkToolchainUpdates() {
+    const manager = this.getToolManager();
+    for(const tool of ["rr", "gdb", "mdb"]) {
       try {
-        const { sha, date } = await queryGit();
-        const configDate = new Date(rr.git.date ?? null);
-        const queryDate = new Date(date);
-        if (rr.git.sha != sha && configDate < queryDate) {
-          vscode.window
-            .showInformationMessage("A newer version of RR can be built. Do you want to build it?", ...["yes", "no"])
-            .then(async (res) => {
-              if (res == "yes") {
-                await this.updateRr();
-              }
-            });
-        }
-      } catch (ex) {
-        vscode.window.showInformationMessage(`Update failed: ${ex}`);
+        manager.getTool(tool).update();
+      } catch(ex) {
+
       }
     }
   }
 
-  async updateRr() {
-    let logger = vscode.window.createOutputChannel("Installing RR dependencies", "Log");
-    logger.show();
-    let cfg = this.getToolchain();
-    logger.appendLine(`Current toolchain: ${JSON.stringify(cfg)}`);
-    const requiredTools = ["cmake", "python", "unzip"];
-    const requirements = verifyPreRequistesExists(requiredTools);
-    for (const tool of requiredTools) {
-      if (!requirements.hasOwnProperty(tool)) {
-        // eslint-disable-next-line max-len
-        throw {
-          type: InstallerExceptions.TerminalCommandNotFound,
-          message: `Could not determine if you have one of the required tools installed on your system: ${requiredTools.join(
-            ", "
-          )}`,
-        };
-      }
-      if (!requirements[tool].found()) {
-        throw { type: InstallerExceptions.TerminalCommandNotFound, message: requirements[tool].errorMessage() };
-      }
-    }
-    let args = {};
-    for (const tool of requiredTools) {
-      args[tool] = requirements[tool].path;
-    }
-    const tmp_build_path = this.getStoragePathOf("rr-tmp-update");
-    logger.appendLine(`Temporary RR build directory: ${tmp_build_path}`);
+  async updatesCheck() {
     try {
-      await guessInstaller(args["python"], logger);
-    } catch (ex) {
-      logger.appendLine(
-        `Couldn't update RR: ${JSON.stringify(ex)}. If you're running in a virtual environement updating will not work.`
-      );
-      return;
-    }
-
-    try {
-      const {
-        install_dir: install_directory,
-        build_dir,
-        path,
-        managed,
-        git,
-        version,
-      } = await installRRFromSource(args, logger, tmp_build_path);
-      logger.appendLine("Building of RR succeeded. Removing old build...");
-      if (fs.existsSync(cfg.rr.root_dir)) {
-        fs.rmSync(cfg.rr.root_dir, { force: true, recursive: true });
-      }
-      // for not-yet-migrated configs, we don't have root path; we need to determine
-      // path from binary path; which is, pop /bin/rr off of it
-      if (cfg.rr.root_dir == "" && fs.existsSync(cfg.rr.path)) {
-        const binary_dir = Path.dirname(cfg.rr.path);
-        const rr_dir = Path.dirname(binary_dir);
-        fs.rmSync(rr_dir, { force: true, recursive: true });
-      }
-      fs.renameSync(build_dir, install_directory);
-      cfg.rr = { root_dir: install_directory, version, git, managed, path: `${install_directory}/bin/rr` };
-      this.writeRr(cfg.rr);
-    } catch (ex) {
-      logger.appendLine(`Couldn't update RR: ${ex}`);
-      fs.rmSync(cfg.rr.root_dir, { force: true, recursive: true });
+      await this.toolchain.checkUpdates();
+      this.#write_config(this.toolchain.serialize());
+    } catch(ex) {
+      vscode.window.showErrorMessage(`Failed to update: ${ex}`);
     }
   }
 }
@@ -462,7 +484,7 @@ async function initMidas(api) {
         const msg = "No RR found in $PATH. Do you want Midas to install or build RR?";
         const opts = { modal: true };
         if ((await vscode.window.showInformationMessage(msg, opts, ...answers)) == "yes") {
-          await getRR();
+          await api.getToolManager().getTool("rr").beginInstallerUI();
         }
       }
     }
@@ -520,7 +542,7 @@ async function activateExtension(context) {
   global.API = new MidasAPI(context);
   await initMidas(global.API);
 
-  await global.API.checkRRUpdates();
+  await global.API.updatesCheck();
 }
 
 function deactivateExtension() {}

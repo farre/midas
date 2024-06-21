@@ -74,7 +74,7 @@ class MidasSessionBase extends DebugSession {
 
     const { response, events } = callbacks ?? { response: null, events: null };
 
-    if (spawnConfig.prettyPrinterPath.length) {
+    if (spawnConfig.prettyPrinterPath?.length) {
       const factory = new PrinterFactory(this);
       factory.loadPrettyPrinters(Uri.file(spawnConfig.prettyPrinterPath)).then((printer) => {
         this.#printer = printer;
