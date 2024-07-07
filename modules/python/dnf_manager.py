@@ -143,8 +143,8 @@ try:
       i686_deps.append(item.removesuffix(".i686"))
     else:
       x86_64_deps.append(item)
-
-  DEPS = [{"arch": [platform.processor(), "noarch"], "deps": x86_64_deps }, {"arch": ["i686"], "deps": i686_deps } ]
+  PLATFORM_PROCESSOR_BUG_FIX = platform.processor() if platform.processor() != "" else "x86_64"
+  DEPS = [{"arch": [PLATFORM_PROCESSOR_BUG_FIX , "noarch"], "deps": x86_64_deps }, {"arch": ["i686"], "deps": i686_deps } ]
   get_logger().debug("Dependencies requested: {}".format(DEPS))
   with dnf.base.Base() as base:
     base.read_all_repos()

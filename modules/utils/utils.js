@@ -88,7 +88,7 @@ class Tool {
 
   errorMessage() {
     return `could not find any of '${ToolList[this.name].variants.join(
-      ", ",
+      ", "
     )}' on $PATH. One of these are required to be installed on your system`;
   }
 }
@@ -187,11 +187,11 @@ async function buildTestFiles(testPath) {
   await new Promise((resolve) =>
     exec("cmake .. -DCMAKE_BUILD_TYPE=Debug", {
       cwd: buildPath,
-    }).once("exit", resolve),
+    }).once("exit", resolve)
   );
 
   await new Promise((resolve) =>
-    exec("cmake --build .", { cwd: buildPath }).once("exit", (exit_code) => resolve(exit_code)),
+    exec("cmake --build .", { cwd: buildPath }).once("exit", (exit_code) => resolve(exit_code))
   );
 }
 
@@ -462,7 +462,7 @@ function requiresMinimum(version, required_version, patch_required = false) {
   const throw_fn = () => {
     const { major, minor, patch } = required_version;
     throw new Error(
-      `Version ${major}.${minor}.${patch} is required. You have ${version.major}.${version.minor}.${version.patch}`,
+      `Version ${major}.${minor}.${patch} is required. You have ${version.major}.${version.minor}.${version.patch}`
     );
   };
   if (version.major < required_version.major) {
@@ -535,13 +535,13 @@ async function getPid() {
 
 const FEDORA_DEPS =
   // eslint-disable-next-line max-len
-  "ccache cmake make gcc gcc-c++ gdb libgcc libgcc.i686 glibc-devel glibc-devel.i686 libstdc++-devel libstdc++-devel.i686 libstdc++-devel.x86_64 python3-pexpect man-pages ninja-build capnproto capnproto-libs capnproto-devel zlib-devel".split(
-    " ",
+  "ccache cmake make gcc gcc-c++ gdb libgcc libgcc.i686 glibc-devel glibc-devel.i686 libstdc++-devel libstdc++-devel.i686 libstdc++-devel.x86_64 python3-pexpect man-pages ninja-build capnproto capnproto-libs capnproto-devel zlib-devel zlib-ng-compat-devel libzstd-devel".split(
+    " "
   );
 
 const UBUNTU_DEPS =
   "ccache cmake make g++-multilib gdb pkg-config coreutils python3-pexpect manpages-dev git ninja-build capnproto libcapnp-dev zlib1g-dev".split(
-    " ",
+    " "
   );
 
 async function guessInstaller(python, logger) {
@@ -662,7 +662,7 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
   return _spawn(
     cmake,
     ["-S", `${build_path}/rr-master`, "-B", build_path, "-DCMAKE_BUILD_TYPE=Release", has_ninja ? "-G Ninja" : ""],
-    { shell: true, stdio: "pipe", cwd: build_path, detached: true, env: sanitizeEnvVariables() },
+    { shell: true, stdio: "pipe", cwd: build_path, detached: true, env: sanitizeEnvVariables() }
   );
 }
 
@@ -675,13 +675,29 @@ function spawn_cmake_cfg(cmake, build_path, has_ninja) {
     git: { sha: string, date: Date }
   } } BuildMetadata
 */
-
-function unzipTodir(unzipPath, file, toPath, logger) {
+async function unzipTodir(unzipPath, file, toPath, logger) {
+  const se = vscode.window.showErrorMessage;
   logger.appendLine(`creating dir ${toPath}`);
+  if (fs.existsSync(toPath)) {
+    try {
+      fs.rmSync(toPath, { recursive: true, force: true });
+    } catch (ex) {
+      await se(
+        `Failed to remove previous rr directory: ${toPath}. Delete it manually and retry this command (in control panel: get RR)\n${ex}`
+      );
+      return false;
+    }
+  }
   fs.mkdirSync(toPath);
   const unzip_cmd = `${unzipPath} ${file} -d ${toPath}`;
   logger.appendLine(unzip_cmd);
-  execSync(unzip_cmd);
+  try {
+    execSync(unzip_cmd);
+  } catch (ex) {
+    await se(`Unzip command failed: ${ex}`, { modal: true });
+    return false;
+  }
+  return true;
 }
 
 function cmakeConfigure(cmakePath, buildPath, hasNinja, logger) {
@@ -725,7 +741,7 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
   const { cmake, unzip } = requiredTools;
   const { path, status } = await http_download(
     "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
-    "rr-master.zip",
+    "rr-master.zip"
   );
   const { sha, date } = await queryGit();
   if (status == "success") {
@@ -736,7 +752,9 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
       async (progressReporter, token) => {
         return new Promise(async (progress_resolve, reject) => {
           if (build_path == null) build_path = getAPI().getStoragePathOf(`rr-${version}`);
-          unzipTodir(unzip, path, build_path, logger);
+          if (!(await unzipTodir(unzip, path, build_path, logger))) {
+            reject("Install aborted");
+          }
           await cmakeConfigure(cmake, build_path, has_ninja, logger)
             .then(() => {
               const cmake_build = _spawn(cmake, ["--build", build_path, "-j"], {
@@ -786,7 +804,7 @@ async function installRRFromSource(requiredTools, logger, build_path = null) {
               reject("CMake Configured failed");
             });
         });
-      },
+      }
     );
   } else {
     return null;
@@ -801,7 +819,7 @@ async function getRR() {
     const choice = await vscode.window.showInformationMessage(
       "Toolchain: RR is being managed by midas already. Do you want to update RR?",
       "Yes",
-      "No",
+      "No"
     );
     if (choice == "Yes") {
       await getAPI().updateRr();
@@ -816,7 +834,7 @@ async function getRR() {
   let answer = await vscode.window.showInformationMessage(
     "To install RR (or it's depedencies), Midas requires you input your sudo password - are you ok with this?",
     { modal: true, detail: "Midas do not save or store any data about you." },
-    ...answers,
+    ...answers
   );
   if (answer.title == answers[1].title) {
     const result = await vscode.window.showQuickPick(
@@ -847,7 +865,7 @@ async function getRR() {
           op: "build",
         },
       ],
-      { placeHolder: "Choose method of installing rr" },
+      { placeHolder: "Choose method of installing rr" }
     );
     if (result) {
       try {
@@ -869,7 +887,7 @@ async function getRR() {
             throw {
               type: InstallerExceptions.TerminalCommandNotFound,
               message: `Could not determine if you have one of the required tools installed on your system: ${requiredTools.join(
-                ", ",
+                ", "
               )}`,
             };
           }
@@ -908,12 +926,12 @@ async function getRR() {
             if (process.env.hasOwnProperty("VIRTUAL_ENV")) {
               // eslint-disable-next-line max-len
               show_modal_error(
-                `${err.message}. VIRTUAL_ENV was found: if you are running vscode in a python virtual environment this command will not work. Open VSCode in another folder without it and try this command again.`,
+                `${err.message}. VIRTUAL_ENV was found: if you are running vscode in a python virtual environment this command will not work. Open VSCode in another folder without it and try this command again.`
               );
             } else {
               // eslint-disable-next-line max-len
               show_modal_error(
-                `${err.message}. You might be running a python virtual environment? Open VSCode without it and run this command again.`,
+                `${err.message}. You might be running a python virtual environment? Open VSCode without it and run this command again.`
               );
             }
             break;
@@ -1084,7 +1102,7 @@ async function http_download(url, file_name) {
             });
           }
         });
-      }),
+      })
   );
 }
 
