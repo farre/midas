@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.22.2",
+  "version": "0.23.0",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -124,6 +124,11 @@
         "command": "midas.get-mdb",
         "title": "Midas: Get Midas x86-64 Debugger",
         "shortTitle": "Get MDB"
+      },
+      {
+        "command": "midas.get-gdb",
+        "title": "Midas: Get GDB",
+        "shortTitle": "Get GDB"
       },
       {
         "command": "midas.get-rr",

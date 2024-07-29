@@ -2,7 +2,6 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const { EventEmitter } = require("events");
 const { getPid, getVersion, isNothing, showReleaseNotes, getAPI } = require("./utils/utils");
 const { getExtensionPathOf } = require("./utils/sysutils");
 /**
@@ -76,7 +75,7 @@ function getVSCodeCommands() {
   });
 
   const zenWorkaround = registerCommand("midas.zen-workaround", async (/** item */) => {
-    const rrSourceDir = getAPI().getToolManager().getTool("rr").sourceDirectory;
+    const rrSourceDir = getAPI().getToolchain().getTool("rr").sourceDirectory;
     const script = path.join(rrSourceDir, "scripts", "zen_workaround.py");
     if (fs.existsSync(script)) {
       try {
@@ -142,38 +141,39 @@ function getVSCodeCommands() {
   });
 
   const ToolInstaller = async (name) => {
-    try {
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          cancellable: true,
-          title: `Installing ${name}`,
-        },
-        async (progress, token) => {
-          let emitter = new EventEmitter();
-          await getAPI().getToolManager().getTool(name).install((report) => {
-            progress.report(report);
-          }, emitter);
-
-          token.onCancellationRequested(() => {
-            emitter.emit("cancel");
-          })
-        })
-    } catch(ex) {
-      vscode.window.showErrorMessage(`Failed to configure & install ${name.toUpperCase()}: ${ex}`);
-    }
+    const mgr = getAPI().getToolchain();
+    const tool = mgr.getTool(name);
+    mgr.installDependencies(tool).then(async (wasNotCancelled) => {
+      if (wasNotCancelled) {
+        await tool.beginInstallerUI()
+      } else {
+        vscode.window.showInformationMessage("Install cancelled.");
+      }
+    });
   };
 
   const getPid_ = registerCommand("midas.getPid", getPid);
   const getRR_ = registerCommand("midas.get-rr", async () => {
-    await ToolInstaller("rr");
+    try {
+      await ToolInstaller("rr");
+    } catch (ex) {
+      vscode.window.showErrorMessage(`RR install failed: ${ex}`);
+    }
   });
   const getMdb = registerCommand("midas.get-mdb", async () => {
-    await ToolInstaller("mdb");
+    try {
+      await ToolInstaller("mdb");
+    } catch(ex) {
+      vscode.window.showErrorMessage(`MDB install failed: ${ex}`);
+    }
   });
 
   const getGdb = registerCommand("midas.get-gdb", async () => {
-    await ToolInstaller("gdb");
+    try {
+      await ToolInstaller("gdb");
+    } catch(ex) {
+      vscode.window.showErrorMessage(`GNU Debugger install failed: ${ex}`);
+    }
   });
 
   const showReleaseNotes_ = registerCommand("midas.show-release-notes", showReleaseNotes);

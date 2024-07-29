@@ -15,30 +15,13 @@ const {
   releaseNotesProvider,
   showReleaseNotes,
   Tool,
+  createEmptyMidasConfig,
 } = require("./utils/utils");
 const fs = require("fs");
-const Path = require("path");
 const { debugLogging, DebugLogging } = require("./buildMode");
 const { ProvidedAdapterTypes } = require("./shared");
 const { execSync } = require("child_process");
 const { ManagedToolchain } = require("./toolchain");
-
-/** @typedef { { sha: string, date: Date } } GitMetadata */
-/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } ManagedTool */
-/** @typedef { { rr: ManagedTool, gdb: ManagedTool, mdb: ManagedTool } } Toolchain */
-/** @typedef { { midas_version: string, toolchain: Toolchain } } MidasConfig */
-
-/** @returns { MidasConfig } */
-const default_config_contents = () => {
-  return {
-    midas_version: "",
-    toolchain: {
-      rr: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-      gdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-      mdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-    },
-  };
-};
 
 function cloneNonExistingSubProperties(obj) {
   return (key, value) => {
@@ -49,9 +32,9 @@ function cloneNonExistingSubProperties(obj) {
   };
 }
 
-/** @returns {MidasConfig} */
-const sanitize_config = (cfg) => {
-  return JSON.parse(JSON.stringify(cfg, cloneNonExistingSubProperties(default_config_contents())));
+/** @returns {import("./utils/utils").MidasConfig} */
+const sanitizeConfig = (cfg) => {
+  return JSON.parse(JSON.stringify(cfg, cloneNonExistingSubProperties(createEmptyMidasConfig())));
 };
 
 // JSON.stringify(sanitize_config(foo))
@@ -166,11 +149,28 @@ class MidasDebugAdapterTrackerFactory {
   }
 }
 
+// This will make it impossible to introduce this bug again.
+class APIInit {
+  configFilePath;
+  constructor(extensionContext) {
+    if (!fs.existsSync(extensionContext.globalStorageUri.fsPath)) {
+      fs.mkdirSync(extensionContext.globalStorageUri.fsPath, { recursive: true });
+    }
+    this.configFilePath = `${extensionContext.globalStorageUri.fsPath}/.config`;
+    if (!fs.existsSync(this.configFilePath)) {
+      fs.writeFileSync(this.configFilePath, JSON.stringify(createEmptyMidasConfig()));
+    }
+  }
+
+  get configFile() {
+    return this.configFilePath;
+  }
+}
+
 /**
  * Public "API" returned by activate function
  */
-class MidasAPI {
-  #CFG_NAME = ".config";
+class MidasAPI extends APIInit {
 
   /** @type {import("vscode").ExtensionContext} */
   #context;
@@ -188,19 +188,8 @@ class MidasAPI {
 
   /** @param {import("vscode").ExtensionContext} ctx */
   constructor(ctx) {
+    super(ctx);
     this.#context = ctx;
-
-    const toolConfigureLogger = this.createLogger("Midas: Tool management");
-    toolConfigureLogger.hide();
-    this.toolchain = new ManagedToolchain(ctx, toolConfigureLogger);
-
-    if (!fs.existsSync(this.getStoragePathOf())) {
-      fs.mkdirSync(this.getStoragePathOf(), { recursive: true });
-    }
-    let cfg_path = this.getStoragePathOf(this.#CFG_NAME);
-    if (!fs.existsSync(cfg_path)) {
-      fs.writeFileSync(cfg_path, JSON.stringify(default_config_contents()));
-    }
   }
 
   initToolsRequired() {
@@ -209,6 +198,7 @@ class MidasAPI {
     if(!this.toolsInitialized) {
       const RequiredTools = {
         cmake: { variants: ["cmake"] },
+        make: { variants: ["make"] },
         python: { variants: ["python", "python3", "py"] },
         unzip: { variants: ["unzip"] },
         ninja: { variants: ["ninja"] },
@@ -230,7 +220,7 @@ class MidasAPI {
   /**
    * @returns { ManagedToolchain }
    */
-  getToolManager() {
+  getToolchain() {
     return this.toolchain;
   }
 
@@ -261,8 +251,8 @@ class MidasAPI {
     return this.getRequiredSystemTool("unzip");
   }
 
-  getNinja() {
-    return this.getSystemTool("ninja");
+  getMake() {
+    return this.getRequiredSystemTool("make");
   }
 
   hasRequiredTools(required) {
@@ -276,96 +266,55 @@ class MidasAPI {
     return true;
   }
 
-  setupEnvVars() {
-    const cfg = this.getConfig();
-    if (!this.#toolchainAddedToEnv) {
-      if (!strEmpty(cfg.toolchain.rr.path)) {
-        const path = Path.dirname(cfg.toolchain.rr.path);
-        this.#context.environmentVariableCollection.append("PATH", `:${path}`);
-        console.log(`appended ${path} to $PATH`);
-        this.#toolchainAddedToEnv = true;
-      }
-    }
-  }
-
   maybeDisplayReleaseNotes() {
-    let cfg = sanitize_config(this.getConfig());
-    const recordedSemVer = parseSemVer(cfg.midas_version);
-    const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
-    if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer ?? currentlyLoadedSemVer)) {
-      showReleaseNotes();
+    try {
+      let cfg = ManagedToolchain.loadConfig(this.#context)
+      const recordedSemVer = parseSemVer(cfg.midas_version);
+      const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
+      if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer ?? currentlyLoadedSemVer) || recordedSemVer == null) {
+        showReleaseNotes();
+      }
+    } catch(ex) {
+      console.log(`exception caught, won't show release notes: ${ex}`);
     }
   }
 
   #write_config(cfg) {
     try {
       const data = JSON.stringify(cfg, null, 2);
-      fs.writeFileSync(this.getStoragePathOf(this.#CFG_NAME), data);
+      fs.writeFileSync(this.configFile, data);
       console.log(`Wrote configuration ${data}`);
     } catch (err) {
       console.log(`Failed to write configuration. Error: ${err}`);
     }
   }
 
-  /** @returns {MidasConfig} */
+  /** @returns {import("./utils/utils").MidasConfig} */
   getConfig() {
-    const cfg_path = this.getStoragePathOf(this.#CFG_NAME);
-    if (!fs.existsSync(cfg_path)) {
-      let default_cfg = default_config_contents();
-      default_cfg.midas_version = this.#context.extension.packageJSON["version"];
-      fs.writeFileSync(cfg_path, JSON.stringify(default_cfg));
-      return default_cfg;
-    } else {
-      const data = fs.readFileSync(cfg_path).toString();
-      const cfg = JSON.parse(data);
-      return cfg;
-    }
+    return ManagedToolchain.loadConfig(this.#context)
   }
 
-  /** @returns { Toolchain } */
+  getWrittenMidasVersion() {
+    return ManagedToolchain.loadConfig(this.#context).midas_version;
+  }
+
+  getExtensionVersion() {
+    return this.#context.extension.packageJSON["version"];
+  }
+
+  /** @returns { import("./utils/utils").Toolchain } */
   getToolchainConfiguration() {
-    const cfg = this.getConfig();
-    return cfg.toolchain;
-  }
-
-  postToolchainUpdate() {
-    const cfg = this.toolchain.serialize();
-    this.#write_config(cfg);
-  }
-
-  /**
-   * Write RR settings to config file
-   * @param { ManagedTool } rr
-   */
-  writeRr(rr) {
-    let cfg = this.getConfig();
-    cfg.toolchain.rr = rr;
-    this.#write_config(cfg);
-  }
-
-  writeMdb() {
-    let cfg = this.getConfig();
-    cfg.toolchain.mdb = this.toolchain.getTool("mdb").serialize();
-    this.#write_config(cfg);
-  }
-
-  /**
-   * Write GDB settings to config file
-   * @param { ManagedTool } gdb
-   */
-  writeGdb(gdb) {
-    let cfg = this.getConfig();
-    cfg.toolchain.gdb = gdb;
-    this.#write_config(cfg);
+    return ManagedToolchain.loadConfig(this.#context).toolchain;
   }
 
   /**
    * Write Midas version to config file
    */
   serializeMidasVersion() {
-    let cfg = sanitize_config(this.getConfig());
-    cfg.midas_version = this.#context.extension.packageJSON["version"];
-    this.#write_config(cfg);
+    const configuration = ManagedToolchain.loadConfig(this.#context);
+    let sanitizedConfiguration = sanitizeConfig(configuration);
+    sanitizedConfiguration.midas_version = this.#context.extension.packageJSON["version"];
+    this.#write_config(sanitizedConfiguration);
   }
 
   /**
@@ -389,25 +338,32 @@ class MidasAPI {
    * 2. Midas managed toolchain (when built or installed via Midas command)
    * 3. $PATH
    * 4. null|undefined if not found in path
-   * @param { "rr" | "gdb" } tool
+   * @param { "rr" | "gdb" | "mdb" } tool
+   * @throws Will throw if `tool`'s path could not be resolved using 'which' command or reading Midas configuration
    * @returns { Promise<string?> }
    */
   async resolveToolPath(tool) {
     const cfg = vscode.workspace.getConfiguration("midas");
     if (!strEmpty(cfg.get(tool))) return cfg.get(tool);
 
-    const toolchain = this.getToolchainConfiguration();
-
-    if (!strEmpty(toolchain[tool].path)) return toolchain[tool].path;
-
     const tool_in_path = await which(tool);
     if (!strEmpty(tool_in_path)) return tool_in_path;
-    return undefined;
+    throw new Error(`Could not resolve path for ${tool}`);
   }
 
-  log() {
-    let cfg = this.getConfig();
-    console.log(`Current settings: ${JSON.stringify(cfg, null, 2)}`);
+  /**
+   * Gets `name` tool if it has been installed and is managed by Midas, otherwise attempt to return system installation.
+   * @param {"rr" | "gdb" | "mdb"} name
+   * @throws Will throw if no path (or managed tool) could be resolved for `name`
+   * @returns { Promise<import("./toolchain").ManagedTool | Tool> } Returns an object that satisfies the Tool interface
+   */
+  async getDebuggerTool(name) {
+    const tool = this.toolchain.getTool(name)
+    if(tool.managed) {
+      return tool;
+    }
+    const path = await this.resolveToolPath(name);
+    return new Tool(name, path, null);
   }
 
   createLogger(name) {
@@ -417,6 +373,12 @@ class MidasAPI {
       this.#channels.set(name, logger);
     }
     return logger;
+  }
+
+  initToolchain() {
+    const toolConfigureLogger = this.createLogger("Midas: Tool management");
+    toolConfigureLogger.hide();
+    this.toolchain = new ManagedToolchain(this.#context, toolConfigureLogger);
   }
 
   /**
@@ -444,7 +406,7 @@ class MidasAPI {
 
 
   async checkToolchainUpdates() {
-    const manager = this.getToolManager();
+    const manager = this.getToolchain();
     for(const tool of ["rr", "gdb", "mdb"]) {
       try {
         manager.getTool(tool).update();
@@ -456,8 +418,10 @@ class MidasAPI {
 
   async updatesCheck() {
     try {
-      await this.toolchain.checkUpdates();
-      this.#write_config(this.toolchain.serialize());
+      const changed = await this.toolchain.checkUpdates();
+      if(changed) {
+        this.toolchain.serialize();
+      }
     } catch(ex) {
       vscode.window.showErrorMessage(`Failed to update: ${ex}`);
     }
@@ -469,11 +433,14 @@ class MidasAPI {
  * @param { MidasAPI } api
  */
 async function initMidas(api) {
+  let firstInit = false;
+  api.initToolchain()
   const cfg = api.getConfig();
   // the first time we read config, this will be empty.
   // this can't be guaranteed with vscode mementos. They just live their own life of which we
   // have 0 oversight over.
   if (strEmpty(cfg.midas_version)) {
+    firstInit = true;
     const answers = ["yes", "no"];
     const msg = "Thank you for using Midas. Do you want to setup RR settings for Midas?";
     const opts = { modal: true, detail: "Midas will attempt to find RR on your system" };
@@ -484,14 +451,18 @@ async function initMidas(api) {
         const msg = "No RR found in $PATH. Do you want Midas to install or build RR?";
         const opts = { modal: true };
         if ((await vscode.window.showInformationMessage(msg, opts, ...answers)) == "yes") {
-          await api.getToolManager().getTool("rr").beginInstallerUI();
+          await api.getToolchain().getTool("rr").beginInstallerUI();
         }
       }
     }
   }
-  api.setupEnvVars();
+  api.getToolchain().exportEnvironment();
   api.maybeDisplayReleaseNotes();
   api.serializeMidasVersion();
+
+  if(!firstInit) {
+    await api.updatesCheck();
+  }
 }
 
 function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, checkpointProvider = null) {
@@ -513,6 +484,14 @@ function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, ch
       vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor())
     );
   }
+}
+
+function InitializeGlobalApi(ctx) {
+  if(global.API == null || global.API == undefined) {
+    global.API = new MidasAPI(ctx);
+    initMidas(global.API);
+  }
+  return global.API;
 }
 
 /**
@@ -539,10 +518,7 @@ async function activateExtension(context) {
     throw ex;
   }
 
-  global.API = new MidasAPI(context);
-  await initMidas(global.API);
-
-  await global.API.updatesCheck();
+  InitializeGlobalApi(context);
 }
 
 function deactivateExtension() {}
@@ -551,5 +527,5 @@ module.exports = {
   activateExtension,
   deactivateExtension,
   MidasAPI,
-  sanitize_config,
+  sanitize_config: sanitizeConfig,
 };

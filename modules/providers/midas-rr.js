@@ -23,22 +23,26 @@ const initializerPopupChoices = {
 };
 
 const initializer = async (config) => {
+  config.tool = {}
+  const API = await getAPI();
   if (!config.hasOwnProperty("trace")) {
     config.trace = "off";
   }
   if (!config.hasOwnProperty("gdbPath")) {
-    config.gdbPath = await getAPI().resolveToolPath("gdb");
-    if (config.gdbPath == undefined) {
+    const tool = await API.getDebuggerTool("gdb").catch(() => {
       throw { type: InitExceptionTypes.GdbNotFound };
-    }
+    });
+    config.gdbPath = tool.path;
+    config.gdbOptions = tool.spawnArgs;
   }
   await gdbSettingsOk(config);
   if (!config.hasOwnProperty("rrPath")) {
-    config.rrPath = await getAPI().resolveToolPath("rr");
-    if (config.rrPath == undefined) {
+    const tool = await API.getDebuggerTool("rr").catch(() => {
       throw { type: InitExceptionTypes.RRNotFound };
-    }
+    });
+    config.rrPath = tool.path;
   }
+
   if (!config.hasOwnProperty("setupCommands")) {
     config.setupCommands = [];
   }
@@ -191,7 +195,8 @@ class RRDebugAdapterFactory {
     const rrInitData = await generateGdbInit(config.rrPath);
     const rrInitFilePath = getExtensionPathOf("rrinit");
     fs.writeFileSync(rrInitFilePath, rrInitData);
-
+    /** @type {Tool} */
+    const rrTool = config.tool.rr;
     let cmd_str = null;
     const rrOptions = (config.rrOptions ?? []).join(" ");
     if (config.replay.noexec) {

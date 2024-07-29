@@ -1,95 +1,93 @@
 // @ts-check
 "use strict";
 
-const { exec, spawn: _spawn, execSync } = require("child_process");
+const { exec, spawn: _spawn } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
-const { InstallerExceptions } = require("./installerProgress");
 const {
-  which,
   resolveCommand,
-  getExtensionPathOf,
   sudo,
   sanitizeEnvVariables,
   getAllPidsForQuickPick,
 } = require("./sysutils");
 const { getReleaseNotes } = require("./releaseNotes");
 
-const ToolList = {
-  cmake: { variants: ["cmake"] },
-  python: { variants: ["python", "python3", "py"] },
-  unzip: { variants: ["unzip"] },
-  ninja: { variants: ["ninja"] },
-};
+/** @typedef { { sha: string, date: Date } } GitMetadata */
+/** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } ManagedTool */
+/** @typedef { { rr: ManagedTool, gdb: ManagedTool, mdb: ManagedTool } } Toolchain */
+/** @typedef { { midas_version: string, toolchain: Toolchain } } MidasConfig */
+
+/** @returns { MidasConfig } */
+function createEmptyMidasConfig() {
+  return {
+    midas_version: "",
+    toolchain: {
+      rr: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
+      gdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
+      mdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
+    },
+  };
+}
 
 class Tool {
+  /** @type {string} */
+  #path;
+
+  #spawnArgs;
+
   /**
-   *
-   * @param {string} name
-   * @param {string} path
-   * @param {{ variant: string, err: import("child_process").ExecException }[]} error
+   * @param { string } name
+   * @param { string } path
+   * @param { string[] } spawnArgs
    */
-  constructor(name, path, error = null) {
+  constructor(name, path, spawnArgs = null) {
     /** @type {string} */
     this.name = name;
 
     /** @type {string} */
-    this.path = path;
+    this.#path = path;
 
-    /** @type {{ variant: string, err: import("child_process").ExecException }[]} */
-    this.error = error;
+    this.#spawnArgs = spawnArgs ?? [];
   }
 
-  /** @returns {boolean} */
-  found() {
-    return this.error === null;
-  }
-
-  /** @returns {{ variant: string, err: import("child_process").ExecException }[]} */
-  errors() {
-    return this.error;
-  }
-
-  errorMessage() {
-    return `could not find any of '${ToolList[this.name].variants.join(
-      ", "
-    )}' on $PATH. One of these are required to be installed on your system`;
+  get managed() {
+    return false;
   }
 
   /**
    * @param {string[]} args
    * @param {string} password
    */
-  async sudoExecute(args, password = null)  {
+  async sudoExecute(args, password = null) {
     const pass = password ?? (await vscode.window.showInputBox({ prompt: "input your sudo password", password: true }));
 
     await sudo([this.path, ...args], pass, (code) => {
-      if(code == 0) {
+      if (code == 0) {
         console.log(`Application executed successfully`);
       } else {
         throw new Error(`${this.path} failed, returned exit code ${code}`);
       }
-    })
+    });
   }
 
-  execute(args, logger=null, spawnOptions = { stdio: "pipe", shell: true, env: sanitizeEnvVariables() }) {
+  execute(args, logger = null, spawnOptions = { stdio: "pipe", shell: true, env: sanitizeEnvVariables() }) {
     try {
       return new Promise((resolve, reject) => {
         console.log(`executing ${this.path} ${args.join(" ")}`);
         let app = _spawn(this.path, args, spawnOptions);
         app.stdout.on("data", (data) => {
           const output = data.toString().trim();
-          if(logger != null) {
-            logger.appendLine(output)
+          if (logger != null) {
+            logger.appendLine(output);
           }
         });
         app.on("error", (err) => {
           reject(err);
         });
         app.on("exit", (code, signals) => {
-          if(code != 0) {
+          if (code != 0) {
             reject(`Application exited with code ${code}`);
           } else {
             resolve();
@@ -101,52 +99,32 @@ class Tool {
     }
   }
 
+  /**
+   * @returns {import("child_process").ChildProcessWithoutNullStreams}
+   */
   spawn(args, spawnOptions) {
-    console.log(`spawning ${this.path} ${args.join(" ")}`);
-    return _spawn(this.path, args, spawnOptions);
+    const spawnWithArgs = this.spawnArgs.concat(args);
+    try {
+      console.log(`spawning ${this.path} ${spawnWithArgs.join(" ")} (options: ${JSON.stringify(spawnOptions)})`);
+    } catch (ex) {
+      console.log(`spawning ${this.path} ${spawnWithArgs.join(" ")}`);
+    }
+
+    return _spawn(this.path, spawnWithArgs, spawnOptions);
+  }
+
+  get path() {
+    return this.#path;
+  }
+
+  get spawnArgs() {
+    return this.#spawnArgs ?? [];
   }
 }
 
 function uiSetAllStopComponent(value) {
   if (typeof value !== "boolean") throw new Error("Must use a boolean to set All Stop Mode UI component");
   vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, value);
-}
-
-/**
- *
- * @param {string} name
- * @param {string[]} variants
- * @returns
- */
-function ToolBuilder(name, variants) {
-  const errors = [];
-  for (const variant of variants) {
-    try {
-      const path = execSync(`which ${variant}`, { env: sanitizeEnvVariables() });
-      if (!strEmpty(path)) {
-        return new Tool(name, path.toString().trim(), null);
-      }
-    } catch (err) {
-      errors.push(err);
-    }
-  }
-  return new Tool(name, null, errors);
-}
-
-/**
- * @param {string[]} tools - what tools to check if they exist on system. `ToolList` contains all tools, but are not
- * required for all tool chain management functions.
- * @return { Object.<string, Tool> }
- */
-function verifyPreRequistesExists(tools = ["cmake", "python", "unzip"]) {
-  let result = {};
-  for (const tool_name of tools) {
-    let tool = ToolBuilder(tool_name, ToolList[tool_name].variants);
-    result[tool_name] = tool;
-  }
-
-  // @ts-ignore
-  return result;
 }
 
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
@@ -547,67 +525,6 @@ async function getPid() {
   return (await vscode.window.showQuickPick(allPids)).pid;
 }
 
-const FEDORA_DEPS =
-  // eslint-disable-next-line max-len
-  "ccache cmake make gcc gcc-c++ gdb libgcc libgcc.i686 glibc-devel glibc-devel.i686 libstdc++-devel libstdc++-devel.i686 libstdc++-devel.x86_64 python3-pexpect man-pages ninja-build capnproto capnproto-libs capnproto-devel zlib-devel zlib-ng-compat-devel libzstd-devel".split(
-    " "
-  );
-
-const UBUNTU_DEPS =
-  "ccache cmake make g++-multilib gdb pkg-config coreutils python3-pexpect manpages-dev git ninja-build capnproto libcapnp-dev zlib1g-dev".split(
-    " "
-  );
-
-async function guessInstaller(python, logger) {
-  const verify_py_imports = async (args) => {
-    return new Promise((resolve) => {
-      _spawn(python, args, { env: sanitizeEnvVariables() }).on("exit", (code) => {
-        if (code == 0) {
-          logger.appendLine(`${python} ${args.join(" ")} succeeded!`);
-          resolve(true);
-        } else {
-          logger.appendLine(`${python} ${args.join(" ")} failed!`);
-          resolve(false);
-        }
-      });
-    });
-  };
-
-  if (!strEmpty(await which("dpkg"))) {
-    if (!(await verify_py_imports(["-c", "import apt"]))) {
-      throw {
-        type: InstallerExceptions.ModuleImportFailed,
-        message: `[Python Error]: Could not import APT module on a verified dpkg system.`,
-      };
-    }
-    return {
-      name: "apt",
-      pkg_manager: getExtensionPathOf("modules/python/apt_manager.py"),
-      deps: UBUNTU_DEPS,
-      cancellable: true,
-    };
-  }
-
-  if (!strEmpty(await which("rpm"))) {
-    if (!(await verify_py_imports(["-c", `import dnf`]))) {
-      throw {
-        type: InstallerExceptions.ModuleImportFailed,
-        message: `[Python Error]: Could not import DNF module on a verified RPM system.`,
-      };
-    }
-    return {
-      name: "dnf",
-      pkg_manager: getExtensionPathOf("modules/python/dnf_manager.py"),
-      deps: FEDORA_DEPS,
-      cancellable: true,
-    };
-  }
-  throw {
-    type: InstallerExceptions.PackageManagerNotFound,
-    message: "Could not resolve what package manager is used on your system",
-  };
-}
-
 const scheme = "midas-notes";
 
 async function showReleaseNotes() {
@@ -624,46 +541,6 @@ ${await getReleaseNotes()}`;
     },
 
     onDidChange: eventEmitter.event,
-  });
-}
-
-/**
- * Returns latest version and url to the package (without file extension). Append .deb or .rpm to get full url.
- * @param {string | "x86_64" | "i686"} arch
- * @returns {Promise<{version: string, url: string }>}
- */
-function resolveLatestVersion(arch) {
-  const tag = "/tag/";
-  return new Promise((resolve) => {
-    const latest_url = "https://github.com/rr-debugger/rr/releases/latest";
-    try {
-      require("https").get(latest_url, (response) => {
-        if (response.statusCode !== 302) {
-          throw {
-            type: InstallerExceptions.CouldNotDetermineRRVersion,
-            message: "Could not resolve latest version of RR",
-          };
-        } else {
-          let redirected = response.headers.location;
-          const idx = redirected.lastIndexOf(tag);
-          if (idx != -1) {
-            const version = redirected.slice(idx + tag.length).split("/")[0];
-            resolve({
-              version: version,
-              url: `https://github.com/rr-debugger/rr/releases/download/${version}/rr-${version}-Linux-${arch}`,
-            });
-          } else {
-            throw {
-              type: InstallerExceptions.CouldNotDetermineRRVersion,
-              message: "Could not resolve latest version of RR",
-            };
-          }
-        }
-      });
-    } catch (err) {
-      vscode.window.showInformationMessage(`${err.message} falling back on version 5.6`);
-      resolve({ version: "5.6.0", url: "https://github.com/rr-debugger/rr/releases/download/5.6.0/" });
-    }
   });
 }
 
@@ -692,9 +569,7 @@ module.exports = {
   strEmpty,
   strValueOr,
   getAPI,
-  verifyPreRequistesExists,
-  resolveLatestVersion,
-  guessInstaller,
   uiSetAllStopComponent,
-  Tool
+  createEmptyMidasConfig,
+  Tool,
 };

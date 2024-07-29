@@ -25,6 +25,7 @@ const initializer = async (config) => {
     config.allStopMode = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
+
     config.gdbPath = await getAPI().resolveToolPath("gdb");
     if (config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };

@@ -2,9 +2,10 @@ const fs = require("fs");
 const vs = require("vscode");
 const { EventEmitter } = require("events");
 const { spawn, execSync } = require("child_process");
-const { sanitizeEnvVariables, which } = require("./utils/sysutils");
+const { sanitizeEnvVariables, which, getExtensionPathOf } = require("./utils/sysutils");
 const path = require("path");
-const { getAPI, kill_pid, Tool } = require("./utils/utils");
+const { getAPI, kill_pid, Tool, createEmptyMidasConfig, strEmpty } = require("./utils/utils");
+const { systemInstall } = require("./utils/installerProgress");
 
 const DefaultConfigTemplate = {
   midas_version: "",
@@ -29,6 +30,58 @@ function cmakeProgress(str, last) {
   return incremented;
 }
 
+class ToolDependencies {
+  #name;
+  #apt;
+  #dnf;
+
+  constructor(name, deps) {
+    this.#name = name;
+    this.#apt = deps["apt"];
+    this.#dnf = deps["dnf"];
+  }
+
+  async config() {
+    const verifyPackageManagerImport = async (args) => {
+      return new Promise((resolve) => {
+        getAPI()
+          .getPython()
+          .spawn(args, { env: sanitizeEnvVariables() })
+          .on("exit", (code) => {
+            if (code == 0) {
+              resolve(true);
+            } else {
+              resolve(false);
+            }
+          });
+      });
+    };
+
+    if (!strEmpty(await which("dpkg"))) {
+      if (!(await verifyPackageManagerImport(["-c", "import apt"]))) {
+        throw new Error(`[${this.#name}][Python Error]: Could not import APT module on a verified dpkg system.`);
+      }
+      return {
+        name: "apt",
+        repoType: getExtensionPathOf("modules/python/apt_manager.py"),
+        packages: this.#apt,
+      };
+    }
+
+    if (!strEmpty(await which("rpm"))) {
+      if (!(await verifyPackageManagerImport(["-c", `import dnf`]))) {
+        throw new Error(`[${this.#name}][Python Error]: Could not import DNF module on a verified RPM system.`);
+      }
+      return {
+        name: "dnf",
+        repoType: getExtensionPathOf("modules/python/dnf_manager.py"),
+        packages: this.#dnf,
+      };
+    }
+    throw new Error(`[${this.#name}]: Could not resolve what package manager is used on your system`);
+  }
+}
+
 /**
  * Downloads a file from `url` and saves it as `file_name` in the extension folder.
  * @param {string} url - The url of the file to download
@@ -37,7 +90,7 @@ function cmakeProgress(str, last) {
  * @returns {Promise<{path: string, status: "success" | "cancelled" }>} `path` of saved file and `status` indicates if it
  */
 async function downloadFile(url, path, emitter) {
-  const removeFile = (file) => fs.rmSync(file, {recursive:false});
+  const removeFile = (file) => fs.rmSync(file, { recursive: false });
   if (fs.existsSync(path)) {
     removeFile(path);
   }
@@ -126,21 +179,18 @@ async function downloadFileHttp(url, path) {
   );
 }
 
-class CMake {
-  #progress;
-  #cmakePath;
-  #usesNinja;
-  #sourcePath;
-  #buildPath;
+/**
+ * @abstract
+ */
+class BuildTool {
   #logger;
+  sourcePath;
+  buildPath;
 
-  constructor(cmakePath, sourcePath, buildPath, logger, hasNinja) {
-    this.#cmakePath = cmakePath;
-    this.#progress = new EventEmitter();
-    this.#usesNinja = hasNinja ?? false;
-    this.#sourcePath = sourcePath;
-    this.#buildPath = buildPath;
+  constructor(sourcePath, buildPath, logger) {
     this.#logger = logger;
+    this.sourcePath = sourcePath;
+    this.buildPath = buildPath;
   }
 
   log(msg) {
@@ -149,14 +199,56 @@ class CMake {
     }
   }
 
+  onProgress(cb) {}
+
+  /**
+   * @abstract
+   * @param {boolean} debug - whether or not this build should be debug
+   * @param {string[]} args - configuration args
+   * @returns { Promise<boolean> } - A promise that when resolved resolves whether configuration was completed or not
+   */
+  // eslint-disable-next-line no-unused-vars
+  async configure(debug, args) {
+    throw new Error("async configure(debug, args) must be implemented");
+  }
+
+  /**
+   * @abstract
+   * @param {EventEmitter} cancellation - An event emitter which we emit cancellation events to.
+   * @returns { Promise<boolean> } - A promise that when resolved resolves whether build was completed or not.
+   */
+  // eslint-disable-next-line no-unused-vars
+  build(cancellation) {
+    throw new Error("build(cancellation) must be implemented");
+  }
+}
+
+class CMake extends BuildTool {
+  #progress;
+  #sourcePath;
+  #buildPath;
+  #logger;
+
+  constructor(sourcePath, buildPath, logger) {
+    super(sourcePath, buildPath, logger);
+    this.#progress = new EventEmitter();
+    this.#sourcePath = sourcePath;
+    this.#buildPath = buildPath;
+    this.#logger = logger;
+  }
+
+  usesNinja() {
+    return true;
+  }
+
   onProgress(cb) {
     this.#progress.on("progress", cb);
   }
 
-  #spawn(signal, args) {
+  #spawn(args) {
     return getAPI()
       .getRequiredSystemTool("cmake")
-      .spawn(args, { stdio: "pipe", env: sanitizeEnvVariables(), signal: signal, shell: true, detached: true });
+      .spawn(args, { stdio: "pipe", env: sanitizeEnvVariables(), shell: true, detached: true });
   }
 
   /**
@@ -165,15 +257,19 @@ class CMake {
   compilerSetting(choice) {
     switch (choice) {
       case "clang":
-        return `-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang`
+        return `-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang`;
       case "gcc":
-        return `-DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc`
+        return `-DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc`;
       default:
         throw new Error(`Unsupported compiler ${choice}`);
     }
   }
 
-  async configure(debug) {
+  /**
+   * @param {boolean} debug
+   * @param {string[]} cmakeArguments
+   */
+  async configure(debug, cmakeArguments) {
     const compiler =
       (await vs.window.showQuickPick(["clang", "gcc"], {
         title: "Pick compiler to build with or cancel to let Midas choose.",
@@ -188,7 +284,7 @@ class CMake {
         "-B",
         this.#buildPath,
         "-DCMAKE_BUILD_TYPE=Debug",
-        this.#usesNinja ? "-G Ninja" : ""
+        this.usesNinja() ? "-G Ninja" : ""
       );
     } else {
       args.push(
@@ -197,14 +293,13 @@ class CMake {
         "-B",
         this.#buildPath,
         "-DCMAKE_BUILD_TYPE=Release",
-        this.#usesNinja ? "-G Ninja" : ""
+        this.usesNinja() ? "-G Ninja" : ""
       );
     }
     args.push(this.compilerSetting(compiler));
-
+    args.push(...cmakeArguments.map((arg) => `-D${arg}`));
     return new Promise((resolve, reject) => {
-      let controller = new AbortController();
-      let process = this.#spawn(controller.signal, args);
+      let process = this.#spawn(args);
       if (this.#logger != null) {
         process.stdout.on("data", (data) => {
           this.log(data.toString().trim());
@@ -219,7 +314,7 @@ class CMake {
         if (code == 0) {
           resolve(true);
         } else {
-          resolve(false);
+          reject(`CMake configure failed`);
         }
       });
       process.on("error", (err) => {
@@ -231,9 +326,7 @@ class CMake {
 
   build(cancellation) {
     return new Promise((resolve, reject) => {
-      let controller = new AbortController();
-      const { signal } = controller;
-      let p = this.#spawn(signal, ["--build", this.#buildPath, "-j"]);
+      let p = this.#spawn(["--build", this.#buildPath, "-j"]);
       cancellation.on("cancel", () => {
         if (p.pid == null || p.pid == undefined) {
           throw new Error(`Could not determine process group`);
@@ -255,15 +348,139 @@ class CMake {
       });
       if (this.#logger) {
         p.stderr.on("data", (data) => {
-          this.#logger.appendLind(data.toString().trim());
+          this.#logger.appendLine(data.toString().trim());
         });
       }
       p.on("exit", (code) => {
-        if (code == 0) {
+        if (p.signalCode == "SIGKILL" || p.signalCode == "SIGTERM") {
+          resolve(false);
+        } else if (code == 0) {
           if (this.#logger) {
             this.#logger.appendLine(`Build completed successfully.`);
           }
-          resolve();
+          resolve(true);
+        } else {
+          reject();
+        }
+      });
+    });
+  }
+}
+
+class GdbMake extends BuildTool {
+  #progress;
+  #makePath;
+  #sourcePath;
+  #buildPath;
+  #logger;
+
+  constructor(sourcePath, buildPath, logger) {
+    super(sourcePath, buildPath, logger);
+    this.#progress = new EventEmitter();
+    this.#sourcePath = sourcePath;
+    this.#buildPath = buildPath;
+    this.#logger = logger;
+  }
+
+  #spawn(args) {
+    return getAPI().getMake().spawn(args, { stdio: "pipe", env: sanitizeEnvVariables(), shell: true, detached: true });
+  }
+
+  /**
+   * @param {boolean} debug
+   * @param {string[]} configArguments
+   */
+  async configure(debug, configArguments) {
+    const compiler =
+      (await vs.window.showQuickPick(["clang", "gcc"], {
+        title: "Pick compiler to build with or cancel to let Midas choose.",
+      })) ?? "clang";
+
+    const { CXX, C } = compiler == "clang" ? { CXX: "clang++", C: "clang" } : { CXX: "g++", C: "gcc" };
+    let env = sanitizeEnvVariables();
+    env["CXX"] = CXX;
+    env["C"] = C;
+
+    const { CXXFLAGS, CFLAGS } = debug
+      ? { CXXFLAGS: "-g3 -O0", CFLAGS: "-g3 -O0" }
+      : { CXXFLAGS: "-O3", CFLAGS: "-O3" };
+    let args = [...configArguments];
+
+    args.push(`CXXFLAGS='${CXXFLAGS}'`);
+    args.push(`CFLAGS='${CFLAGS}'`);
+    // compiling with -O3 will fail, due to -Werror not passing in bfd code. Disable Werror
+    args.push(`--disable-werror`);
+
+    if (fs.existsSync(this.#buildPath)) {
+      fs.rmSync(this.#buildPath, { recursive: true });
+    }
+    fs.mkdirSync(this.#buildPath);
+
+    return new Promise((resolve, reject) => {
+      const configureScript = `${this.#sourcePath}/configure`;
+      const process = spawn(configureScript, args, {
+        stdio: "pipe",
+        env: env,
+        shell: true,
+        detached: true,
+        cwd: this.#buildPath,
+      });
+      if (this.#logger != null) {
+        process.stdout.on("data", (data) => {
+          this.log(data.toString().trim());
+        });
+
+        process.stderr.on("data", (data) => {
+          this.log(data.toString().trim());
+        });
+      }
+
+      process.on("exit", (code) => {
+        if (code == 0) {
+          resolve(true);
+        } else {
+          reject(`GDB Configure failed`);
+        }
+      });
+      process.on("error", (err) => {
+        console.log(`Failed to configure: ${err}`);
+        reject(err);
+      });
+    });
+  }
+
+  build(cancellation) {
+    return new Promise((resolve, reject) => {
+      let p = this.#spawn(["-C", this.#buildPath, "all-gdb", "-j"]);
+      cancellation.on("cancel", () => {
+        if (p.pid == null || p.pid == undefined) {
+          throw new Error(`Could not determine process group`);
+        }
+        process.kill(-p.pid, 9);
+      });
+
+      p.stdout.on("data", (data) => {
+        if (this.#logger) {
+          const str = data.toString();
+          this.#logger.appendLine(str.trim());
+        }
+      });
+      p.on("error", (err) => {
+        reject(err);
+      });
+      if (this.#logger) {
+        p.stderr.on("data", (data) => {
+          this.#logger.appendLine(data.toString().trim());
+        });
+      }
+      p.on("exit", (code) => {
+        if (p.signalCode == "SIGKILL" || p.signalCode == "SIGTERM") {
+          resolve(false);
+        } else if (code == 0) {
+          if (this.#logger) {
+            this.#logger.appendLine(`Build completed successfully.`);
+          }
+          resolve(true);
         } else {
           reject();
         }
@@ -294,37 +511,54 @@ class GitMetadata {
 }
 
 class ManagedToolConfig {
-  /** @type {string} relative path to binary inside build folder */
-  relativeBinaryPath;
-  /** @type {string[]} */
-  requiredSpawnArguments;
+  /** @typedef {{binaryPath: string, args: string[]}} SpawnArgs */
+  /** @type {SpawnArgs} */
+  spawnArgs;
+
   /** @type { string } */
   unzipFolder;
 
-  /** @type { "clang" | "gcc" } */
-  #useCompiler;
+  ToolConstructor;
 
   #preConfigureFn;
 
+  /** @type { string[] } */
+  #configureArgs;
+
   /**
-   * @param {string} relativeBinaryPath - The relative path from the source root to the final build dir binary.
-   *  All managed tools are built in-source tree (either in build/ or build-debug/)
-   * @param {string[]} defaultSpawnArguments - Default (required) spawn arguments for the managed tool.
-   *  This is for instance arguments that, since we don't run them as system installed tools, require additional params.
-   * @param { "clang" | "gcc" } compiler - Configure tool to be built by compiler
+   * @param { SpawnArgs } spawnArgs - Configuration that details how to spawn the built binary
    * @param {(string) => void} preConfigFn - a closure that takes the sourceRoot directory and performs some pre-cmake configuration,
    *  like for instance, pulling in dependencies or running some project-script etc.
+   * @param {function(new: BuildTool, ...*)} buildTool - The constructor for the build tool; i.e CMake or GdbMake etc
    */
-  constructor(relativeBinaryPath, defaultSpawnArguments, unzipFolder, compiler, preConfigFn = null) {
-    this.relativeBinaryPath = relativeBinaryPath;
-    this.requiredSpawnArguments = defaultSpawnArguments;
+  constructor(spawnArgs, unzipFolder, buildTool, configureArgs = null, preConfigFn = null) {
+    this.spawnArgs = spawnArgs;
     this.unzipFolder = unzipFolder;
-    this.#useCompiler = compiler;
+    this.ToolConstructor = buildTool;
     this.#preConfigureFn = preConfigFn;
+    this.#configureArgs = configureArgs ?? [];
   }
 
   get preConfigureFn() {
     return this.#preConfigureFn;
+  }
+
+  /**
+   * Additional arguments that this tool requires when configuring the build (pre-build).
+   * Can be arguments passed to CMake, or in the case of gdb, configure
+   */
+  get configureArgs() {
+    return this.#configureArgs;
+  }
+
+  /**
+   * @param {string} sourceDirectory
+   * @param {string} buildDirectory
+   * @param {any} logger
+   * @returns { BuildTool }
+   */
+  buildTool(sourceDirectory, buildDirectory, logger) {
+    return new this.ToolConstructor(sourceDirectory, buildDirectory, logger);
   }
 }
 
@@ -344,24 +578,51 @@ class ManagedTool {
   #globalStorage;
   #logger;
   #gitUrls;
+  /** @type {import("vscode").ExtensionContext} */
+  #context;
+  /** @type {ToolDependencies} */
+  #systemDependencies;
 
   /** @type { ManagedToolConfig } */
   buildConfig;
 
   /** @param { ManagedToolConfig } buildConfig */
-  constructor(context, logger, name, gitUrls, config, buildDebug, buildConfig) {
+  constructor(context, logger, name, gitUrls, config, buildDebug, buildConfig, deps) {
     this.#globalStorage = context.globalStorageUri.fsPath;
     this.#logger = logger;
     this.#name = name;
     this.#gitUrls = gitUrls;
-    this.context = context;
+    this.#context = context;
+    this.loadConfig(config);
+    this.#isDebugBuild = buildDebug;
+    this.#systemDependencies = new ToolDependencies(name, deps[name]);
+    this.buildConfig = buildConfig;
+  }
+
+  get dependencies() {
+    return this.#systemDependencies;
+  }
+
+  loadConfig(config) {
     this.#root_dir = config.root_dir;
     this.#path = config.path;
     this.#version = config.version;
     this.#managed = config.managed;
-    this.#git = config.git;
-    this.#isDebugBuild = buildDebug;
-    this.buildConfig = buildConfig;
+    this.#git = new GitMetadata(config.git.sha, config.git.date);
+  }
+
+  serialize() {
+    return {
+      root_dir: this.#root_dir,
+      path: this.#path,
+      version: this.#version,
+      managed: this.#managed,
+      git: { sha: this.#git.sha, date: this.#git.date },
+    };
+  }
+
+  getExportPath() {
+    return path.dirname(this.#path);
   }
 
   get name() {
@@ -391,13 +652,17 @@ class ManagedTool {
     } else {
       const isRelease = !(this.#isDebugBuild && false);
       if (isRelease) {
-        return this.#path ?? path.join(this.#globalStorage, this.name, "build", this.buildConfig.relativeBinaryPath);
+        return this.#path ?? path.join(this.#globalStorage, this.name, "build", this.buildConfig.spawnArgs.binaryPath);
       } else {
         return (
-          this.#path ?? path.join(this.#globalStorage, this.name, "build-debug", this.buildConfig.relativeBinaryPath)
+          this.#path ?? path.join(this.#globalStorage, this.name, "build-debug", this.buildConfig.spawnArgs.binaryPath)
         );
       }
     }
+  }
+
+  get spawnArgs() {
+    return this.buildConfig?.spawnArgs?.args ?? [];
   }
 
   get version() {
@@ -406,14 +671,6 @@ class ManagedTool {
 
   get managed() {
     return this.#managed ?? false;
-  }
-
-  or(fn) {
-    if(this.#path && fs.existsSync(this.#path)) {
-      return new Tool(this.name, this.#path);
-    } else {
-      return fn(this.name);
-    }
   }
 
   /** @returns { Promise<GitMetadata> } */
@@ -447,16 +704,6 @@ class ManagedTool {
     });
   }
 
-  serialize() {
-    return {
-      root_dir: this.#root_dir,
-      path: this.#path,
-      version: this.#version,
-      managed: this.#managed,
-      git: { sha: this.#git.sha, date: this.#git.date },
-    };
-  }
-
   log(msg) {
     if (this.#logger) {
       this.#logger.appendLine(msg);
@@ -481,7 +728,7 @@ class ManagedTool {
 
   async #downloadSource() {
     if (fs.existsSync(this.sourceDirectory)) {
-      throw new Error(`Directory ${this.sourceDirectory} exists`);
+      fs.rmSync(this.sourceDirectory, { recursive: true });
     }
 
     if (this.#gitUrls.download) {
@@ -524,15 +771,20 @@ class ManagedTool {
         },
         async (progress, token) => {
           let emitter = new EventEmitter();
-          await this.install((report) => {
-            progress.report(report);
-          }, emitter);
-
           token.onCancellationRequested(() => {
             emitter.emit("cancel");
-          })
-        })
-    } catch(ex) {
+          });
+
+          await this.install((report) => {
+            progress.report(report);
+          }, emitter).then((success) => {
+            if (success) {
+              getAPI().getToolchain().serialize();
+            }
+          });
+        }
+      );
+    } catch (ex) {
       vs.window.showErrorMessage(`Failed to configure & install ${this.name.toUpperCase()}: ${ex}`);
     }
   }
@@ -541,18 +793,24 @@ class ManagedTool {
     if (this.#logger) {
       this.#logger.show();
     }
-    await this.#downloadSource();
-    const cmake = new CMake("cmake", this.sourceDirectory, this.buildDirectory, this.#logger, true);
-    await this.preConfigure(this.sourceDirectory);
-    const configured = await cmake.configure(this.#isDebugBuild);
     const { sha, date } = await this.queryGit();
+    await this.#downloadSource();
+    const buildTool = this.buildConfig.buildTool(this.sourceDirectory, this.buildDirectory, this.#logger);
+    await this.preConfigure(this.sourceDirectory);
+    const configured = await buildTool.configure(this.#isDebugBuild, this.buildConfig.configureArgs);
     if (configured) {
-      cmake.onProgress(progressCallback);
-      await cmake.build(cancellation);
-      this.#root_dir = this.sourceDirectory;
-      this.#path = path.join(this.buildDirectory, this.buildConfig.relativeBinaryPath);
-      this.#git = new GitMetadata(sha, date);
-      this.#managed = true;
+      buildTool.onProgress(progressCallback);
+      const finished = await buildTool.build(cancellation);
+      if (finished) {
+        this.loadConfig({
+          root_dir: this.sourceDirectory,
+          path: path.join(this.buildDirectory, this.buildConfig.spawnArgs.binaryPath),
+          version: "",
+          managed: true,
+          git: new GitMetadata(sha, date),
+        });
+      }
+      return finished;
     } else {
       throw new Error(`Failed to configure ${this.name}`);
     }
@@ -565,7 +823,7 @@ class ManagedTool {
 
   async update() {
     if (!this.managed) {
-      return;
+      return false;
     }
     const configDate = new Date(this.#git.date ?? null);
     const { date } = await this.queryGit();
@@ -625,11 +883,19 @@ class ManagedTool {
     }
   }
 
-  spawn(argsArray) {
+  asTool() {
+    return new Tool(this.name, this.path, this.buildConfig.spawnArgs.args);
+  }
+
+  /**
+   * @returns {import("child_process").ChildProcessWithoutNullStreams}
+   */
+  spawn(args, spawnOptions) {
     if (!fs.existsSync(this.path)) {
       throw new Error(`Path ${this.path} doesn't exist`);
     }
-    return spawn(this.path, [...this.buildConfig.requiredSpawnArguments, ...argsArray]);
+    const spawnWithArgs = (this.buildConfig.spawnArgs.args ?? []).concat(args);
+    return spawn(this.path, spawnWithArgs, spawnOptions);
   }
 }
 
@@ -641,9 +907,10 @@ class ManagedToolchain {
       download: "https://github.com/rr-debugger/rr/archive/refs/heads/master.zip",
     },
     gdb: {
-      query: "",
+      // gdb uses sourceware which has like 10% of the features of github, unfortunately. using mirror.
+      query: "https://api.github.com/repos/bminor/binutils-gdb/commits/master",
       clone: "https://sourceware.org/git/binutils-gdb.git",
-      download: "",
+      download: "https://github.com/bminor/binutils-gdb/archive/refs/heads/master.zip",
     },
     mdb: {
       query: "https://api.github.com/repos/theIDinside/mdebug/commits/main",
@@ -652,6 +919,13 @@ class ManagedToolchain {
     },
   };
 
+  static dependencies = null;
+
+  /** @type { { rr: ManagedToolConfig, gdb: ManagedToolConfig, mdb: ManagedToolConfig }} */
+  #toolConfigurations;
+
+  #toolchainInstallLogger;
+
   /** @type { ManagedTool } */
   #rr;
   /** @type { ManagedTool } */
@@ -659,67 +933,127 @@ class ManagedToolchain {
   /** @type { ManagedTool } */
   #mdb;
 
-  /** @type { Map<String, import("./utils/utils").Tool> } */
-  #installedSystemTools = new Map();
-
   /**
    *  @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: { sha: string, date: Date } } } SerializedTool
    *  @returns { { midas_version: string, toolchain: { rr: SerializedTool, gdb: SerializedTool, mdb: SerializedTool } } }
    */
   static loadConfig(extensionContext) {
-    const cfg_path = `${extensionContext.globalStorageUri.fsPath}/.config`;
-    if (!fs.existsSync(cfg_path)) {
-      let default_cfg = structuredClone(DefaultConfigTemplate);
-      default_cfg.midas_version = extensionContext.extension.packageJSON["version"];
-      fs.writeFileSync(cfg_path, JSON.stringify(default_cfg));
-      return default_cfg;
-    } else {
-      const data = fs.readFileSync(cfg_path).toString();
-      let cfg = JSON.parse(data);
-      if (!cfg.toolchain.mdb) {
-        cfg.toolchain.mdb = DefaultConfigTemplate.toolchain.mdb;
-      }
-      return cfg;
+    const configPath = `${extensionContext.globalStorageUri.fsPath}/.config`;
+    if (!fs.existsSync(configPath)) {
+      return createEmptyMidasConfig();
     }
+    const data = fs.readFileSync(configPath).toString();
+    const cfg = JSON.parse(data);
+    return this.migrateConfiguration(cfg);
   }
 
-  constructor(extensionContext, logger) {
-    this.extensionContext = extensionContext;
-    const {
-      midas_version,
-      toolchain: { rr, gdb, mdb },
-    } = ManagedToolchain.loadConfig(this.extensionContext);
-    this.version = midas_version;
-    const rrcfg = new ManagedToolConfig("bin/rr", [], "rr-master", "gcc");
-    const gdbcfg = new ManagedToolConfig("gdb/gdb", ["--data-directory={}"], "any", "gcc");
-    const mdbcfg = new ManagedToolConfig("bin/mdb", [], "mdebug-main", "clang", async (sourceRoot) => {
+  /**
+   * @returns { import("./utils/utils").MidasConfig }
+   */
+  static migrateConfiguration(config) {
+    const { toolchain } = createEmptyMidasConfig();
+    for (let tool in toolchain) {
+      if (!config.toolchain.hasOwnProperty(tool)) {
+        config.toolchain[tool] = toolchain[tool];
+      }
+    }
+    return config;
+  }
+
+  static determinePython3Path() {
+    return `/usr/bin/python3`;
+  }
+
+  static spawnArgs(bin, args) {
+    return { binaryPath: bin, args: args ?? [] };
+  }
+
+  static rrConfig() {
+    const rrSpawnArgs = ManagedToolchain.spawnArgs("bin/rr");
+    const rrcfg = new ManagedToolConfig(rrSpawnArgs, "rr-master", CMake, ["BUILD_TESTS=OFF"]);
+    return rrcfg;
+  }
+
+  static gdbConfig() {
+    const gdbSpawnArgs = ManagedToolchain.spawnArgs("gdb/gdb", [
+      `--data-directory=${getAPI().getStoragePathOf("binutils-gdb")}/build/gdb/data-directory`,
+    ]);
+    const gdbcfg = new ManagedToolConfig(gdbSpawnArgs, "binutils-gdb-master", GdbMake, [
+      `--with-python=${ManagedToolchain.determinePython3Path()}`,
+      "--with-expat",
+      "--with-lzma",
+    ]);
+    return gdbcfg;
+  }
+
+  static mdbConfig() {
+    const mdbSpawnArgs = ManagedToolchain.spawnArgs("bin/mdb");
+    const mdbcfg = new ManagedToolConfig(mdbSpawnArgs, "mdebug-main", CMake, async (sourceRoot) => {
       const script = path.join(sourceRoot, "configure-dev.sh");
       const mode = 0o755; // make file contain the following rights: rwxr-xr-x  (so that we can execute the project-dev dependencies)
       fs.chmodSync(script, mode);
       execSync(script);
     });
+    return mdbcfg;
+  }
+
+  constructor(extensionContext, logger) {
+    const Self = ManagedToolchain;
+    /** @type {import("vscode").ExtensionContext} */
+    this.extensionContext = extensionContext;
+    this.#toolchainInstallLogger = logger;
+    const {
+      toolchain: { rr, gdb, mdb },
+    } = Self.loadConfig(this.extensionContext);
+
+    const rrcfg = Self.rrConfig();
+    const gdbcfg = Self.gdbConfig();
+    const mdbcfg = Self.mdbConfig();
+
+    this.#toolConfigurations = { rr: rrcfg, gdb: gdbcfg, mdb: mdbcfg };
     const ctx = this.extensionContext;
-    this.#rr = new ManagedTool(ctx, logger, "rr", ManagedToolchain.GitUrls.rr, rr, false, rrcfg);
-    this.#mdb = new ManagedTool(ctx, logger, "mdb", ManagedToolchain.GitUrls.mdb, mdb, true, mdbcfg);
-    this.#gdb = new ManagedTool(ctx, logger, "gdb", ManagedToolchain.GitUrls.gdb, gdb, false, gdbcfg);
+
+    const depsConfigFile = getExtensionPathOf("tool-dependencies.json");
+    const deps = JSON.parse(fs.readFileSync(depsConfigFile).toString());
+
+    this.#rr = new ManagedTool(ctx, logger, "rr", Self.GitUrls.rr, rr, false, rrcfg, deps);
+    this.#gdb = new ManagedTool(ctx, logger, "gdb", Self.GitUrls.gdb, gdb, false, gdbcfg, deps);
+    this.#mdb = new ManagedTool(ctx, logger, "mdb", Self.GitUrls.mdb, mdb, true, mdbcfg, deps);
+  }
+
+  exportEnvironment() {
+    const exported = this.getToolList()
+      .filter((t) => t.managed)
+      .map((t) => t.getExportPath());
+    this.extensionContext.environmentVariableCollection.append("PATH", `:${exported.join(":")}`);
+  }
+
+  get version() {
+    return this.extensionContext.extension.packageJSON["version"];
   }
 
   serialize() {
     const serialized = {
       midas_version: this.version,
-      toolchain: {
-        rr: this.#rr.serialize(),
-        gdb: this.#gdb.serialize(),
-        mdb: this.#mdb.serialize(),
-      },
+      toolchain: this.getToolList().reduce((tc, tool) => {
+        tc[tool.name] = tool.serialize();
+        return tc;
+      }, {}),
     };
-    fs.writeFileSync(`${this.extensionContext.globalStorageUri.fsPath}/.config`, JSON.stringify(serialized));
+    fs.writeFileSync(`${this.extensionContext.globalStorageUri.fsPath}/.config`, JSON.stringify(serialized, null, 2));
+    this.exportEnvironment();
   }
 
-  checkUpdates() {
-    this.#rr.update();
-    this.#mdb.update();
-    this.#gdb.update();
+  async checkUpdates() {
+    let changed = false;
+    for await (const updated of this.getToolList().map((t) => t.update())) {
+      changed = changed || updated;
+    }
+    return changed;
+  }
+
+  getToolList() {
+    return [this.#rr, this.#gdb, this.#mdb];
   }
 
   /**
@@ -739,9 +1073,21 @@ class ManagedToolchain {
   get mdb() {
     return this.#mdb;
   }
+
+  /**
+   * @param {ManagedTool} tool
+   * @returns
+   */
+  installDependencies(tool) {
+    return tool.dependencies.config().then(({ name, repoType, packages }) => {
+      console.log(`repo type: ${name}. installer service: ${repoType}. Required packages: ${packages.join(" ")}`);
+      return systemInstall(repoType, packages, true, this.#toolchainInstallLogger);
+    });
+  }
 }
 
 module.exports = {
   ManagedToolchain,
+  ManagedTool,
   downloadFileHttp,
 };
