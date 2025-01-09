@@ -9,5 +9,6 @@ add_subdirectory(rr)
 add_subdirectory(simple_input)
 add_subdirectory(test)
 add_subdirectory(thread)
+add_subdirectory(multi-process)
 
 # install(TARGETS attach CONFIGURATIONS Debug RUNTIME DESTINATION ${CMAKE_BINARY_DIR}/../bin)
