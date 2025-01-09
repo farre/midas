@@ -86,7 +86,7 @@ class MidasSessionBase extends DebugSession {
     } else {
       this.dbg.connectResponse((res) => {
         if (!res.success) {
-          const err = (res.body.error ?? { stacktrace: "No stack trace info" }).stacktrace;
+          const err = (res.body?.error ?? { stacktrace: "No stack trace info" }).stacktrace;
           console.log(`[request error]: ${res.command} failed\n${err}`);
         }
         switch (res.command) {
@@ -473,6 +473,21 @@ class MidasSessionBase extends DebugSession {
       case CustomRequests.DeleteCheckpoint: {
         request.arguments = { id: args };
         this.dbg.sendRequest(request);
+        break;
+      }
+      case CustomRequests.PauseAll: {
+        request.command = "customRequest";
+        request.arguments = {
+          command: command,
+          arguments: args
+        };
+        this.dbg.sendRequest(request)
+        break;
+      }
+      case CustomRequests.ContinueAll: {
+        request.command = "continue";
+        request.arguments = { threadId: -1, singleThread: false }
+        this.dbg.sendRequest(request)
         break;
       }
       case CustomRequests.RunToEvent: {

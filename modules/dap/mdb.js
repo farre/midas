@@ -49,7 +49,8 @@ class MdbProcess extends DebuggerProcessBase {
         throw ex;
       }
     } else {
-      this.process = spawn(this.path(), this.spawnArgs());
+      const spawnOptions = [...this.options.options];
+      this.process = spawn(this.path(), spawnOptions);
     }
     this.socket = new MdbSocket("stdio", this.process, this.messages);
   }

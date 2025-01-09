@@ -185,6 +185,30 @@ class UnixSocketCommunication extends MidasCommunicationChannel {
     const sock = await connect_socket(this.name, this.name, 10, 50);
     return { recv: sock, send: sock };
   }
+
+  async connect() {
+    this.channel = await this.resolveInputDataChannel().then((channel) => {
+      channel.recv.on("data", (data) => {
+        const str = data.toString();
+        this.buffer = this.buffer.concat(str);
+        const packets = processBuffer(this.buffer).filter((i) => i.all_received);
+        const { buffer: remaining_buffer, protocol_messages } = parseBuffer(this.buffer, packets);
+        console.log(`protocol messages=\n${JSON.stringify(protocol_messages, null, 2)}\nRemaining buffer=${remaining_buffer}`);
+        this.buffer = remaining_buffer;
+        for (const msg of protocol_messages) {
+          const type = msg.type;
+          switch (type) {
+            case "response":
+              this.reportResponse(msg);
+              break;
+            default:
+              this.emitter.emit(type, msg);
+          }
+        }
+      });
+      return channel;
+    });
+  }
 }
 
 module.exports = {
