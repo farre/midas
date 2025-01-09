@@ -67,6 +67,10 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveDebugConfiguration(folder, config, token) {
+    return config;
+  }
+
+  async resolveDebugConfigurationWithSubstitutedVariables(folder, config, token) {
     if(config.RRSession == null) {
       config.RRSession = false;
     }
@@ -110,10 +114,6 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       }
       return config;
     }
-  }
-
-  async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
-    return debugConfiguration;
   }
 }
 
