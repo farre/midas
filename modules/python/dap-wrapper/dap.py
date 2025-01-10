@@ -369,7 +369,7 @@ def continue_(args):
     return {"allThreadsContinued": allThreadsContinued}
 
 
-@request("continue-all", ArbitraryOptionalArgs())
+@request("continueAll", ArbitraryOptionalArgs())
 def continueAll(args):
     gdb.execute("continue -a")
     return {"allThreadsContinued": True}

@@ -1,6 +1,6 @@
 /* eslint-disable max-len */
 const vscode = require("vscode");
-const { CustomRequests } = require("../../debugSessionCustomRequests");
+const { CustomRequests } = require("../../constants");
 const { registerCommand } = require("vscode").commands;
 const { UI_REQUESTS, UI_MESSAGES } = require("./ui_protocol");
 class CheckpointsViewProvider {
@@ -36,7 +36,7 @@ class CheckpointsViewProvider {
   updateCheckpoints(checkpoints, show = true) {
     if (this.#view) {
       if (show) this.#view.show?.(true);
-      for(let cp of checkpoints) {
+      for (let cp of checkpoints) {
         cp.name = this.checkpointIdToNameMap.get(cp.id) ?? `${cp.where.path}:${cp.where.line}`;
       }
       this.#view.webview.postMessage({ type: UI_MESSAGES.UpdateCheckpoints, payload: checkpoints });

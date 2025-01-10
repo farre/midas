@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
-const { ContextKeys, showErrorPopup, getAPI } = require("../utils/utils");
+const { showErrorPopup, getAPI } = require("../utils/utils");
+const { ContextKeys } = require("../constants");
 const { MdbSpawnConfig } = require("../spawn");
 const { MdbSession, MdbChildSession } = require("../dap/mdb");
 const fs = require("fs");
@@ -25,16 +26,16 @@ const initializer = async (config) => {
 
 class MdbConfigurationProvider extends ConfigurationProviderInitializer {
   get type() {
-    return "midas-canonical";
+    return "midas-native";
   }
 
-  prepareAttachArgs(config)  {
+  prepareAttachArgs(config) {
     const variants = [config.targetVariant?.rr, config.targetVariant?.remote, config.targetVariant?.native];
-    if(variants.filter(v => v != null).length != 1) {
+    if (variants.filter(v => v != null).length != 1) {
       throw new Error(`targetVariant on attach configuration must be one of either 'rr', 'remote' or 'native'. You have ${variants.length} set`);
     }
 
-    if(config.targetVariant?.rr) {
+    if (config.targetVariant?.rr) {
       const [host, port] = config.targetVariant.rr.host.split(":");
       const portNumber = Number.parseInt(port);
       config.RRSession = true;
@@ -46,7 +47,7 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       };
     }
 
-    if(config.targetVariant?.remote) {
+    if (config.targetVariant?.remote) {
       const [host, port] = config.targetVariant.rr.host.split(":");
       const portNumber = Number.parseInt(port);
       config.RRSession = false;
@@ -58,10 +59,9 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       };
     }
 
-    if(config.targetVariant?.native) {
+    if (config.targetVariant?.native) {
       config.RRSession = false;
       throw new Error(`Attach for ptrace not yet implemented`);
-      // return { type: "ptrace", pid: null, allstop: true };
     }
 
   }
@@ -71,7 +71,7 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveDebugConfigurationWithSubstitutedVariables(folder, config, token) {
-    if(config.RRSession == null) {
+    if (config.RRSession == null) {
       config.RRSession = false;
     }
 
@@ -102,14 +102,14 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       if (config.request == "attach" && config["targetVariant"] == null) {
         throw new Error("targetVariant field is missing. This field is required to determine target to attach to.");
       }
-      if(config.request == "attach") {
+      if (config.request == "attach") {
         config.attachArguments = this.prepareAttachArgs(config);
       }
 
       return config;
     } else {
       // Assume MDB sends well-formed and sane config to itself.
-      if(config.childConfiguration == null && config.childConfiguration?.path == null) {
+      if (config.childConfiguration == null && config.childConfiguration?.path == null) {
         throw new Error(`Child session could not spawn: No path was provided in the configuration`);
       }
       return config;

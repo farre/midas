@@ -22,51 +22,6 @@
 				"--extensionDevelopmentPath=${workspaceFolder}",
 				"${workspaceFolder}/test/cppworkspace/thread"
 			]
-		},
-		{
-			"name": "GDB",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/foss/binutils-gdb"
-			]
-		},
-    {
-			"name": "lldb",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/foss/cx/llvm-project/lldb"
-			]
-		},
-		{
-			"name": "MDB",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/cx/dbm"
-			]
-		},
-    {
-			"name": "rr",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/cx/dev/foss/cx/rr"
-			]
-		},
-		{
-			"name": "Extension Tests",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"--extensionTestsPath=${workspaceFolder}/test/suite/index"
-			]
 		}
 	]
 }

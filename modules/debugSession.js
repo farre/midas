@@ -6,9 +6,9 @@ const vscode = require("vscode");
 const { GDB } = require("./gdb");
 const fs = require("fs");
 const net = require("net");
-const { ContextKeys, toHexString, getAPI } = require("./utils/utils");
+const { toHexString, getAPI } = require("./utils/utils");
 const nixkernel = require("./utils/kernelsettings");
-const { CustomRequests } = require("./debugSessionCustomRequests");
+const { CustomRequests, ContextKeys } = require("./constants");
 let server;
 
 let REPL_MESSAGE_SHOWN = 0;
@@ -57,7 +57,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   log(where, output) {
     const logger = getAPI().getLogger(where)
-    if(logger == undefined) {
+    if (logger == undefined) {
       this.#defaultLogger(output);
     } else {
       logger.appendLine(output);
@@ -204,7 +204,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   async attachRequest(response, args, request) {
-    if(!this.verifyPtraceScope(response)) {
+    if (!this.verifyPtraceScope(response)) {
       return;
     }
     this.gdb = new GDB(this, this.#spawnConfig)
@@ -216,7 +216,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       try {
         await this.gdb.attach_start();
         this.sendResponse(response);
-      } catch(err) {
+      } catch (err) {
         this.sendErrorResponse(response, 0, "Failed to attach");
         this.sendEvent(new DebugAdapter.TerminatedEvent())
       }
@@ -312,8 +312,8 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   }
 
   performHexFormat(variables) {
-    if(this.formatValuesAsHex) {
-      for(let v of variables) {
+    if (this.formatValuesAsHex) {
+      for (let v of variables) {
         if (!isNaN(v.value)) {
           v.value = toHexString(v.value);
         }
@@ -340,7 +340,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     // start a server that creates a new session for every connection request
     server = net
       .createServer((socket) => {
-        socket.on("end", () => {});
+        socket.on("end", () => { });
         const session = new MidasDebugSession();
         session.setRunAsServer(true);
         session.start(socket, socket);
@@ -454,7 +454,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async reverseContinueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
     response.body = {
-      allThreadsContinued : true
+      allThreadsContinued: true
     }
     this.sendResponse(response);
     this.gdb.execCLI("reverse-continue");
@@ -567,7 +567,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  async completionsRequest(response, {frameId, text, column, line}, ) {
+  async completionsRequest(response, { frameId, text, column, line },) {
     const cmd = `-complete "${text}"`;
     const results = (await this.gdb.execMI(cmd)).matches ?? [];
 
@@ -589,7 +589,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
     return this.virtualDispatch(...args);
   }
 
-  async readMemoryRequest(response, {memoryReference, offset, count}, request) {
+  async readMemoryRequest(response, { memoryReference, offset, count }, request) {
     let res = await this.gdb.execCMD(`read-memory ${memoryReference} ${offset} ${count}`);
     response.body = res
     this.sendResponse(response);
@@ -794,7 +794,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
           for (const cp of checkpoints) {
             await this.gdb.deleteCheckpoint(cp.id);
           }
-        } catch (e) {}
+        } catch (e) { }
         this.#checkpointsUI.updateCheckpoints([]);
         break;
       }

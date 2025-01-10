@@ -1,12 +1,6 @@
 const { ImmediateExecuteCommand } = require("./gdbCommand");
 const { getExtensionPathOf } = require("./utils/sysutils");
-
-const DebugLogging = {
-  Off: "off",
-  GdbEventsOnly: "gdb events",
-  PythonLogsOnly: "python logs",
-  Full: "full",
-};
+const { DebugLogging } = require("./constants");
 
 /**
  * @param { string } setting
@@ -60,7 +54,7 @@ class MidasRunMode {
   getCommandParameters() {
     const traceparam = this.#trace ? "True" : "False";
     const debugparam = this.#debug ? "True" : "False";
-    return  [
+    return [
       new ImmediateExecuteCommand(`py config.setTrace = ${traceparam}`),
       new ImmediateExecuteCommand(`py config.isDevelopmentBuild = ${debugparam}`)
     ];
@@ -83,5 +77,4 @@ class MidasRunMode {
 module.exports = {
   MidasRunMode,
   debugLogging,
-  DebugLogging
 };

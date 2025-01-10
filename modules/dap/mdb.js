@@ -3,9 +3,10 @@
 const { MidasCommunicationChannel, UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
-const { getAPI, ContextKeys } = require("../utils/utils");
+const { getAPI, } = require("../utils/utils");
 const { spawn } = require("child_process");
-const vs = require("vscode")
+const vs = require("vscode");
+const { ContextKeys } = require("../constants");
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -92,11 +93,12 @@ class MdbSession extends MidasSessionBase {
     await this.dbg.initialize();
     args["RRSession"] = this.spawnConfig?.RRSession ?? false;
     super.initializeRequest(response, args);
+    vs.commands.executeCommand("setContext", ContextKeys.NativeMode, true);
   }
 
   attachRequest(response, args, request) {
     const attachArgs = args.attachArguments;
-    if(attachArgs.type == "rr") {
+    if (attachArgs.type == "rr") {
       vs.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     }
     this.dbg.sendRequest(request, attachArgs);

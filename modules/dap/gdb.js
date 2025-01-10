@@ -3,7 +3,7 @@ const { InitializedEvent } = require("@vscode/debugadapter");
 const { getExtensionPathOf } = require("../utils/sysutils");
 const { UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
-const {MidasSessionBase} = require("./dap-base");
+const { MidasSessionBase } = require("./dap-base");
 const { spawn } = require("child_process");
 
 class GdbProcess extends DebuggerProcessBase {

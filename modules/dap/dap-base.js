@@ -1,9 +1,9 @@
-const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent, } = require("@vscode/debugadapter");
+const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
 const { commands, window, Uri } = require("vscode");
 const vs = require("vscode")
-const { CustomRequests } = require("../debugSessionCustomRequests");
-const { ContextKeys,  toHexString, getAPI } = require("../utils/utils");
+const { toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
+const { ContextKeys, CustomRequests, ProvidedAdapterTypes } = require("../constants");
 
 /**
  *
@@ -112,14 +112,13 @@ class MidasSessionBase extends DebugSession {
             this.emit("exit");
             break;
           case "startDebugging":
-            // currently, only midas-canonical supports multiprocessing
+            // currently, only midas-native supports multiprocessing
             // via reverse requesting a debug session.
-
             await vs.debug
               .startDebugging(
                 vs.workspace.workspaceFolders[0],
                 {
-                  type: "midas-canonical",
+                  type: ProvidedAdapterTypes.Native,
                   name: "forked",
                   request: "attach",
                   childConfiguration: {
@@ -129,7 +128,7 @@ class MidasSessionBase extends DebugSession {
                 vs.debug.activeDebugSession
               )
               .then((bool) => {
-                if(bool) {
+                if (bool) {
                   console.log(`child session started`);
                 }
               });
@@ -144,7 +143,7 @@ class MidasSessionBase extends DebugSession {
     });
 
 
-    if(this.hasProcessHandle()) {
+    if (this.hasProcessHandle()) {
       for (const evt of ["close", "disconnect", "error", "exit"]) {
         this.dbg.process.on(evt, () => {
           if (!this.notifiedOfTermination) {
@@ -161,11 +160,16 @@ class MidasSessionBase extends DebugSession {
     return this.dbg.process != null;
   }
 
-  dispose() {
+  resetContextValues() {
     commands.executeCommand("setContext", ContextKeys.RRSession, false);
+    commands.executeCommand("setContext", ContextKeys.NativeMode, false);
+  }
+
+  dispose() {
     this.disposeTerminal();
     super.dispose();
-    if(this.rootSessionCleanup) {
+    this.resetContextValues();
+    if (this.rootSessionCleanup) {
       // Root Session Cleanup
       this.rootSessionCleanup.emit("shutdown")
     }
@@ -479,14 +483,17 @@ class MidasSessionBase extends DebugSession {
         request.command = "customRequest";
         request.arguments = {
           command: command,
-          arguments: args
+          arguments: {}
         };
         this.dbg.sendRequest(request)
         break;
       }
       case CustomRequests.ContinueAll: {
-        request.command = "continue";
-        request.arguments = { threadId: -1, singleThread: false }
+        request.command = "customRequest";
+        request.arguments = {
+          command: command,
+          arguments: {}
+        };
         this.dbg.sendRequest(request)
         break;
       }

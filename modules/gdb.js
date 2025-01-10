@@ -60,12 +60,11 @@ const {
   ArrayMap,
   ExclusiveArray,
   showErrorPopup,
-  ContextKeys,
   strEmpty,
   strValueOr
 } = require("./utils/utils");
 const { spawnGdb } = require("./spawn");
-const { CustomRequests } = require("./debugSessionCustomRequests");
+const { CustomRequests, ContextKeys } = require("./constants");
 const { getExtensionPathOf } = require("./utils/sysutils");
 let trace = false;
 let LOG_ID = 0;
@@ -131,7 +130,7 @@ class GDB extends GDBMixin(GDBBase) {
   async startWithRR(program, stopOnEntry, isRemote) {
     try {
       this.#program = path.basename(program);
-    } catch(ex) {
+    } catch (ex) {
       this.#program = "unknown";
     }
 
@@ -154,7 +153,7 @@ class GDB extends GDBMixin(GDBBase) {
     this.execCLI(`source ${getExtensionPathOf("/modules/.gdb_rrinit")}`);
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
-    if(!isRemote) {
+    if (!isRemote) {
       if (stopOnEntry) {
         await this.execMI("-exec-run --start");
       } else {
@@ -221,7 +220,7 @@ class GDB extends GDBMixin(GDBBase) {
     if (stopOnEntry) {
       try {
         await this.execMI("-exec-run --start");
-      } catch(ex) {
+      } catch (ex) {
         this.debugConsole(`Couldn't set breakpoint at main; ${ex}. Setting pending breakpoint`);
         this.execCLI("b main");
         this.run();
@@ -548,7 +547,7 @@ class GDB extends GDBMixin(GDBBase) {
           };
           evt.body = body;
           this.sendEvent(evt);
-        } else if(this.paused) {
+        } else if (this.paused) {
           let evt = new StoppedEvent("entry", 1);
           let body = {
             reason: "stopped",
@@ -569,10 +568,10 @@ class GDB extends GDBMixin(GDBBase) {
 
   createStoppedEvent(reason, desc, threadId, allThreadsStopped, hitBreakpointIds) {
     const safeParseHitBps = (bp) => {
-      if(bp == null) return [];
+      if (bp == null) return [];
       try {
         return [+bp];
-      } catch(ex) {
+      } catch (ex) {
         return [];
       }
     };
@@ -580,9 +579,9 @@ class GDB extends GDBMixin(GDBBase) {
     const safeParseThreadId = (thr) => {
       try {
         let threadId = Number.parseInt(thr);
-        if(Number.isNaN(threadId)) return null;
+        if (Number.isNaN(threadId)) return null;
         return threadId;
-      } catch(ex) {
+      } catch (ex) {
         console.log(`Couldn't parse ${thr} for stopped event`);
         return null;
       }
@@ -615,14 +614,14 @@ class GDB extends GDBMixin(GDBBase) {
 
   handleExecStopped(data) {
     vscode.commands.executeCommand("setContext", ContextKeys.Running, false);
-    switch(data.reason) {
+    switch (data.reason) {
       case "breakpoint-hit":
         return this.createStoppedEvent("breakpoint", "Hit breakpoint", data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
       case "signal-received":
         switch (data["signal-name"]) {
           case "SIGKILL":
             // rr
-            if(this.config.isRRSession() && data.frame.func == "syscall_traced") {
+            if (this.config.isRRSession() && data.frame.func == "syscall_traced") {
               return this.createStoppedEvent("exception", ui_prepare_signal_display(SIGNALS[data["signal-name"]].description, "Replay ended"), data["thread-id"], true, null);
             } else {
               return this.createStoppedEvent("exception", ui_prepare_signal_display(SIGNALS[data["signal-name"]].description), data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
@@ -630,7 +629,7 @@ class GDB extends GDBMixin(GDBBase) {
           case "0": {
             if (this.config.isRRSession() && !this.paused) {
               return this.createStoppedEvent("entry", "rr trampoline", 1, true, null);
-            } else if(this.paused) {
+            } else if (this.paused) {
               let evt = new StoppedEvent("entry", 1);
               let body = {
                 reason: "stopped",
@@ -666,11 +665,11 @@ class GDB extends GDBMixin(GDBBase) {
       case "read-watchpoint-trigger": {
         const wp_msg = `Old value: ${data.value.old}\nNew value: ${data.value.new}`;
         this.registerExceptionInfo(+data["thread-id"], `Watchpoint`, "Watch point triggered", wp_msg, data.reason);
-        return this.createStoppedEvent("exception", "Hit watchpoint",  data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
+        return this.createStoppedEvent("exception", "Hit watchpoint", data["thread-id"], data["stopped-threads"] == "all", data.bkptno);
       }
       default: {
         let reason = "pause";
-        if(data.frame && data.frame.func == "_start") {
+        if (data.frame && data.frame.func == "_start") {
           reason = "entry";
         }
         return this.createStoppedEvent(reason, "Stopped", data["thread-id"], data["stopped-threads"] == "all", null);
@@ -680,11 +679,11 @@ class GDB extends GDBMixin(GDBBase) {
 
   handleExecRunning(data) {
     let allContinued = false;
-    if(data["thread-id"] == "all") {
+    if (data["thread-id"] == "all") {
       allContinued = true;
     }
     let threadId = Number.parseInt(data["thread-id"]);
-    if(Number.isNaN(threadId)) {
+    if (Number.isNaN(threadId)) {
       threadId = 1;
     }
     return new ContinuedEvent(threadId, allContinued);
@@ -744,7 +743,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @param {{threadId: number}} payload
    */
   // eslint-disable-next-line no-unused-vars
-  #onNotifyRunning(payload) {}
+  #onNotifyRunning(payload) { }
 
   /**
    * The target has stopped.
@@ -1056,7 +1055,7 @@ class GDB extends GDBMixin(GDBBase) {
    * @returns { Promise<{id: number, enabled: boolean, verified: boolean, source: Source, line: number }> }
    */
   async setConditionalBreakpoint(path, line, condition, threadId = undefined) {
-    if(strEmpty(condition)) {
+    if (strEmpty(condition)) {
       let bp = await this.setPendingBreakpoint(path, line, threadId);
       if (bp) {
         this.registerBreakpoint(bp);

@@ -1,7 +1,7 @@
 const vscode = require("vscode");
 const path = require("path");
 const subprocess = require("child_process");
-const { REGEXES } = require("./utils");
+const { Regexes } = require("../constants");
 
 /**
  * @param { string } rr - Path to rr
@@ -33,9 +33,9 @@ function* get_field(line) {
   let parts_generated = 0;
   while (it < line.length) {
     if (parts_generated < 3) {
-      while (REGEXES.WhiteSpace.test(line.charAt(it))) it++;
+      while (Regexes.WhiteSpace.test(line.charAt(it))) it++;
       end = it;
-      while (!REGEXES.WhiteSpace.test(line.charAt(end))) end++;
+      while (!Regexes.WhiteSpace.test(line.charAt(end))) end++;
       const res = line.substring(it, end).trim();
       it = end;
       parts_generated++;
@@ -60,7 +60,7 @@ function fallbackParseOfrrps(data) {
     .filter((line) => line.length > 2)
     .map((line) => {
       const [pid, ppid, exit, cmd] = [...get_field(line)];
-      return { pid, ppid, exit, cmd, noexec: REGEXES.ForkedNoExec.test(line) };
+      return { pid, ppid, exit, cmd, noexec: Regexes.ForkedNoExec.test(line) };
     });
 }
 
