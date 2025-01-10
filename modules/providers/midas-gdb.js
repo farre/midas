@@ -5,7 +5,6 @@ const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = 
 const {
   isNothing,
   resolveCommand,
-  ContextKeys,
   showErrorPopup,
   getPid,
   strEmpty,
@@ -13,6 +12,7 @@ const {
 } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
+const { ContextKeys } = require("../constants");
 
 const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -64,6 +64,12 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
 
   // eslint-disable-next-line no-unused-vars
   async resolveDebugConfiguration(folder, config, token) {
+    return config;
+  }
+
+  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
+  // @ts-ignore
+  async resolveDebugConfigurationWithSubstitutedVariables(folder, config, token) {
     getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
@@ -102,12 +108,6 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
     }
     vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
     return config;
-  }
-
-  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
-  // @ts-ignore
-  async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
-    return debugConfiguration;
   }
 }
 

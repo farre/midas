@@ -16,8 +16,7 @@ __pycache__
 
 **/build/**
 
-.vscode/launch.json
-.vscode/launch.json
+**/.vscode/launch.json
 test/cppworkspace/rr/.vscode/
 rr-*
 test/cppworkspace/bin/*

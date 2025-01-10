@@ -13,6 +13,7 @@ const {
   getAllPidsForQuickPick,
 } = require("./sysutils");
 const { getReleaseNotes } = require("./releaseNotes");
+const { Regexes } = require("../constants");
 
 /** @typedef { { sha: string, date: Date } } GitMetadata */
 /** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } ManagedTool */
@@ -122,30 +123,12 @@ class Tool {
   }
 }
 
-function uiSetAllStopComponent(value) {
-  if (typeof value !== "boolean") throw new Error("Must use a boolean to set All Stop Mode UI component");
-  vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, value);
-}
-
 /** @typedef { { major: number, minor: number, patch: number } } SemVer */
 
 /** @returns { import("../activateDebuggerExtension").MidasAPI } */
 function getAPI() {
   return global.API;
 }
-
-const REGEXES = {
-  MajorMinorPatch: /(\d+)\.(\d+)\.*((\d+))?/,
-  WhiteSpace: /\s/,
-  ForkedNoExec: /forked without exec/,
-};
-
-const ContextKeys = {
-  AllStopModeSet: "midas.allStopModeSet",
-  Running: "midas.Running",
-  DebugType: "midas.debugType",
-  RRSession: "midas.rrSession",
-};
 
 function strEmpty(str) {
   return str === undefined || str === null || str === "";
@@ -233,7 +216,7 @@ function spawn(gdbPath, args) {
  */
 class ArrayMap {
   #storage = new Map();
-  constructor() {}
+  constructor() { }
   /**
    * Adds `value` to the array keyed by `key`. If no array is referenced by key, one is created.
    * @param {any} key
@@ -276,7 +259,7 @@ class ArrayMap {
 class ExclusiveArray {
   /** @type { T[] } */
   #data = [];
-  constructor() {}
+  constructor() { }
 
   /**
    * Compares `items` with the elements in this array and returns what elements needs removing from this array
@@ -474,7 +457,7 @@ function requiresMinimum(version, required_version, patch_required = false) {
  * @returns { SemVer }
  */
 function parseSemVer(string) {
-  let m = REGEXES.MajorMinorPatch.exec(string);
+  let m = Regexes.MajorMinorPatch.exec(string);
   if (!isNothing(m)) {
     // remove first group. i.e. 1.2.3 is not interesting, only 1 2 and 3 is
     m.shift();
@@ -557,9 +540,7 @@ module.exports = {
   kill_pid,
   showErrorPopup,
   resolveCommand,
-  ContextKeys,
   toHexString,
-  REGEXES,
   parseSemVer,
   semverIsNewer,
   getVersion,
@@ -570,7 +551,6 @@ module.exports = {
   strEmpty,
   strValueOr,
   getAPI,
-  uiSetAllStopComponent,
   createEmptyMidasConfig,
   Tool,
 };

@@ -8,8 +8,7 @@ const { getExtensionPathOf } = require("./utils/sysutils");
  * @typedef { import("vscode").Disposable } Disposable
  */
 const vscode = require("vscode");
-const { CustomRequests } = require("./debugSessionCustomRequests");
-const { ProvidedAdapterTypes } = require("./shared");
+const { CustomRequests, ProvidedAdapterTypes } = require("./constants");
 const { registerCommand } = require("vscode").commands;
 
 /**
@@ -27,10 +26,10 @@ function getVSCodeCommands() {
     const config = vscode.workspace.getConfiguration("launch", vscode.workspace.workspaceFolders[0].uri);
     // retrieve values
     const isMidasConfig = (cfg) => {
-      switch(cfg.type ?? "") {
+      switch (cfg.type ?? "") {
         case ProvidedAdapterTypes.Gdb:
         case ProvidedAdapterTypes.RR:
-        case ProvidedAdapterTypes.Canonical:
+        case ProvidedAdapterTypes.Native:
           return true;
         default:
           return false;
@@ -58,11 +57,11 @@ function getVSCodeCommands() {
     }
   });
 
-  let continueAll = registerCommand("midas.session-continue-all", () => {
+  let continueAll = registerCommand("midas.continueAll", () => {
     vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll, {});
   });
 
-  let pauseAll = registerCommand("midas.session-pause-all", () => {
+  let pauseAll = registerCommand("midas.pauseAll", () => {
     vscode.debug.activeDebugSession.customRequest(CustomRequests.PauseAll);
   });
 
@@ -81,7 +80,7 @@ function getVSCodeCommands() {
       try {
         await getAPI().getPython().sudoExecute([script]);
         vscode.window.showInformationMessage("Zen Workaround is active");
-      } catch(ex) {
+      } catch (ex) {
         vscode.window.showInformationMessage("Zen Workaround failed");
       }
     }
@@ -163,7 +162,7 @@ function getVSCodeCommands() {
   const getMdb = registerCommand("midas.get-mdb", async () => {
     try {
       await ToolInstaller("mdb");
-    } catch(ex) {
+    } catch (ex) {
       vscode.window.showErrorMessage(`MDB install failed: ${ex}`);
     }
   });
@@ -171,7 +170,7 @@ function getVSCodeCommands() {
   const getGdb = registerCommand("midas.get-gdb", async () => {
     try {
       await ToolInstaller("gdb");
-    } catch(ex) {
+    } catch (ex) {
       vscode.window.showErrorMessage(`GNU Debugger install failed: ${ex}`);
     }
   });

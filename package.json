@@ -91,17 +91,17 @@
         "shortTitle": "rr Record"
       },
       {
-        "command": "midas.session-continue-all",
+        "command": "midas.continueAll",
         "title": "Continue all threads",
         "shortTitle": "Continue All",
         "icon": "$(notebook-execute-all)"
       },
       {
-        "command": "midas.session-pause-all",
+        "command": "midas.pauseAll",
         "title": "Pause all threads",
         "shortTitle": "Pause all",
         "icon": "$(debug-pause)",
-        "enablement": "midas.allStopModeSet == false && midas.debugType == midas-gdb && midas.Running == true"
+        "enablement": "(midas.allStopModeSet == false && midas.debugType == midas-gdb && midas.Running == true) || midas.debugType == midas-native"
       },
       {
         "command": "midas.reverse-finish",
@@ -174,14 +174,14 @@
       ],
       "debug/toolBar": [
         {
-          "command": "midas.session-continue-all",
+          "command": "midas.continueAll",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && midas.debugType != midas-rr"
+          "when": "(midas.allStopModeSet == false && midas.debugType != midas-rr)"
         },
         {
-          "command": "midas.session-pause-all",
+          "command": "midas.pauseAll",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && midas.debugType == midas-gdb"
+          "when": "midas.allStopModeSet == false && (midas.debugType == midas-gdb || midas.debugType == midas-native)"
         },
         {
           "command": "midas.reverse-finish",
@@ -684,8 +684,8 @@
         ]
       },
       {
-        "type": "midas-canonical",
-        "label": "Midas Canonical Debugger",
+        "type": "midas-native",
+        "label": "Midas Native Debugger",
         "languages": [
           "c",
           "cpp"
@@ -853,7 +853,7 @@
         },
         "initialConfigurations": [
           {
-            "type": "midas-canonical",
+            "type": "midas-native",
             "request": "launch",
             "name": "Midas Launch",
             "program": "${workspaceFolder}/program",
@@ -865,11 +865,11 @@
         ],
         "configurationSnippets": [
           {
-            "name": "midas-canonical",
+            "name": "midas-native",
             "label": "MDB: Launch",
-            "description": "Launch a canonical Midas debug session",
+            "description": "Launch a native Midas debug session",
             "body": {
-              "type": "midas-canonical",
+              "type": "midas-native",
               "request": "launch",
               "name": "Midas Launch",
               "program": "${workspaceFolder}/program",

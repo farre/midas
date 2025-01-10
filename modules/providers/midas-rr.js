@@ -5,11 +5,12 @@ const fs = require("fs");
 const { getFreeRandomPort } = require("../utils/netutils");
 const { tracePicked, getTraces, parseProgram, generateGdbInit } = require("../utils/rrutils");
 const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
-const { spawnExternalRrConsole, showErrorPopup, ContextKeys, getAPI, Tool } = require("../utils/utils");
+const { spawnExternalRrConsole, showErrorPopup, getAPI } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
 const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
 const { getExtensionPathOf } = require("../utils/sysutils");
+const { ContextKeys } = require("../constants");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -124,6 +125,11 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
   }
 
   async resolveDebugConfiguration(folder, config, token) {
+    return config;
+  }
+
+  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
+  async resolveDebugConfigurationWithSubstitutedVariables(folder, config, token) {
     getAPI().clearChannelOutputs();
     try {
       await super.defaultInitialize(config, initializer);
@@ -165,11 +171,6 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
       return result;
     }
   }
-
-  // for now, we do not substitute any variables in the launch config, but we will. this will be used then.
-  async resolveDebugConfigurationWithSubstitutedVariables(folder, debugConfiguration, token) {
-    return debugConfiguration;
-  }
 }
 
 class RRDebugAdapterFactory {
@@ -195,8 +196,6 @@ class RRDebugAdapterFactory {
     const rrInitData = await generateGdbInit(config.rrPath);
     const rrInitFilePath = getExtensionPathOf("rrinit");
     fs.writeFileSync(rrInitFilePath, rrInitData);
-    /** @type {Tool} */
-    const rrTool = config.tool.rr;
     let cmd_str = null;
     const rrOptions = (config.rrOptions ?? []).join(" ");
     if (config.replay.noexec) {

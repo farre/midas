@@ -4,7 +4,7 @@ const vscode = require("vscode");
 const { getVSCodeCommands } = require("./commandsRegistry");
 const { ConfigurationProvider, DebugAdapterFactory } = require("./providers/midas-gdb");
 const { RRConfigurationProvider, RRDebugAdapterFactory } = require("./providers/midas-rr");
-const { MdbConfigurationProvider, MdbDebugAdapterFactory } = require("./providers/midas-canonical");
+const { MdbConfigurationProvider, MdbDebugAdapterFactory } = require("./providers/midas-native");
 const { CheckpointsViewProvider } = require("./ui/checkpoints/checkpoints");
 const { which, sanitizeEnvVariables } = require("./utils/sysutils");
 const {
@@ -18,8 +18,8 @@ const {
   createEmptyMidasConfig,
 } = require("./utils/utils");
 const fs = require("fs");
-const { debugLogging, DebugLogging } = require("./buildMode");
-const { ProvidedAdapterTypes } = require("./shared");
+const { debugLogging } = require("./buildMode");
+const { ProvidedAdapterTypes, DebugLogging } = require("./constants");
 const { execSync } = require("child_process");
 const { ManagedToolchain } = require("./toolchain");
 
@@ -59,12 +59,12 @@ class MidasDebugAdapterTracker {
   /**
    * A session with the debug adapter is about to be started.
    */
-  onWillStartSession() {}
+  onWillStartSession() { }
   /**
    * The debug adapter is about to receive a Debug Adapter Protocol message from the editor.
    */
   onWillReceiveMessage(message) {
-    if(message.command) {
+    if (message.command) {
       this.logger.appendLine(`[REQ][${message.command}] ----> ${JSON.stringify(message)}`);
     } else {
       this.logger.appendLine(`[EVT][${message.event}] ----> ${JSON.stringify(message)}`);
@@ -75,7 +75,7 @@ class MidasDebugAdapterTracker {
    * The debug adapter has sent a Debug Adapter Protocol message to the editor.
    */
   onDidSendMessage(message) {
-    if(message.command) {
+    if (message.command) {
       this.logger.appendLine(`[RES][${message.command}] <---- ${JSON.stringify(message)}\n`);
     } else {
       this.logger.appendLine(`[EVT][${message.event}] <---- ${JSON.stringify(message)}\n`);
@@ -85,7 +85,7 @@ class MidasDebugAdapterTracker {
   /**
    * The debug adapter session is about to be stopped.
    */
-  onWillStopSession() {}
+  onWillStopSession() { }
 
   /**
    * An error with the debug adapter has occurred.
@@ -129,8 +129,8 @@ class MidasDebugAdapterTrackerFactory {
   createDebugAdapterTracker(session) {
     const config = session.configuration;
     switch (config.type) {
-      case ProvidedAdapterTypes.Canonical: {
-        if(config.debug?.logging?.dapMessages) {
+      case ProvidedAdapterTypes.Native: {
+        if (config.debug?.logging?.dapMessages) {
           this.initOutputChannel();
           return new MidasDebugAdapterTracker(session, this.outputChannel);
         }
@@ -195,7 +195,7 @@ class MidasAPI extends APIInit {
   initToolsRequired() {
     this.toolsInitialized = this.toolsInitialized ?? false;
 
-    if(!this.toolsInitialized) {
+    if (!this.toolsInitialized) {
       const RequiredTools = {
         cmake: { variants: ["cmake"] },
         make: { variants: ["make"] },
@@ -203,13 +203,13 @@ class MidasAPI extends APIInit {
         unzip: { variants: ["unzip"] },
         ninja: { variants: ["ninja"] },
       };
-      for(const prop in RequiredTools) {
-        for(const variant of RequiredTools[prop].variants) {
+      for (const prop in RequiredTools) {
+        for (const variant of RequiredTools[prop].variants) {
           try {
             const p = execSync(`which ${variant}`, { env: sanitizeEnvVariables() }).toString().trim();
             this.#tools.set(prop, new Tool(prop, p, null));
             break;
-          } catch(e) {
+          } catch (e) {
           }
         }
       }
@@ -232,7 +232,7 @@ class MidasAPI extends APIInit {
 
   getRequiredSystemTool(name) {
     const tool = this.getSystemTool(name);
-    if(tool == null) {
+    if (tool == null) {
       vscode.window.showErrorMessage(`Failed to find required tool ${name} on $PATH. This may cause Midas toolchain management to not work.`);
       throw new Error(`Could not determine ${name} existence on system`);
     }
@@ -256,10 +256,10 @@ class MidasAPI extends APIInit {
   }
 
   hasRequiredTools(required) {
-    for(const req of required) {
+    for (const req of required) {
       try {
         const t = this.getRequiredSystemTool(req);
-      } catch(ex) {
+      } catch (ex) {
         return false;
       }
     }
@@ -274,7 +274,7 @@ class MidasAPI extends APIInit {
       if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer ?? currentlyLoadedSemVer) || recordedSemVer == null) {
         showReleaseNotes();
       }
-    } catch(ex) {
+    } catch (ex) {
       console.log(`exception caught, won't show release notes: ${ex}`);
     }
   }
@@ -359,7 +359,7 @@ class MidasAPI extends APIInit {
    */
   async getDebuggerTool(name) {
     const tool = this.toolchain.getTool(name)
-    if(tool.managed) {
+    if (tool.managed) {
       return tool;
     }
     const path = await this.resolveToolPath(name);
@@ -407,10 +407,10 @@ class MidasAPI extends APIInit {
 
   async checkToolchainUpdates() {
     const manager = this.getToolchain();
-    for(const tool of ["rr", "gdb", "mdb"]) {
+    for (const tool of ["rr", "gdb", "mdb"]) {
       try {
         manager.getTool(tool).update();
-      } catch(ex) {
+      } catch (ex) {
 
       }
     }
@@ -419,10 +419,10 @@ class MidasAPI extends APIInit {
   async updatesCheck() {
     try {
       const changed = await this.toolchain.checkUpdates();
-      if(changed) {
+      if (changed) {
         this.toolchain.serialize();
       }
-    } catch(ex) {
+    } catch (ex) {
       vscode.window.showErrorMessage(`Failed to update: ${ex}`);
     }
   }
@@ -460,7 +460,7 @@ async function initMidas(api) {
   api.maybeDisplayReleaseNotes();
   api.serializeMidasVersion();
 
-  if(!firstInit) {
+  if (!firstInit) {
     await api.updatesCheck();
   }
 }
@@ -487,7 +487,7 @@ function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, ch
 }
 
 function InitializeGlobalApi(ctx) {
-  if(global.API == null || global.API == undefined) {
+  if (global.API == null || global.API == undefined) {
     global.API = new MidasAPI(ctx);
     initMidas(global.API);
   }
@@ -521,7 +521,7 @@ async function activateExtension(context) {
   InitializeGlobalApi(context);
 }
 
-function deactivateExtension() {}
+function deactivateExtension() { }
 
 module.exports = {
   activateExtension,
