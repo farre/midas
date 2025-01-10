@@ -102,6 +102,8 @@ class Session:
             if sessionArgs.get("program") is None:
                 raise Exception("No program was provided for gdb to launch")
             gdb.execute(f"file {sessionArgs['program']}")
+            programArgs = " ".join(sessionArgs["args"])
+            gdb.execute(f"set args {programArgs}")
         elif sessionArgs["type"] == "attach":
             gdb.execute("set remotetimeout 10000")
             gdb.execute("set tcp connect-timeout 10000")
@@ -617,13 +619,14 @@ def configuration_done(args):
     return {}
 
 
-@request("launch", ArbitraryOptionalArgs(["program"]))
+@request("launch", ArbitraryOptionalArgs(["program"], ["args"]))
 def launch(args):
     global session
     session.start_session(
         {
             "type": "launch",
             "program": args["program"],
+            "args": args.get("args") or [],
             "stopOnEntry": args.get("stopOnEntry"),
             "allStopMode": args.get("allStopMode"),
             "setupCommands": args.get("setupCommands"),
