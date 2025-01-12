@@ -163,16 +163,9 @@ class MidasSessionBase extends DebugSession {
     return this.dbg.process != null;
   }
 
-  resetContextValues() {
-    commands.executeCommand("setContext", ContextKeys.RRSession, false);
-    commands.executeCommand("setContext", ContextKeys.NativeMode, false);
-    commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, true);
-  }
-
   dispose() {
     this.disposeTerminal();
     super.dispose();
-    this.resetContextValues();
     if (this.rootSessionCleanup) {
       // Root Session Cleanup
       this.rootSessionCleanup.emit("shutdown")

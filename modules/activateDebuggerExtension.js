@@ -19,7 +19,7 @@ const {
 } = require("./utils/utils");
 const fs = require("fs");
 const { debugLogging } = require("./buildMode");
-const { ProvidedAdapterTypes, DebugLogging, CustomRequests, CustomRequestsUI } = require("./constants");
+const { ProvidedAdapterTypes, DebugLogging, CustomRequests, CustomRequestsUI, ContextKeys } = require("./constants");
 const { execSync } = require("child_process");
 const { ManagedToolchain } = require("./toolchain");
 
@@ -196,6 +196,11 @@ class UIDebugSession {
   /** @returns { Thenable<boolean> } */
   SelectedThreadInUI(id) {
     return this.#session.customRequest(CustomRequests.OnSelectedThread, { id: id })
+  }
+
+  /** @param {string} sessionId @returns { boolean } */
+  CompareId(sessionId) {
+    return this.#session.id == sessionId;
   }
 
   static SelectedThreadInUi(session, id) {
@@ -547,6 +552,12 @@ function InitializeGlobalApi(ctx) {
   return global.API;
 }
 
+function RestoreContextDefaults() {
+  vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
+  vscode.commands.executeCommand("setContext", ContextKeys.NativeMode, false);
+  vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, true);
+}
+
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -579,13 +590,16 @@ async function activateExtension(context) {
   });
 
   vscode.debug.onDidChangeActiveStackItem(uiElement => {
-    if(uiElement.threadId) {
+    if (uiElement.threadId) {
       UIDebugSession.SelectedThreadInUi(uiElement.session, uiElement.threadId);
     }
   });
 
   vscode.debug.onDidTerminateDebugSession(session => {
     api.RemoveDebugSession(session);
+    if (api.GetDebugSessions().size == 0) {
+      RestoreContextDefaults();
+    }
   });
 
   return api;
