@@ -251,11 +251,11 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
   async continueRequest(response, args) {
     // todo(simon): for rr this needs to be implemented differently
     response.body = {
-      allThreadsContinued: this.gdb.allStopMode,
+      allThreadsContinued: this.gdb.noSingleThreadControl,
     };
     this.gdb.interrupt_operations();
     this.gdb.paused = false;
-    await this.gdb.continue(this.gdb.allStopMode ? undefined : args.threadId, false);
+    await this.gdb.continue(this.gdb.noSingleThreadControl ? undefined : args.threadId, false);
 
     vscode.commands.executeCommand("setContext", ContextKeys.Running, true);
     this.sendResponse(response);
@@ -735,7 +735,7 @@ class MidasDebugSession extends DebugAdapter.DebugSession {
       case CustomRequests.ContinueAll: {
         await this.gdb.continueAll();
         response.body = {
-          allThreadsContinued: this.gdb.allStopMode,
+          allThreadsContinued: this.gdb.noSingleThreadControl,
         };
         this.sendResponse(response);
         this.gdb.sendContinueEvent(1, true);

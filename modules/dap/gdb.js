@@ -5,6 +5,8 @@ const { UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
 const { spawn } = require("child_process");
+const { CustomRequests, ContextKeys } = require("../constants");
+const vscode = require("vscode");
 
 class GdbProcess extends DebuggerProcessBase {
 
@@ -54,6 +56,7 @@ class GdbDAPSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI) {
     const cleanUpEmitter = null
     super(GdbProcess, spawnConfig, terminal, checkpointsUI, null, cleanUpEmitter);
+    vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, spawnConfig.noSingleThreadControl);
   }
 
   initializeRequest(response, args) {
@@ -73,6 +76,24 @@ class GdbDAPSession extends MidasSessionBase {
   attachRequest(response, args, request) {
     args["setupCommands"] = this.spawnConfig.setupCommands;
     super.attachRequest(response, args, request);
+  }
+
+  PauseAll(request)  {
+    request.command = CustomRequests.PauseAll;
+    request.arguments = {}
+    this.dbg.sendRequest(request)
+  }
+
+  ContinueAll(request) {
+    request.command = CustomRequests.ContinueAll;
+    request.arguments = {}
+    this.dbg.sendRequest(request);
+  }
+
+  OnSelectedThread(request, id) {
+    request.command = "selectThread";
+    request.arguments = { threadId: id }
+    this.dbg.sendRequest(request);
   }
 }
 

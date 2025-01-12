@@ -94,14 +94,15 @@
         "command": "midas.continueAll",
         "title": "Continue all threads",
         "shortTitle": "Continue All",
-        "icon": "$(notebook-execute-all)"
+        "icon": "$(notebook-execute-all)",
+        "enablement": "midas.noSingleThreadControl == false"
       },
       {
         "command": "midas.pauseAll",
         "title": "Pause all threads",
         "shortTitle": "Pause all",
         "icon": "$(debug-pause)",
-        "enablement": "(midas.allStopModeSet == false && midas.debugType == midas-gdb && midas.Running == true) || midas.debugType == midas-native"
+        "enablement": "midas.noSingleThreadControl == false"
       },
       {
         "command": "midas.reverse-finish",
@@ -176,12 +177,12 @@
         {
           "command": "midas.continueAll",
           "group": "midas",
-          "when": "(midas.allStopModeSet == false && midas.debugType != midas-rr)"
+          "when": "(midas.noSingleThreadControl == false && midas.debugType != midas-rr)"
         },
         {
           "command": "midas.pauseAll",
           "group": "midas",
-          "when": "midas.allStopModeSet == false && (midas.debugType == midas-gdb || midas.debugType == midas-native)"
+          "when": "midas.noSingleThreadControl == false && (midas.debugType == midas-gdb || midas.debugType == midas-native)"
         },
         {
           "command": "midas.reverse-finish",
@@ -197,6 +198,16 @@
           "command": "midas.run-to-event",
           "group": "midas",
           "when": "midas.rrSession == true"
+        }
+      ],
+      "debug/callstack/context": [
+        {
+          "command": "midas.continueAll",
+          "group": "midas"
+        },
+        {
+          "command": "midas.pauseAll",
+          "group": "midas"
         }
       ],
       "debug/variables/context": [
@@ -266,6 +277,11 @@
                 "default": []
               },
               "allStopMode": {
+                "type": "boolean",
+                "description": "Whether or not GDB should run in all stop mode",
+                "deprecationMessage": "Use 'noSingleThreadControl' instead."
+              },
+              "noSingleThreadControl": {
                 "type": "boolean",
                 "description": "Whether or not GDB should run in all stop mode",
                 "default": true
@@ -414,7 +430,7 @@
             "program": "${workspaceFolder}/program",
             "stopOnEntry": true,
             "trace": "Off",
-            "allStopMode": true,
+            "noSingleThreadControl": true,
             "cwd": "${workspaceFolder}",
             "setupCommands": []
           },
@@ -444,7 +460,7 @@
               "stopOnEntry": true,
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
-              "allStopMode": true,
+              "noSingleThreadControl": true,
               "setupCommands": [],
               "attachOnFork": false
             }
@@ -500,7 +516,7 @@
         ],
         "configurationAttributes": {
           "attach": {
-          "properties": {
+            "properties": {
               "prettyPrinterPath": {
                 "type": "string",
                 "description": "Paths from where to import pretty printers",
@@ -900,7 +916,7 @@
     "@types/glob": "^8.0.0",
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.11.15",
-    "@types/vscode": "^1.74.0",
+    "@types/vscode": "^1.96.0",
     "@vscode/debugadapter": "^1.65.0",
     "@vscode/debugadapter-testsupport": "^1.63.0",
     "@vscode/test-electron": "^2.2.1",

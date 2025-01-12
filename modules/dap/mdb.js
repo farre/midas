@@ -87,6 +87,7 @@ class MdbChildConnection extends DebuggerProcessBase {
 class MdbSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI, cleanUp) {
     super(MdbProcess, spawnConfig, terminal, checkpointsUI, null, cleanUp);
+    vs.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, false);
   }
 
   async initializeRequest(response, args) {

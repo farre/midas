@@ -3,7 +3,7 @@ const { commands, window, Uri } = require("vscode");
 const vs = require("vscode")
 const { toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
-const { ContextKeys, CustomRequests, ProvidedAdapterTypes } = require("../constants");
+const { ContextKeys, CustomRequests, ProvidedAdapterTypes, CustomRequestsUI } = require("../constants");
 
 /**
  *
@@ -94,6 +94,9 @@ class MidasSessionBase extends DebugSession {
           case CustomRequests.SetCheckpoint:
             this.updateCheckpointsView(res.body.checkpoints ?? []);
             break;
+          case "threads":
+            this.UpdateThreadIdCache(res.body);
+            break;
         }
         this.sendResponse(res);
       });
@@ -163,6 +166,7 @@ class MidasSessionBase extends DebugSession {
   resetContextValues() {
     commands.executeCommand("setContext", ContextKeys.RRSession, false);
     commands.executeCommand("setContext", ContextKeys.NativeMode, false);
+    commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, true);
   }
 
   dispose() {
@@ -461,6 +465,28 @@ class MidasSessionBase extends DebugSession {
     this.dbg.sendRequest(request, args);
   }
 
+  PauseAll(request)  {
+    request.command = "customRequest";
+    request.arguments = {
+      command: CustomRequests.PauseAll,
+      arguments: {}
+    };
+    this.dbg.sendRequest(request)
+  }
+
+  ContinueAll(request) {
+    request.command = "customRequest";
+    request.arguments = {
+      command: CustomRequests.ContinueAll,
+      arguments: {}
+    };
+    this.dbg.sendRequest(request);
+  }
+
+  OnSelectedThread(request, id) {
+    // implement if backend has use for it.
+  }
+
   /**
    * Override this hook to implement custom requests.
    */
@@ -480,22 +506,10 @@ class MidasSessionBase extends DebugSession {
         break;
       }
       case CustomRequests.PauseAll: {
-        request.command = "customRequest";
-        request.arguments = {
-          command: command,
-          arguments: {}
-        };
-        this.dbg.sendRequest(request)
-        break;
+        return this.PauseAll(request);
       }
       case CustomRequests.ContinueAll: {
-        request.command = "customRequest";
-        request.arguments = {
-          command: command,
-          arguments: {}
-        };
-        this.dbg.sendRequest(request)
-        break;
+        return this.ContinueAll(request);
       }
       case CustomRequests.RunToEvent: {
         window.showInputBox().then((event_number) => {
@@ -508,6 +522,18 @@ class MidasSessionBase extends DebugSession {
           this.dbg.sendRequest(request);
         });
         break;
+      }
+
+      // UI Related requests. Dumbest in the world that this is the approach vscode has taken.
+      case CustomRequestsUI.HasThread: {
+        const hasThread = this.ContainsThreadId(args.id)
+        response.body = { hasThread: hasThread };
+        this.sendResponse(response);
+        break;
+      }
+
+      case CustomRequests.OnSelectedThread: {
+        return this.OnSelectedThread(request, args.id);
       }
       default:
         request.arguments = args ?? {};
@@ -579,6 +605,28 @@ class MidasSessionBase extends DebugSession {
   getSpawnConfig() {
     return this.spawnConfig;
   }
+
+  ContainsThreadId(threadId) {
+    if(this.threadCache == null) {
+      return false;
+    }
+    return this.threadCache.has(threadId);
+  }
+
+  UpdateThreadIdCache({ threads }) {
+    if(this.threadCache == null) {
+      this.threadCache = new Set();
+    }
+    this.threadCache.clear();
+    try {
+      for(const thread of threads) {
+        this.threadCache.add(thread.id);
+      }
+    } catch(ex) {
+      console.log(`not iterable?`);
+    }
+  }
+
 }
 
 module.exports = {

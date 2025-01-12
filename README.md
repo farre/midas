@@ -114,7 +114,7 @@ The quickest way to configure is to open up the `launch.json` file and hit the a
   "gdbPath": "gdb", // if GDB is on $PATH, this field is not required
   "stopOnEntry": true,
   "trace": "Off",
-  "allStopMode": true
+  "noSingleThreadControl": true
 }
 ```
 
@@ -128,7 +128,7 @@ Default values for non-required (or non-set) properties:
 
 - trace: "Off"
 - stopOnEntry: false
-- allStopMode: true
+- noSingleThreadControl: true
 - gdbPath: gdb (meaning, if gdb doesn't exist on $PATH you will have to set this)
 
 All stop mode, means that all stop / continue actions halt or start threads in unison.
@@ -269,7 +269,7 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
   "use-dap": true,
   "stopOnEntry": true,
   "trace": "Off",
-  "allStopMode": true,
+  "noSingleThreadControl": true,
   "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```

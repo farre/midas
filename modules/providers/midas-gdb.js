@@ -21,8 +21,14 @@ const initializer = async (config) => {
   if (!config.hasOwnProperty("trace")) {
     config.trace = "off";
   }
-  if (!config.hasOwnProperty("allStopMode")) {
-    config.allStopMode = true;
+  // allStopMode is legacy name from gdb.
+  if(config.hasOwnProperty("allStopMode")) {
+    vscode.window.showWarningMessage("allStopMode is a deprecated flag. Use noSingleThreadControl instead");
+    config.noSingleThreadControl = config.allStopMode;
+  }
+
+  if (!config.hasOwnProperty("noSingleThreadControl") && config.noSingleThreadControl == undefined) {
+    config.noSingleThreadControl = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
 
