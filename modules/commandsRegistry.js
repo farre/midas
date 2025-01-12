@@ -83,8 +83,7 @@ function getVSCodeCommands() {
 
       const map = getAPI().GetDebugSessions();
       for (const v of map.values()) {
-        const managesItem = await v.ManagesThread(uiElementId);
-        if (managesItem) {
+        if (v.CompareId(uiElementId) || await v.ManagesThread(uiElementId)) {
           return v.PauseAll();
         }
       }
