@@ -19,8 +19,6 @@
   "activationEvents": [
     "onStartupFinished",
     "onDebug",
-    "onCommand:midas.issue-report",
-    "onCommand:midas.get-rr",
     "onFileSystem:midas-notes"
   ],
   "main": "./extension.js",
