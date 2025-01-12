@@ -14,6 +14,14 @@ const CustomRequests = {
   ClearCheckpoints: "clear-checkpoints",
 };
 
+// Custom requests that doesn't reach the backend, whether it is gdb or mdb
+// This is used for VSCode UI purposes, since there seems to be process isolation.
+// Someone thought it was a better idea to have it act like a browser instead of an editor.
+const CustomRequestsUI = {
+  HasThread: "HasThreadId",
+  OnSelectedThread: "OnSelectedThread"
+};
+
 const ProvidedAdapterTypes = {
   RR: "midas-rr",
   Gdb: "midas-gdb",
@@ -27,7 +35,7 @@ const Regexes = {
 };
 
 const ContextKeys = {
-  AllStopModeSet: "midas.allStopModeSet",
+  NoSingleThreadControl: "midas.noSingleThreadControl",
   Running: "midas.Running",
   DebugType: "midas.debugType",
   RRSession: "midas.rrSession",
@@ -46,5 +54,6 @@ module.exports = {
   ProvidedAdapterTypes,
   Regexes,
   ContextKeys,
-  DebugLogging
+  DebugLogging,
+  CustomRequestsUI
 }

@@ -57,12 +57,41 @@ function getVSCodeCommands() {
     }
   });
 
-  let continueAll = registerCommand("midas.continueAll", () => {
-    vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll, {});
+  const continueAll = registerCommand("midas.continueAll", async (uiElementId) => {
+    if (uiElementId) {
+      if (uiElementId == vscode.debug.activeDebugSession.id) {
+        return vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll, {});
+      }
+
+      for (const session of getAPI().GetDebugSessions().values()) {
+        const hasThread = await session.ManagesThread(uiElementId);
+        if (hasThread) {
+          return session.ContinueAll();
+        }
+      }
+    } else {
+      vscode.debug.activeDebugSession.customRequest(CustomRequests.ContinueAll, {});
+    }
   });
 
-  let pauseAll = registerCommand("midas.pauseAll", () => {
-    vscode.debug.activeDebugSession.customRequest(CustomRequests.PauseAll);
+  const pauseAll = registerCommand("midas.pauseAll", async (uiElementId) => {
+    if (uiElementId) {
+      if (uiElementId == vscode.debug.activeDebugSession.id) {
+        vscode.debug.activeDebugSession.customRequest(CustomRequests.PauseAll);
+        return;
+      }
+
+      const map = getAPI().GetDebugSessions();
+      for (const v of map.values()) {
+        const managesItem = await v.ManagesThread(uiElementId);
+        if (managesItem) {
+          return v.PauseAll();
+        }
+      }
+    } else {
+      // request came via the debug toolbar which is the active session
+      vscode.debug.activeDebugSession.customRequest(CustomRequests.PauseAll);
+    }
   });
 
   let reverseFinish = registerCommand("midas.reverse-finish", () => {

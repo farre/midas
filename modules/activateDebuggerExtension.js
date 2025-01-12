@@ -19,7 +19,7 @@ const {
 } = require("./utils/utils");
 const fs = require("fs");
 const { debugLogging } = require("./buildMode");
-const { ProvidedAdapterTypes, DebugLogging } = require("./constants");
+const { ProvidedAdapterTypes, DebugLogging, CustomRequests, CustomRequestsUI } = require("./constants");
 const { execSync } = require("child_process");
 const { ManagedToolchain } = require("./toolchain");
 
@@ -167,6 +167,42 @@ class APIInit {
   }
 }
 
+// The objects of type vscode.DebugSession lives in a different process (seemingly, at least)
+// than the ones in the extension vscode.debugadapter.DebugSession. Only way of having some
+// fine tuned control of the UI is unfortunately via customRequests.
+class UIDebugSession {
+  /** @type { vscode.DebugSession } */
+  #session;
+  /** @param { vscode.DebugSession } session */
+  constructor(session) {
+    this.#session = session;
+  }
+
+  /** @returns { Thenable<boolean> } */
+  ManagesThread(id) {
+    return this.#session.customRequest(CustomRequestsUI.HasThread, { id: id }).then(res => res?.hasThread)
+  }
+
+  /** @returns { Thenable<void> } */
+  ContinueAll() {
+    return this.#session.customRequest(CustomRequests.ContinueAll, {})
+  }
+
+  /** @returns { Thenable<void> } */
+  PauseAll() {
+    return this.#session.customRequest(CustomRequests.PauseAll, {});
+  }
+
+  /** @returns { Thenable<boolean> } */
+  SelectedThreadInUI(id) {
+    return this.#session.customRequest(CustomRequests.OnSelectedThread, { id: id })
+  }
+
+  static SelectedThreadInUi(session, id) {
+    return session.customRequest(CustomRequests.OnSelectedThread, { id: id })
+  }
+}
+
 /**
  * Public "API" returned by activate function
  */
@@ -185,6 +221,9 @@ class MidasAPI extends APIInit {
 
   /** @type { Map<String, import("./utils/utils").Tool> } */
   #tools = new Map();
+
+  /** @type { Map<String, UIDebugSession> } */
+  #debugSessions = new Map();
 
   /** @param {import("vscode").ExtensionContext} ctx */
   constructor(ctx) {
@@ -426,6 +465,19 @@ class MidasAPI extends APIInit {
       vscode.window.showErrorMessage(`Failed to update: ${ex}`);
     }
   }
+
+  /** @return { Map<string, UIDebugSession> } */
+  GetDebugSessions() {
+    return this.#debugSessions;
+  }
+
+  AddDebugSession(session) {
+    this.#debugSessions.set(session.id, new UIDebugSession(session));
+  }
+
+  RemoveDebugSession(session) {
+    this.#debugSessions.delete(session.id);
+  }
 }
 
 /**
@@ -486,6 +538,7 @@ function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, ch
   }
 }
 
+/** @returns { MidasAPI } */
 function InitializeGlobalApi(ctx) {
   if (global.API == null || global.API == undefined) {
     global.API = new MidasAPI(ctx);
@@ -518,7 +571,24 @@ async function activateExtension(context) {
     throw ex;
   }
 
-  InitializeGlobalApi(context);
+  let api = InitializeGlobalApi(context);
+  global.API.DebugSessionMap = new Map();
+
+  vscode.debug.onDidStartDebugSession((session) => {
+    api.AddDebugSession(session);
+  });
+
+  vscode.debug.onDidChangeActiveStackItem(uiElement => {
+    if(uiElement.threadId) {
+      UIDebugSession.SelectedThreadInUi(uiElement.session, uiElement.threadId);
+    }
+  });
+
+  vscode.debug.onDidTerminateDebugSession(session => {
+    api.RemoveDebugSession(session);
+  });
+
+  return api;
 }
 
 function deactivateExtension() { }

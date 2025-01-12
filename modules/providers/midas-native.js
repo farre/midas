@@ -43,7 +43,7 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
         type: "rr",
         host: host,
         port: portNumber,
-        allstop: true,
+        noSingleThreadControl: true,
       };
     }
 
@@ -55,7 +55,7 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
         type: "gdbremote",
         host: host,
         port: portNumber,
-        allstop: true,
+        noSingleThreadControl: true,
       };
     }
 

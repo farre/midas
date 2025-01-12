@@ -95,7 +95,8 @@ class GDB extends GDBMixin(GDBBase) {
   #uninitializedThread = new Map();
 
   userRequestedInterrupt = false;
-  allStopMode;
+
+  noSingleThreadControl;
 
   // we push exception-info related data onto this, so that we can reach it from `exceptionInfoRequest` when needed.
   threadExceptionInfos = new Map();
@@ -141,7 +142,7 @@ class GDB extends GDBMixin(GDBBase) {
       await this.attachOnFork();
     }
 
-    this.registerAsAllStopMode();
+    this.setNoSingleThreadControl();
     await this.setup();
     if (this.config.externalConsole) {
       this.#target.registerTerminal(this.#target.terminal, () => {
@@ -164,8 +165,8 @@ class GDB extends GDBMixin(GDBBase) {
 
   async attach_start() {
     trace = this.#target.buildSettings.trace;
-    this.allStopMode = true;
-    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);
+    this.noSingleThreadControl = true;
+    vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, this.noSingleThreadControl);
     await this.init();
     const printOptions = [printOption(PrintOptions.HideStaticMembers), printOption(PrintOptions.PrettyStruct)];
     await this.setPrintOptions(printOptions);
@@ -174,11 +175,11 @@ class GDB extends GDBMixin(GDBBase) {
   }
 
   /**
-   * @param {{program: string, stopOnEntry: boolean, allStopMode: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args
+   * @param {{program: string, stopOnEntry: boolean, noSingleThreadControl: boolean, externalConsole: {path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit: boolean} | null }} args
    * @param { import("./spawn").SpawnConfig } config
    */
   async start(args, config) {
-    const { program, stopOnEntry, allStopMode, externalConsole } = args;
+    const { program, stopOnEntry, noSingleThreadControl, externalConsole } = args;
     if (externalConsole != null) {
       const { path, closeTerminalOnEndOfSession, endSessionOnTerminalExit } = externalConsole;
       try {
@@ -200,10 +201,10 @@ class GDB extends GDBMixin(GDBBase) {
 
     this.#program = path.basename(program);
     trace = this.#target.buildSettings.trace;
-    this.allStopMode = allStopMode;
-    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, this.allStopMode);
+    this.noSingleThreadControl = noSingleThreadControl;
+    vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, this.noSingleThreadControl);
     await this.init();
-    if (!allStopMode) {
+    if (!noSingleThreadControl) {
       await this.enableAsync();
     }
 
@@ -278,7 +279,7 @@ class GDB extends GDBMixin(GDBBase) {
   //  if continue of all is desired, call continueAll() instead
   async continue(threadId, reverse = false) {
     if (!reverse) {
-      if (threadId && !this.allStopMode) {
+      if (threadId && !this.noSingleThreadControl) {
         await this.proceed(this.#threads.get(threadId));
       } else {
         await this.continueAll();
@@ -985,7 +986,7 @@ class GDB extends GDBMixin(GDBBase) {
     let stopEvent = new StoppedEvent("breakpoint", THREADID);
     const body = {
       reason: stopEvent.body.reason,
-      allThreadsStopped: this.allStopMode,
+      allThreadsStopped: this.noSingleThreadControl,
       threadId: THREADID,
     };
     stopEvent.body = body;
@@ -1007,10 +1008,10 @@ class GDB extends GDBMixin(GDBBase) {
     this.sendEvent(stopEvent);
   }
 
-  // tells the frontend that we're all stop mode, so we can read this value and disable non-stop UI elements for instance
-  registerAsAllStopMode() {
-    this.allStopMode = true;
-    vscode.commands.executeCommand("setContext", ContextKeys.AllStopModeSet, true);
+  // Set that this debug session can not control individual threads. It either resumes or stops all.
+  setNoSingleThreadControl() {
+    this.noSingleThreadControl = true;
+    vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, true);
   }
 
   /**

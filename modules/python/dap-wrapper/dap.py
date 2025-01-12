@@ -113,13 +113,13 @@ class Session:
 
     def start_tracee(self):
         global singleThreadControl
-        allStop = (
+        noSingleThreadControl = (
             True
-            if self.sessionArgs.get("allStopMode") is None
-            else self.sessionArgs.get("allStopMode")
+            if self.sessionArgs.get("noSingleThreadControl") is None
+            else self.sessionArgs.get("noSingleThreadControl")
         )
         if self.sessionArgs["type"] == "launch":
-            if not allStop:
+            if not noSingleThreadControl:
                 singleThreadControl = True
                 gdb.execute("set non-stop on")
             if self.sessionArgs["stopOnEntry"]:
@@ -628,7 +628,7 @@ def launch(args):
             "program": args["program"],
             "args": args.get("args") or [],
             "stopOnEntry": args.get("stopOnEntry"),
-            "allStopMode": args.get("allStopMode"),
+            "noSingleThreadControl": args.get("noSingleThreadControl"),
             "setupCommands": args.get("setupCommands"),
         }
     )
@@ -657,7 +657,7 @@ def attach(args):
             {
                 "type": "attach",
                 "command": cmd,
-                "allStopMode": args.get("allStopMode"),
+                "noSingleThreadControl": args.get("noSingleThreadControl"),
                 "setupCommands": args.get("setupCommands"),
             }
         )
@@ -677,10 +677,30 @@ def next(args):
 @request("pause", Args(["threadId"]))
 def pause(args):
     global singleThreadControl
-    cmd = "interrupt -a" if singleThreadControl else "interrupt"
+    threadId = args.get("threadId")
+    cmd = None
+    if threadId is not None:
+        try:
+            gdb.select_thread(threadId)
+        except:
+            pass
+        cmd = "interrupt"
+    else:
+        cmd = "interrupt -a"
+
     gdb.execute(cmd)
     return {}
 
+@request("pauseAll", ArbitraryOptionalArgs())
+def pauseAll(args):
+    gdb.execute("interrupt -a")
+    return { "allThreadsStopped": true }
+
+
+@request("selectThread", ArbitraryOptionalArgs(["threadId"]))
+def selectThread(args):
+    select_thread(args["threadId"])
+    return {}
 
 @request("readMemory", Args(["memoryReference", "count"], ["offset"]))
 def read_memory(args):
