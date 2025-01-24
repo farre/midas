@@ -184,8 +184,6 @@ class RRDebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
-    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, true);
     if (config.remoteTargetConfig != null) {
       let dbg_session = new MidasDebugSession(true, false, fs, new RemoteRRSpawnConfig(config), null, this.#cp_ui);
       return new vscode.DebugAdapterInlineImplementation(dbg_session);

@@ -1,9 +1,9 @@
 const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
-const { commands, window, Uri } = require("vscode");
+const { window, Uri } = require("vscode");
 const vs = require("vscode")
 const { toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
-const { ContextKeys, CustomRequests, ProvidedAdapterTypes, CustomRequestsUI } = require("../constants");
+const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = require("../constants");
 
 /**
  *
@@ -70,7 +70,7 @@ class MidasSessionBase extends DebugSession {
     this.dbg = new DebuggerProcessConstructor(spawnConfig);
     this.#terminal = terminal;
     this.notifiedOfTermination = false;
-    this.rootSessionCleanup = cleanUp
+    this.rootSessionCleanup = cleanUp;
 
     const { response, events } = callbacks ?? { response: null, events: null };
 
@@ -125,8 +125,8 @@ class MidasSessionBase extends DebugSession {
                   name: "forked",
                   request: "attach",
                   childConfiguration: {
-                    path: body.configuration.path
-                  }
+                    path: body.configuration.path,
+                  },
                 },
                 vs.debug.activeDebugSession
               )
@@ -145,7 +145,6 @@ class MidasSessionBase extends DebugSession {
       this.sendEvent(new OutputEvent(event.body, "console", event));
     });
 
-
     if (this.hasProcessHandle()) {
       for (const evt of ["close", "disconnect", "error", "exit"]) {
         this.dbg.process.on(evt, () => {
@@ -158,6 +157,22 @@ class MidasSessionBase extends DebugSession {
     }
   }
 
+  /**
+   * Configures the user interface based on the provided settings.
+   *
+   * @param { Object } configUI - The configuration object for the user interface.
+   * @param { "midas-gdb" | "midas-rr" | "midas-native" } configUI.sessionType - One of the midas sessions
+   * @param { boolean } configUI.singleThreadControl - Configure UI for single thread control
+   * @param { boolean | undefined } [configUI.nativeMode] - Configure the UI for native debugger mode
+   * @param { boolean | undefined } [configUI.rrSession] - Make RR UI widgets available
+   */
+  configureUserInterfaceFor({ sessionType, singleThreadControl, nativeMode, rrSession }) {
+    vs.commands.executeCommand("setContext", ContextKeys.DebugType, sessionType);
+    vs.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, !singleThreadControl);
+    vs.commands.executeCommand("setContext", ContextKeys.NativeMode, nativeMode ?? false);
+    vs.commands.executeCommand("setContext", ContextKeys.RRSession, rrSession ?? false);
+  }
+
   // If this is a child session, it holds no handle to a process. It's just a connection to a socket
   hasProcessHandle() {
     return this.dbg.process != null;
@@ -168,7 +183,7 @@ class MidasSessionBase extends DebugSession {
     super.dispose();
     if (this.rootSessionCleanup) {
       // Root Session Cleanup
-      this.rootSessionCleanup.emit("shutdown")
+      this.rootSessionCleanup.emit("shutdown");
     }
   }
 
@@ -270,26 +285,24 @@ class MidasSessionBase extends DebugSession {
 
     if (!this.#printer) {
       this.dbg.sendRequest(request, args);
-      return
+      return;
     }
 
     // If no pretty printer is found this initiates the variables request as usual.
-    this.#printer.print(request, args).then(
-      async (response) => {
-        try {
-          if (this.#printer) {
-            for (const variable of response.body.variables) {
-              // If it's already pretty this does nothing.
-              await this.#printer.prettify(variable);
-            }
+    this.#printer.print(request, args).then(async (response) => {
+      try {
+        if (this.#printer) {
+          for (const variable of response.body.variables) {
+            // If it's already pretty this does nothing.
+            await this.#printer.prettify(variable);
           }
-        } catch (e) {
-          console.log(e.message)
         }
-
-        this.sendResponse(response);
+      } catch (e) {
+        console.log(e.message);
       }
-    );
+
+      this.sendResponse(response);
+    });
   }
 
   checkForHexFormatting(variablesReference, variables) {
@@ -340,7 +353,21 @@ class MidasSessionBase extends DebugSession {
 
   // eslint-disable-next-line no-unused-vars
   disconnectRequest(response, args, request) {
-    this.dbg.sendRequest(request, args);
+    try {
+      this.dbg.sendRequest(request, args);
+    } catch (ex) {
+      const msg = {
+        id: 100,
+        format: `Failed to send disconnect: ${ex}`,
+        variables: null,
+        sendTelemetry: false,
+        showUser: true,
+        url: null,
+        urlLabel: null,
+      };
+      this.sendErrorResponse(response, msg);
+      this.sendEvent(new TerminatedEvent());
+    }
   }
 
   terminateRequest(response, args, request) {
@@ -458,20 +485,20 @@ class MidasSessionBase extends DebugSession {
     this.dbg.sendRequest(request, args);
   }
 
-  PauseAll(request)  {
+  PauseAll(request) {
     request.command = "customRequest";
     request.arguments = {
       command: CustomRequests.PauseAll,
-      arguments: {}
+      arguments: {},
     };
-    this.dbg.sendRequest(request)
+    this.dbg.sendRequest(request);
   }
 
   ContinueAll(request) {
     request.command = "customRequest";
     request.arguments = {
       command: CustomRequests.ContinueAll,
-      arguments: {}
+      arguments: {},
     };
     this.dbg.sendRequest(request);
   }
@@ -519,7 +546,7 @@ class MidasSessionBase extends DebugSession {
 
       // UI Related requests. Dumbest in the world that this is the approach vscode has taken.
       case CustomRequestsUI.HasThread: {
-        const hasThread = this.ContainsThreadId(args.id)
+        const hasThread = this.ContainsThreadId(args.id);
         response.body = { hasThread: hasThread };
         this.sendResponse(response);
         break;
@@ -600,26 +627,25 @@ class MidasSessionBase extends DebugSession {
   }
 
   ContainsThreadId(threadId) {
-    if(this.threadCache == null) {
+    if (this.threadCache == null) {
       return false;
     }
     return this.threadCache.has(threadId);
   }
 
   UpdateThreadIdCache({ threads }) {
-    if(this.threadCache == null) {
+    if (this.threadCache == null) {
       this.threadCache = new Set();
     }
     this.threadCache.clear();
     try {
-      for(const thread of threads) {
+      for (const thread of threads) {
         this.threadCache.add(thread.id);
       }
-    } catch(ex) {
+    } catch (ex) {
       console.log(`not iterable?`);
     }
   }
-
 }
 
 module.exports = {

@@ -1,15 +1,9 @@
 # MIDAS - Debug Adapter Extension for VSCode
 
-## Release 0.23.1
-
-### Fixes
-
-- Make validation of config happen after substition of variables like ${workspaceFolder} so that _any_ configuration items can use the short-hands/built ins
-- Refactors and cleaning up the inherent messiness of supporting what essentially is 3 backends; midas-native (mdb, future hopefully mdb+rr), midas-gdb (gdb) and midas-rr (gdb+rr).
-- Added program args as a configuration item for launched program when `use-dap` is true, which seems to have been missing
+## Release 0.24.0
 
 ### Features
-
+- Added `ignoreStandardLibrary` to launch and attach configurations. It will attempt at ignoring most c++ standard library files while stepping. It's a best approximation approach. Defaults to `true`.
 - Extended support for the debugger backend "midas" which henceforth will be known as "midas-native"
 - Added context menu support for call stack, to resume/pause all threads
 - Make use of onActive item events so that the debugger backends can know what threads the user is inspecting in the UI
@@ -19,18 +13,19 @@
 - Deprecated allStopMode in launch.json; use noSingleThreadControl instead. It's a better name and will
 be also what this feature eventually be called by MDB.
 - ${workspaceFolder} and built-ins in launch.json, should now work for all sorts of config field values
+- Added new pretty printer features.
+- Support for using the canonical experimental debugger `mdb`
 
-## Release 0.23.0
 
 ### Fixes
 
+- Make validation of config happen after substition of variables like ${workspaceFolder} so that _any_ configuration items can use the short-hands/built ins
+- Refactors and cleaning up the inherent messiness of supporting what essentially is 3 backends; midas-native (mdb, future hopefully mdb+rr), midas-gdb (gdb) and midas-rr (gdb+rr).
+- Added program args as a configuration item for launched program when `use-dap` is true, which seems to have been missing
 - Build RR related bugs fixed
 - Pretty printer related issues fixed
+- Fixes to UI to behave more consistent.
 
-### Features
-
-- Added new pretty printer features.
-- Support for using the canonical experimental debugger `mdb`
 
 ## Release 0.22.0
 

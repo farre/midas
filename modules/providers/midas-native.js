@@ -130,7 +130,6 @@ class MdbDebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     if (MdbDebugAdapterFactory.RootSession == null) {
       const config = session.configuration;
-      vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
       let cleanUp = new EventEmitter();
       cleanUp.on("shutdown", () => {
         MdbDebugAdapterFactory.RootSession = null;

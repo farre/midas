@@ -20,6 +20,7 @@ which consists of connecting to a remote target machine to debug there.
 - [Attach session](#attach-session)
 - [Remote debug sessions](#remote-debug-sessions)
 - [Setup commands](#setup-commands)
+- [Midas Native](#midas-native)
 
 
 ## NEWS
@@ -114,7 +115,9 @@ The quickest way to configure is to open up the `launch.json` file and hit the a
   "gdbPath": "gdb", // if GDB is on $PATH, this field is not required
   "stopOnEntry": true,
   "trace": "Off",
-  "noSingleThreadControl": true
+  // allStopMode has been deprecated in favor of this field. they are equivalent allStopMode:true == noSingleThreadControl:true
+  "noSingleThreadControl": true,
+  "ignoreStandardLibrary": true, // when stepping, try not to step into stdlib code
 }
 ```
 
@@ -273,6 +276,10 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
   "setupCommands": ["set print object on", "set auto-load safe-path /"]
 }
 ```
+
+[back to top](#contents)
+## Midas Native
+There's a mode for a 3rd debugger which is being natively developed to work in Midas extension. As the debugger is in an alpha version, it won't be provided here, so it will have to be built manually from sources from [here](https://github.com/theIDinside/mdebug).
 
 [back to top](#contents)
 ## Usage

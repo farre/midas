@@ -64,8 +64,7 @@ function getVSCodeCommands() {
       }
 
       for (const session of getAPI().GetDebugSessions().values()) {
-        const hasThread = await session.ManagesThread(uiElementId);
-        if (hasThread) {
+        if (session.CompareId(uiElementId) || await session.ManagesThread(uiElementId)) {
           return session.ContinueAll();
         }
       }

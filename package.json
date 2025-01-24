@@ -201,11 +201,13 @@
       "debug/callstack/context": [
         {
           "command": "midas.continueAll",
-          "group": "midas"
+          "group": "midas",
+          "when": "(midas.noSingleThreadControl == false && midas.debugType != midas-rr)"
         },
         {
           "command": "midas.pauseAll",
-          "group": "midas"
+          "group": "midas",
+          "when": "(midas.noSingleThreadControl == false && midas.debugType != midas-rr)"
         }
       ],
       "debug/variables/context": [
@@ -228,6 +230,11 @@
         "configurationAttributes": {
           "launch": {
             "properties": {
+              "ignoreStandardLibrary": {
+                "type": "boolean",
+                "description": "Ignore stepping through standard library code (best approximation)",
+                "default": true
+              },
               "prettyPrinterPath": {
                 "type": "string",
                 "description": "Paths from where to import pretty printers",
@@ -339,6 +346,11 @@
           },
           "attach": {
             "properties": {
+              "ignoreStandardLibrary": {
+                "type": "boolean",
+                "description": "Ignore stepping through standard library code (best approximation)",
+                "default": true
+              },
               "use-dap": {
                 "type": "boolean",
                 "description": "Use the new Midas custom DAP implementation in GDB",
@@ -430,7 +442,8 @@
             "trace": "Off",
             "noSingleThreadControl": true,
             "cwd": "${workspaceFolder}",
-            "setupCommands": []
+            "setupCommands": [],
+            "ignoreStandardLibrary": true
           },
           {
             "type": "midas-gdb",
@@ -440,7 +453,8 @@
             "pid": "${command:getPid}",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
-            "setupCommands": []
+            "setupCommands": [],
+            "ignoreStandardLibrary": true
           }
         ],
         "configurationSnippets": [
@@ -460,7 +474,8 @@
               "gdbPath": "${4:gdb}",
               "noSingleThreadControl": true,
               "setupCommands": [],
-              "attachOnFork": false
+              "attachOnFork": false,
+              "ignoreStandardLibrary": true
             }
           },
           {
@@ -477,7 +492,8 @@
               "pid": "^\"\\${command:getPid}\"",
               "gdbPath": "${5:gdb}",
               "setupCommands": [],
-              "attachOnFork": false
+              "attachOnFork": false,
+              "ignoreStandardLibrary": true
             }
           },
           {
@@ -492,6 +508,7 @@
               "trace": "${1:Off}",
               "setupCommands": [],
               "attachOnFork": false,
+              "ignoreStandardLibrary": true,
               "target": {
                 "type": "remote",
                 "parameter": "127.0.0.1:12345"
@@ -515,6 +532,11 @@
         "configurationAttributes": {
           "attach": {
             "properties": {
+              "ignoreStandardLibrary": {
+                "type": "boolean",
+                "description": "Ignore stepping through standard library code (best approximation)",
+                "default": true
+              },
               "prettyPrinterPath": {
                 "type": "string",
                 "description": "Paths from where to import pretty printers",
@@ -644,7 +666,8 @@
               "set sysroot /",
               "set debuginfod enabled off",
               "set auto-load safe-path /"
-            ]
+            ],
+            "ignoreStandardLibrary": true
           }
         ],
         "configurationSnippets": [
@@ -665,7 +688,8 @@
                 "set sysroot /",
                 "set debuginfod enabled off",
                 "set auto-load safe-path /"
-              ]
+              ],
+              "ignoreStandardLibrary": true
             }
           },
           {
@@ -692,7 +716,8 @@
                   "local": null,
                   "remote": null
                 }
-              }
+              },
+              "ignoreStandardLibrary": true
             }
           }
         ]
@@ -707,6 +732,11 @@
         "configurationAttributes": {
           "launch": {
             "properties": {
+              "ignoreStandardLibrary": {
+                "type": "boolean",
+                "description": "Ignore stepping through standard library code (best approximation)",
+                "default": true
+              },
               "program": {
                 "type": "string",
                 "description": "Binary to debug. Only required for 'gdb' mode."
@@ -736,6 +766,21 @@
                 "type": "string",
                 "description": "Path to the MDB executable",
                 "default": "mdb"
+              },
+              "breakpointBehavior": {
+                "type": [
+                  "string"
+                ],
+                "description": "Breakpoint hit-stop behavior",
+                "enum": [
+                  "Stop all threads",
+                  "Stop single thread"
+                ],
+                "default": "Stop single thread",
+                "enumDescriptions": [
+                  "When a breakpoint is hit, stop all threads in the process",
+                  "When a breakpoint is hit, only have the thread that hit the breakpoint stop"
+                ]
               },
               "debug": {
                 "type": "object",
@@ -770,6 +815,11 @@
               "targetVariant"
             ],
             "properties": {
+              "ignoreStandardLibrary": {
+                "type": "boolean",
+                "description": "Ignore stepping through standard library code (best approximation)",
+                "default": true
+              },
               "dbgArgs": {
                 "type": "array",
                 "items": {
@@ -874,7 +924,8 @@
             "stopOnEntry": true,
             "args": [],
             "dbgArgs": [],
-            "mdbPath": "mdb"
+            "mdbPath": "mdb",
+            "ignoreStandardLibrary": true
           }
         ],
         "configurationSnippets": [
@@ -893,7 +944,8 @@
               "debug": {
                 "recordSession": true
               },
-              "mdbPath": "/path/to/mdb"
+              "mdbPath": "/path/to/mdb",
+              "ignoreStandardLibrary": true
             }
           }
         ]

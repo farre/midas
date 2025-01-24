@@ -19,7 +19,8 @@ const CustomRequests = {
 // Someone thought it was a better idea to have it act like a browser instead of an editor.
 const CustomRequestsUI = {
   HasThread: "HasThreadId",
-  OnSelectedThread: "OnSelectedThread"
+  OnSelectedThread: "OnSelectedThread",
+  SetThreadStoppingBreakpoint: "NonProcessHaltingBreakpoint"
 };
 
 const ProvidedAdapterTypes = {
@@ -42,6 +43,14 @@ const ContextKeys = {
   NativeMode: "midas.native"
 };
 
+function ContextKeyName(contextKey) {
+  if(!contextKey.includes(".")) {
+    throw new Error(`Object is not a context key!`);
+  }
+  const [, key] = contextKey.split('.');
+  return key;
+}
+
 const DebugLogging = {
   Off: "off",
   GdbEventsOnly: "gdb events",
@@ -55,5 +64,6 @@ module.exports = {
   Regexes,
   ContextKeys,
   DebugLogging,
-  CustomRequestsUI
+  CustomRequestsUI,
+  ContextKeyName
 }

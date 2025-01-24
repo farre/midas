@@ -5,8 +5,6 @@ const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
 const { getAPI, } = require("../utils/utils");
 const { spawn } = require("child_process");
-const vs = require("vscode");
-const { ContextKeys } = require("../constants");
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -35,7 +33,7 @@ class MdbSocket extends MidasCommunicationChannel {
 
 class MdbProcess extends DebuggerProcessBase {
   constructor(options) {
-    super(options)
+    super(options);
     if (this.options?.debug?.recordSession) {
       const { path: rr } = getAPI().getToolchainConfiguration().rr;
       // Read MDB "documentation" (the source code): the -r CLI parameter, configures the wait system to use signals
@@ -57,7 +55,7 @@ class MdbProcess extends DebuggerProcessBase {
   }
 
   spawnArgs() {
-    return this.options
+    return this.options;
   }
 
   async initialize() {
@@ -87,34 +85,35 @@ class MdbChildConnection extends DebuggerProcessBase {
 class MdbSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, checkpointsUI, cleanUp) {
     super(MdbProcess, spawnConfig, terminal, checkpointsUI, null, cleanUp);
-    vs.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, false);
+    super.configureUserInterfaceFor({
+      sessionType: "midas-native",
+      singleThreadControl: true,
+      nativeMode: true,
+      rrSession: false,
+    });
   }
 
   async initializeRequest(response, args) {
     await this.dbg.initialize();
     args["RRSession"] = this.spawnConfig?.RRSession ?? false;
     super.initializeRequest(response, args);
-    vs.commands.executeCommand("setContext", ContextKeys.NativeMode, true);
   }
 
   attachRequest(response, args, request) {
     const attachArgs = args.attachArguments;
-    if (attachArgs.type == "rr") {
-      vs.commands.executeCommand("setContext", ContextKeys.RRSession, true);
-    }
     this.dbg.sendRequest(request, attachArgs);
   }
 }
 
 class MdbChildSession extends MidasSessionBase {
   constructor(spawnConfig, terminal, cpui) {
-    super(MdbChildConnection, spawnConfig, terminal, cpui, null, null)
+    super(MdbChildConnection, spawnConfig, terminal, cpui, null, null);
   }
 
   initializeRequest(response, args) {
     this.dbg.initialize().then(() => {
       this.dbg.sendRequest({ seq: response.request_seq, command: response.command }, args);
-    })
+    });
   }
 
   attachRequest(response, args, request) {
@@ -125,5 +124,5 @@ class MdbChildSession extends MidasSessionBase {
 
 module.exports = {
   MdbSession,
-  MdbChildSession
+  MdbChildSession,
 };

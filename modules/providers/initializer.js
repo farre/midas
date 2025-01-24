@@ -28,6 +28,9 @@ class ConfigurationProviderInitializer {
     if (isNothing(config) || isNothing(config.type)) {
       throw { type: InitExceptionTypes.NullConfig, message: "No launch.json found" };
     }
+    if (config.ignoreStandardLibrary == null) {
+      config.ignoreStandardLibrary = true;
+    }
     await initializer(config);
   }
 }

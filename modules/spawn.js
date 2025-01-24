@@ -41,6 +41,9 @@ class SpawnConfig {
   /**@type {{path: string, closeTerminalOnEndOfSession: boolean, endSessionOnTerminalExit?: boolean }} */
   externalConsole;
 
+  /** @type {boolean} */
+  ignoreStandardLibrary;
+
   /**
    * @param {*} launchJson - The settings in launch.json
    */
@@ -56,6 +59,7 @@ class SpawnConfig {
     this.externalConsole = launchJson.externalConsole;
     this.trace = launchJson["trace"];
     this.prettyPrinterPath = launchJson.prettyPrinterPath;
+    this.ignoreStandardLibrary = launchJson["ignoreStandardLibrary"];
   }
 
   /**
@@ -65,7 +69,7 @@ class SpawnConfig {
   build(session) {
     const commandList = new CommandList("General Settings");
     commandList.addOption("-i", "mi3");
-    if(this.cwd != null) {
+    if (this.cwd != null) {
       commandList.addOption("--cd", this.cwd);
       commandList.addCommand(`set cwd ${this.cwd}`);
     }
@@ -112,6 +116,21 @@ class SpawnConfig {
    */
   // eslint-disable-next-line no-unused-vars
   async performGdbSetup(gdb) { }
+
+  /** @returns { Promise<string[]> } */
+  getCppStandardLibraryFileList() {
+    if (!this.ignoreStandardLibrary) {
+      return Promise.resolve([]);
+    }
+    return new Promise((resolve, reject) => {
+      require("fs").readFile(getExtensionPathOf("/modules/c++stdlib.ignore"), 'utf-8', (err, data) => {
+        if (err) {
+          reject(err);
+        }
+        resolve(data.split('\n').filter(line => line.length > 0))
+      });
+    })
+  }
 }
 
 class LaunchSpawnConfig extends SpawnConfig {
@@ -167,7 +186,7 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
     super(launchJson);
     const [address, port] = launchJson.target.parameter.split(":");
     this.target = launchJson.target;
-    if(!Number.isSafeInteger(parseInt(port))) {
+    if (!Number.isSafeInteger(parseInt(port))) {
       throw new Error(`Could not parse port number from ${port} (parsed from remote target setting: ${JSON.stringify(launchJson.remoteTarget)})`);
     }
     this.port = parseInt(port);
@@ -188,7 +207,7 @@ class RemoteLaunchSpawnConfig extends SpawnConfig {
 
   /** @param {import("./gdb").GDB} gdb */
   async performGdbSetup(gdb) {
-    if(this.program != null && this.program != undefined) {
+    if (this.program != null && this.program != undefined) {
       gdb.execCLI(`set remote exec-file ${this.program}`);
     }
   }
@@ -201,7 +220,7 @@ class RemoteAttachSpawnConfig extends SpawnConfig {
   constructor(launchJson) {
     super(launchJson);
     const [address, port] = launchJson.target.parameter.split(":");
-    if(!Number.isSafeInteger(parseInt(port))) {
+    if (!Number.isSafeInteger(parseInt(port))) {
       throw new Error(`Could not parse port number from ${port} (parsed from remote target setting: ${JSON.stringify(launchJson.remoteTarget)})`);
     }
     this.port = parseInt(port);
@@ -220,7 +239,7 @@ class RemoteAttachSpawnConfig extends SpawnConfig {
   get spawnType() { return "remote-attach"; }
 
   /** @param {import("./gdb").GDB} gdb */
-  async performGdbSetup(gdb) {}
+  async performGdbSetup(gdb) { }
 }
 
 class RRSpawnConfig extends SpawnConfig {
@@ -272,7 +291,7 @@ class RemoteRRSpawnConfig extends SpawnConfig {
     commandList.addImmediateCommand("set tcp connect-timeout 180");
     commandList.addImmediateCommand("set non-stop off");
     commandList.addCommand(`target extended-remote ${this.address}:${this.port}`);
-    if(this.substitutePath.remote != null && this.substitutePath.local != null) {
+    if (this.substitutePath.remote != null && this.substitutePath.local != null) {
       commandList.addCommand(`set substitute-path ${this.substitutePath.remote} ${this.substitutePath.local}`);
     }
     return [

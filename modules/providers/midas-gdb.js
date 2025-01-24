@@ -12,7 +12,6 @@ const {
 } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
-const { ContextKeys } = require("../constants");
 
 const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -112,7 +111,6 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
         config.pid = pid;
       }
     }
-    vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
     return config;
   }
 }
@@ -124,7 +122,6 @@ class DebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    vscode.commands.executeCommand("setContext", ContextKeys.DebugType, config.type);
     if (config["use-dap"]) {
       let terminal = null;
       const midas_session = new GdbDAPSession(this.spawnConfig(config), terminal, null);
