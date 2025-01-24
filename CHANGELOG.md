@@ -25,7 +25,7 @@ be also what this feature eventually be called by MDB.
 - Build RR related bugs fixed
 - Pretty printer related issues fixed
 - Fixes to UI to behave more consistent.
-
+- Refactor of tool management, so that it can be extended to additional software like GDB as well (in the future) in-house debugger, caused Midas to ask every time for updates of tools even when having updated to last version. Fixed.
 
 ## Release 0.22.0
 

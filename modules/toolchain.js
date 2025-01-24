@@ -830,21 +830,22 @@ class ManagedTool {
     const gitDate = new Date(date);
 
     if (!(configDate < gitDate && (await this.checkUserConfiguredUpdateFrequency()))) {
-      return;
+      return false;
     }
     let choice =
       (await vs.window.showInformationMessage(`${this.name} have updates. Update now?`, "yes", "no")) ?? "no";
     if (choice == "no") {
-      return;
+      return false;
     }
 
     let backup = false;
     let cancelled = false;
+    let success = false;
     const removeDirectory = (dir) => fs.rmSync(dir, { recursive: true });
     try {
       fs.renameSync(this.#root_dir, `${this.#root_dir}-old`);
       backup = true;
-      await vs.window.withProgress(
+      success = await vs.window.withProgress(
         {
           location: vs.ProgressLocation.Notification,
           cancellable: true,
@@ -856,7 +857,7 @@ class ManagedTool {
             emitter.emit("cancel");
             cancelled = true;
           });
-          await this.install((report) => {
+          return await this.install((report) => {
             reporter.report(report);
           }, emitter);
         }
@@ -881,6 +882,7 @@ class ManagedTool {
       fs.renameSync(`${this.#root_dir}-old`, `${this.#root_dir}`);
       cancelled = false;
     }
+    return success;
   }
 
   asTool() {
