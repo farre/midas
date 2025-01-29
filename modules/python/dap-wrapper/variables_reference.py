@@ -440,6 +440,10 @@ class RegistersReference(VariablesReference):
                 ref = create_eager_var_ref(reg.name, value, None)
                 res.append(ref.ui_data(format))
             else:
-                res.append({ "name": reg.name, "value": f"{value}", "variablesReference": 0 })
+                if value.type.code == gdb.TYPE_CODE_INT and format is not None and format["hex"]:
+                    formattedValue = value.format_string(format="x")
+                else:
+                    formattedValue = f"{value}"
+                res.append({ "name": reg.name, "value": formattedValue, "variablesReference": 0 })
 
         return res
