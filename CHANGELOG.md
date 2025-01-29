@@ -26,6 +26,7 @@ be also what this feature eventually be called by MDB.
 - Pretty printer related issues fixed
 - Fixes to UI to behave more consistent.
 - Refactor of tool management, so that it can be extended to additional software like GDB as well (in the future) in-house debugger, caused Midas to ask every time for updates of tools even when having updated to last version. Fixed.
+- Fixed hex-formatting bug for register values with the sign bit set.
 
 ## Release 0.22.0
 
