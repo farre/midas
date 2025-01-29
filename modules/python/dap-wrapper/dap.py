@@ -490,24 +490,27 @@ def offset_disassemble(arch, end_pc, offset, count):
     ),
 )
 def disassemble(args):
-    ins_offset = safeInt(args.get("instructionOffset"))
-    addr = int(args["memoryReference"], 16) + safeInt(args.get("offset"))
-    count = safeInt(args["instructionCount"])
-    resolve = bool(args.get("resolveSymbols"))
-    arch = gdb.selected_inferior().architecture()
+    pc = int(args["memoryReference"], 16) + safeInt(args.get("offset"))
+    inf = gdb.selected_inferior()
+    try:
+        arch = gdb.selected_frame().architecture()
+    except gdb.error:
+        arch = inf.architecture()
     result = []
-    if ins_offset < 0:
-        disassembly = offset_disassemble(arch, addr, abs(ins_offset), count)
-        ins_offset = 0
-        count = count - len(result)
-        result = [
-            {"address": hex(i["addr"]), "instruction": i["asm"]} for i in disassembly
-        ]
-
-    for i in arch.disassemble(addr, count=count + ins_offset)[ins_offset:]:
-        result.append({"address": hex(i["addr"]), "instruction": i["asm"]})
-
-    return {"instructions": result}
+    instructionCount = safeInt(args["instructionCount"])
+    instructionOffset = safeInt(args.get("instructionOffset"))
+    requestedCount = instructionOffset + instructionCount
+    # For now we ignore when instructionOffset < 0, arch.disassemble will fail
+    # and we return nothing. It's to error prone currently, to concatenate outputs
+    for elt in arch.disassemble(pc, count=requestedCount)[instructionOffset:]:
+        insn = {
+            "address": hex(elt["addr"]),
+            "instruction": elt["asm"]
+        }
+        result.append(insn)
+    return {
+        "instructions": result,
+    }
 
 
 @request("disconnect", Args([], ["terminateDebuggee", "restart", "suspendDebuggee"]))
