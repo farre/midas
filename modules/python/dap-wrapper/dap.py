@@ -934,8 +934,8 @@ def set_ins_bps(args):
         if bp_key in previous_bp_state:
             breakpoints["address"][bp_key] = previous_bp_state[bp_key]
         else:
-            address = int(bp_req.get("instructionReference"), 16)
-            bp = gdb.Breakpoint(spec=f"*0x{address}")
+            address = int(bp_req.get("instructionReference"), 16) + safeInt(bp_req.get("offset"))
+            bp = gdb.Breakpoint(spec=f"*{address}")
             bp.condition = bp_req.get("condition")
             # if bp_req.get("hitCondition") is not None:
             # bp.ignore_count = int(gdb.parse_and_eval(bp_req.get("hitCondition"), global_context=True))
