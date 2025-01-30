@@ -19,6 +19,7 @@ which consists of connecting to a remote target machine to debug there.
 - [Attach session](#attach-session)
 - [Remote debug sessions](#remote-debug-sessions)
 - [Setup commands](#setup-commands)
+- [Contribute](#contribute)
 - [Midas Native](#midas-native)
 
 ## NEWS
@@ -242,6 +243,13 @@ To use Midas to debug an application running on a remote target, the user must h
 
 If the remote session is an RR replay, just replace `midas-gdb` with `midas-rr` in the `type` field launch.json.
 
+[back to top](#contents)
+
+## Contribute
+
+To contribute, pop in to the matrix channel, say Hi, tell us why you want X and send a PR for it. Or send a PR with detailed information about why/what/how.
+
+Before requesting a PR, run the command `npm run format` on the commits, that was introduced as a dev dependency for versions >=0.24.
 [back to top](#contents)
 
 ## Setup commands

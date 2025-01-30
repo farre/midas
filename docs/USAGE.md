@@ -26,6 +26,8 @@ a debugging session and click "Toggle hex formatting":
 
 ![Toggle hex](./toggle_hex.gif)
 
+In the "watch" window you can toggle hexadecimal formatting for values by just placing `,x` behind the variable name, so for foo: `foo,x`.
+
 ## Watch variables
 
 To add a contiguous set of variables to to watch (for instance they're behind some pointer or array), the syntax is the same as in GDB's command line: `*foo@10` (dereference foo and take 10 elements).
