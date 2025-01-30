@@ -27,7 +27,8 @@ be also what this feature eventually be called by MDB.
 - Fixes to UI to behave more consistent.
 - Refactor of tool management, so that it can be extended to additional software like GDB as well (in the future) in-house debugger, caused Midas to ask every time for updates of tools even when having updated to last version. Fixed.
 - Fixed hex-formatting bug for register values with the sign bit set.
-- Make disassemble only disassemble functions and don't allow for scroll-disassembling as this caused jank and bugs. New system not perfect, but does not produce invalid results
+- Greatly improved stability and reliability of disassembly outputs
+- Fixed bug in InstructionBreakpoint requests
 
 ## Release 0.22.0
 
