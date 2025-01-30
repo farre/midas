@@ -37,9 +37,7 @@ function getVSCodeCommands() {
     };
     const programs = config
       .get("configurations")
-      .filter(
-        (cfg) => isMidasConfig(cfg) && cfg.program !== undefined
-      )
+      .filter((cfg) => isMidasConfig(cfg) && cfg.program !== undefined)
       .map((cfg) => cfg.program.replace("${workspaceFolder}", vscode.workspace.workspaceFolders[0].uri.fsPath));
     if (programs.length >= 1) {
       let program = await vscode.window.showQuickPick(programs, {
@@ -51,7 +49,7 @@ function getVSCodeCommands() {
       spawnTerminalRunRecord(program);
     } else {
       vscode.window.showInformationMessage(
-        "rr Record command uses the program configuration property in launch.json but this was not set."
+        "rr Record command uses the program configuration property in launch.json but this was not set.",
       );
       return;
     }
@@ -64,7 +62,7 @@ function getVSCodeCommands() {
       }
 
       for (const session of getAPI().GetDebugSessions().values()) {
-        if (session.CompareId(uiElementId) || await session.ManagesThread(uiElementId)) {
+        if (session.CompareId(uiElementId) || (await session.ManagesThread(uiElementId))) {
           return session.ContinueAll();
         }
       }
@@ -82,7 +80,7 @@ function getVSCodeCommands() {
 
       const map = getAPI().GetDebugSessions();
       for (const v of map.values()) {
-        if (v.CompareId(uiElementId) || await v.ManagesThread(uiElementId)) {
+        if (v.CompareId(uiElementId) || (await v.ManagesThread(uiElementId))) {
           return v.PauseAll();
         }
       }
@@ -171,7 +169,7 @@ function getVSCodeCommands() {
     const tool = mgr.getTool(name);
     mgr.installDependencies(tool).then(async (wasNotCancelled) => {
       if (wasNotCancelled) {
-        await tool.beginInstallerUI()
+        await tool.beginInstallerUI();
       } else {
         vscode.window.showInformationMessage("Install cancelled.");
       }
@@ -219,7 +217,7 @@ function getVSCodeCommands() {
     showReleaseNotes_,
     toggleHexFormatting,
     runToEvent,
-    zenWorkaround
+    zenWorkaround,
   ];
 }
 

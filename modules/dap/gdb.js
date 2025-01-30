@@ -4,27 +4,23 @@ const { getExtensionPathOf } = require("../utils/sysutils");
 const { UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
-const { spawn } = require("child_process");
 const { CustomRequests } = require("../constants");
 
 class GdbProcess extends DebuggerProcessBase {
-
-  /** @type { import("child_process").ChildProcessWithoutNullStreams } */
-  #process = null;
   constructor(options) {
     super(options);
 
     try {
       const p = this.path();
       const args = this.spawnArgs();
-      this.#process = spawn(p, args);
+      this.spawnDebugger(p, args);
     } catch (ex) {
       console.log(`Creating instance of GdbProcess failed: ${ex}`);
       // re-throw exception - this must be a hard error
       throw ex;
     }
 
-    this.commands_socket = new UnixSocketCommunication("/tmp/midas-commands", this.messages)
+    this.commands_socket = new UnixSocketCommunication("/tmp/midas-commands", this.messages);
     this.events_socket = new UnixSocketCommunication("/tmp/midas-events", this.messages);
   }
 
@@ -85,7 +81,7 @@ class GdbDAPSession extends MidasSessionBase {
 
       const res = await this.dbg.waitableSendRequest(
         { seq: 1, command: "initialize", arguments: args, type: "request" },
-        args
+        args,
       );
       this.sendResponse(res);
       this.sendEvent(new InitializedEvent());

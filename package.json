@@ -148,13 +148,13 @@
         "command": "midas.set-checkpoint",
         "category": "Midas Checkpoints",
         "title": "Set Checkpoint",
-        "icon": "$(device-camera)"
+        "icon": "assets/icons/checkpoint.svg"
       },
       {
         "command": "midas.run-to-event",
         "category": "Midas RR",
         "title": "Run to event",
-        "icon": "$(run-below)"
+        "icon": "assets/icons/run-to-event.svg"
       }
     ],
     "menus": {
@@ -239,11 +239,6 @@
                 "type": "string",
                 "description": "Paths from where to import pretty printers",
                 "default": ""
-              },
-              "use-dap": {
-                "type": "boolean",
-                "description": "Use the new Midas custom DAP implementation in GDB. If Midas stops working - set this to false.",
-                "default": true
               },
               "program": {
                 "type": "string",
@@ -351,11 +346,6 @@
                 "description": "Ignore stepping through standard library code (best approximation)",
                 "default": true
               },
-              "use-dap": {
-                "type": "boolean",
-                "description": "Use the new Midas custom DAP implementation in GDB",
-                "default": true
-              },
               "pid": {
                 "type": "string",
                 "description": "Pid of the process to attach to. ${command:getPid} provides the user with an input box where the user types the process name. If multiple processes with that name exists a drop down list of PIDs to choose from will be displayed",
@@ -436,7 +426,6 @@
             "type": "midas-gdb",
             "request": "launch",
             "name": "Midas Launch",
-            "use-dap": true,
             "program": "${workspaceFolder}/program",
             "stopOnEntry": true,
             "trace": "Off",
@@ -449,7 +438,6 @@
             "type": "midas-gdb",
             "request": "attach",
             "name": "Midas Attach",
-            "use-dap": true,
             "pid": "${command:getPid}",
             "trace": "Off",
             "cwd": "${workspaceFolder}",
@@ -466,7 +454,6 @@
               "type": "midas-gdb",
               "request": "launch",
               "name": "${1:Launch Debug}",
-              "use-dap": true,
               "program": "${2:/path/to/binary}",
               "cwd": "^\"\\${workspaceFolder}\"",
               "stopOnEntry": true,
@@ -486,7 +473,6 @@
               "type": "midas-gdb",
               "request": "attach",
               "name": "${1:Attach to process}",
-              "use-dap": true,
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${4:Off}",
               "pid": "^\"\\${command:getPid}\"",
@@ -504,7 +490,6 @@
               "type": "midas-gdb",
               "request": "attach",
               "name": "Connect and run remote target",
-              "use-dap": true,
               "trace": "${1:Off}",
               "setupCommands": [],
               "attachOnFork": false,
@@ -541,11 +526,6 @@
                 "type": "string",
                 "description": "Paths from where to import pretty printers",
                 "default": ""
-              },
-              "use-dap": {
-                "type": "boolean",
-                "description": "Use the new Midas custom DAP implementation in GDB",
-                "default": true
               },
               "trace": {
                 "type": [
@@ -659,7 +639,6 @@
             "type": "midas-rr",
             "request": "attach",
             "name": "Launch replay session",
-            "use-dap": true,
             "trace": "Off",
             "cwd": "${workspaceFolder}",
             "setupCommands": [
@@ -679,7 +658,6 @@
               "type": "midas-rr",
               "request": "attach",
               "name": "${1:Launch replay debug session}",
-              "use-dap": true,
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
@@ -700,7 +678,6 @@
               "type": "midas-rr",
               "request": "attach",
               "name": "${1:Launch replay debug session}",
-              "use-dap": true,
               "cwd": "^\"\\${workspaceFolder}\"",
               "trace": "${3:Off}",
               "gdbPath": "${4:gdb}",
@@ -956,7 +933,8 @@
     "lint": "eslint .",
     "pretest": "npm run lint",
     "test": "node ./test/runTest.js",
-    "package": "vsce package --yarn"
+    "package": "vsce package --yarn",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
@@ -973,6 +951,7 @@
     "eslint": "^8.29.0",
     "glob": "^8.0.3",
     "mocha": "^10.2.0",
+    "prettier": "3.4.2",
     "typescript": "^4.9.4"
   },
   "author": {
@@ -991,8 +970,6 @@
   ],
   "dependencies": {
     "@vscode/codicons": "^0.0.33",
-    "@vscode/debugadapter": "^1.65.0",
-    "gdb-js": "^1.3.0",
-    "regenerator-runtime": "^0.13.11"
+    "@vscode/debugadapter": "^1.65.0"
   }
 }

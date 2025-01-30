@@ -48,10 +48,6 @@ class MidasDebugAdapterTracker {
   session;
   logger;
 
-  /**
-   * @param {import("./debugSession").MidasDebugSession } session
-   * @param {import("vscode").OutputChannel} logger
-   */
   constructor(session, logger) {
     this.session = session;
     this.logger = logger;
@@ -59,7 +55,7 @@ class MidasDebugAdapterTracker {
   /**
    * A session with the debug adapter is about to be started.
    */
-  onWillStartSession() { }
+  onWillStartSession() {}
   /**
    * The debug adapter is about to receive a Debug Adapter Protocol message from the editor.
    */
@@ -69,7 +65,6 @@ class MidasDebugAdapterTracker {
     } else {
       this.logger.appendLine(`[EVT][${message.event}] ----> ${JSON.stringify(message)}`);
     }
-
   }
   /**
    * The debug adapter has sent a Debug Adapter Protocol message to the editor.
@@ -80,12 +75,11 @@ class MidasDebugAdapterTracker {
     } else {
       this.logger.appendLine(`[EVT][${message.event}] <---- ${JSON.stringify(message)}\n`);
     }
-
   }
   /**
    * The debug adapter session is about to be stopped.
    */
-  onWillStopSession() { }
+  onWillStopSession() {}
 
   /**
    * An error with the debug adapter has occurred.
@@ -180,12 +174,12 @@ class UIDebugSession {
 
   /** @returns { Thenable<boolean> } */
   ManagesThread(id) {
-    return this.#session.customRequest(CustomRequestsUI.HasThread, { id: id }).then(res => res?.hasThread)
+    return this.#session.customRequest(CustomRequestsUI.HasThread, { id: id }).then((res) => res?.hasThread);
   }
 
   /** @returns { Thenable<void> } */
   ContinueAll() {
-    return this.#session.customRequest(CustomRequests.ContinueAll, {})
+    return this.#session.customRequest(CustomRequests.ContinueAll, {});
   }
 
   /** @returns { Thenable<void> } */
@@ -195,7 +189,7 @@ class UIDebugSession {
 
   /** @returns { Thenable<boolean> } */
   SelectedThreadInUI(id) {
-    return this.#session.customRequest(CustomRequests.OnSelectedThread, { id: id })
+    return this.#session.customRequest(CustomRequests.OnSelectedThread, { id: id });
   }
 
   /** @param {string} sessionId @returns { boolean } */
@@ -204,7 +198,7 @@ class UIDebugSession {
   }
 
   static SelectedThreadInUi(session, id) {
-    return session.customRequest(CustomRequests.OnSelectedThread, { id: id })
+    return session.customRequest(CustomRequests.OnSelectedThread, { id: id });
   }
 }
 
@@ -212,7 +206,6 @@ class UIDebugSession {
  * Public "API" returned by activate function
  */
 class MidasAPI extends APIInit {
-
   /** @type {import("vscode").ExtensionContext} */
   #context;
 
@@ -253,8 +246,7 @@ class MidasAPI extends APIInit {
             const p = execSync(`which ${variant}`, { env: sanitizeEnvVariables() }).toString().trim();
             this.#tools.set(prop, new Tool(prop, p, null));
             break;
-          } catch (e) {
-          }
+          } catch (e) {}
         }
       }
       this.toolsInitialized = true;
@@ -277,7 +269,9 @@ class MidasAPI extends APIInit {
   getRequiredSystemTool(name) {
     const tool = this.getSystemTool(name);
     if (tool == null) {
-      vscode.window.showErrorMessage(`Failed to find required tool ${name} on $PATH. This may cause Midas toolchain management to not work.`);
+      vscode.window.showErrorMessage(
+        `Failed to find required tool ${name} on $PATH. This may cause Midas toolchain management to not work.`,
+      );
       throw new Error(`Could not determine ${name} existence on system`);
     }
     return tool;
@@ -312,7 +306,7 @@ class MidasAPI extends APIInit {
 
   maybeDisplayReleaseNotes() {
     try {
-      let cfg = ManagedToolchain.loadConfig(this.#context)
+      let cfg = ManagedToolchain.loadConfig(this.#context);
       const recordedSemVer = parseSemVer(cfg.midas_version);
       const currentlyLoadedSemVer = parseSemVer(this.#context.extension.packageJSON["version"]);
       if (semverIsNewer(currentlyLoadedSemVer, recordedSemVer ?? currentlyLoadedSemVer) || recordedSemVer == null) {
@@ -335,7 +329,7 @@ class MidasAPI extends APIInit {
 
   /** @returns {import("./utils/utils").MidasConfig} */
   getConfig() {
-    return ManagedToolchain.loadConfig(this.#context)
+    return ManagedToolchain.loadConfig(this.#context);
   }
 
   getWrittenMidasVersion() {
@@ -402,7 +396,7 @@ class MidasAPI extends APIInit {
    * @returns { Promise<import("./toolchain").ManagedTool | Tool> } Returns an object that satisfies the Tool interface
    */
   async getDebuggerTool(name) {
-    const tool = this.toolchain.getTool(name)
+    const tool = this.toolchain.getTool(name);
     if (tool.managed) {
       return tool;
     }
@@ -448,15 +442,12 @@ class MidasAPI extends APIInit {
     }
   }
 
-
   async checkToolchainUpdates() {
     const manager = this.getToolchain();
     for (const tool of ["rr", "gdb", "mdb"]) {
       try {
         manager.getTool(tool).update();
-      } catch (ex) {
-
-      }
+      } catch (ex) {}
     }
   }
 
@@ -491,7 +482,7 @@ class MidasAPI extends APIInit {
  */
 async function initMidas(api) {
   let firstInit = false;
-  api.initToolchain()
+  api.initToolchain();
   const cfg = api.getConfig();
   // the first time we read config, this will be empty.
   // this can't be guaranteed with vscode mementos. They just live their own life of which we
@@ -528,17 +519,17 @@ function registerDebuggerType(context, ConfigConstructor, FactoryConstructor, ch
     vscode.debug.registerDebugConfigurationProvider(
       provider.type,
       provider,
-      vscode.DebugConfigurationProviderTriggerKind.Dynamic
-    )
+      vscode.DebugConfigurationProviderTriggerKind.Dynamic,
+    ),
   );
 
   if (checkpointProvider != null) {
     context.subscriptions.push(
-      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor(checkpointProvider))
+      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor(checkpointProvider)),
     );
   } else {
     context.subscriptions.push(
-      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor())
+      vscode.debug.registerDebugAdapterDescriptorFactory(provider.type, new FactoryConstructor()),
     );
   }
 }
@@ -571,7 +562,7 @@ async function activateExtension(context) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(checkpointProvider.type, checkpointProvider, {
       webviewOptions: { retainContextWhenHidden: true },
-    })
+    }),
   );
   try {
     registerDebuggerType(context, ConfigurationProvider, DebugAdapterFactory);
@@ -589,13 +580,13 @@ async function activateExtension(context) {
     api.AddDebugSession(session);
   });
 
-  vscode.debug.onDidChangeActiveStackItem(uiElement => {
+  vscode.debug.onDidChangeActiveStackItem((uiElement) => {
     if (uiElement.threadId) {
       UIDebugSession.SelectedThreadInUi(uiElement.session, uiElement.threadId);
     }
   });
 
-  vscode.debug.onDidTerminateDebugSession(session => {
+  vscode.debug.onDidTerminateDebugSession((session) => {
     api.RemoveDebugSession(session);
     if (api.GetDebugSessions().size == 0) {
       RestoreContextDefaults();
@@ -605,7 +596,7 @@ async function activateExtension(context) {
   return api;
 }
 
-function deactivateExtension() { }
+function deactivateExtension() {}
 
 module.exports = {
   activateExtension,

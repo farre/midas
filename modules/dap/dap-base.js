@@ -1,6 +1,6 @@
 const { DebugSession, OutputEvent, InvalidatedEvent, TerminatedEvent } = require("@vscode/debugadapter");
 const { window, Uri } = require("vscode");
-const vs = require("vscode")
+const vs = require("vscode");
 const { toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
 const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = require("../constants");
@@ -128,7 +128,7 @@ class MidasSessionBase extends DebugSession {
                     path: body.configuration.path,
                   },
                 },
-                vs.debug.activeDebugSession
+                vs.debug.activeDebugSession,
               )
               .then((bool) => {
                 if (bool) {
@@ -189,13 +189,6 @@ class MidasSessionBase extends DebugSession {
 
   shutdown() {
     super.shutdown();
-  }
-
-  /**
-   * @returns { import("../buildMode").MidasRunMode }
-   */
-  get buildSettings() {
-    return this.spawnConfig.traceSettings;
   }
 
   log(where, output) {

@@ -17,8 +17,8 @@ function setupUI(protocol) {
       checkpointName.addEventListener("click", () => {
         const sourceLocPath = cp.where.path.split(" at ")[1];
 
-        if(sourceLocPath)
-          vscode.postMessage({ type: UI_REQUESTS.GotoSourceLoc, value: { path: sourceLocPath, line: cp.where.line }});
+        if (sourceLocPath)
+          vscode.postMessage({ type: UI_REQUESTS.GotoSourceLoc, value: { path: sourceLocPath, line: cp.where.line } });
       });
 
       checkpointName.addEventListener("keydown", (event) => {
@@ -69,7 +69,6 @@ function setupUI(protocol) {
       actionBar.appendChild(actionContainer);
       container.appendChild(actionBar);
     }
-
 
     // Handle messages sent from the extension to the webview
     window.addEventListener("message", (event) => {

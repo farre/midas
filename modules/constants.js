@@ -1,4 +1,4 @@
-"use strict"
+"use strict";
 
 // Debug Adapter Protocol follow thisFormattingStyle, change the remaining in future commits.
 const CustomRequests = {
@@ -20,13 +20,13 @@ const CustomRequests = {
 const CustomRequestsUI = {
   HasThread: "HasThreadId",
   OnSelectedThread: "OnSelectedThread",
-  SetThreadStoppingBreakpoint: "NonProcessHaltingBreakpoint"
+  SetThreadStoppingBreakpoint: "NonProcessHaltingBreakpoint",
 };
 
 const ProvidedAdapterTypes = {
   RR: "midas-rr",
   Gdb: "midas-gdb",
-  Native: "midas-native"
+  Native: "midas-native",
 };
 
 const Regexes = {
@@ -40,21 +40,19 @@ const ContextKeys = {
   Running: "midas.Running",
   DebugType: "midas.debugType",
   RRSession: "midas.rrSession",
-  NativeMode: "midas.native"
+  NativeMode: "midas.native",
 };
 
 function ContextKeyName(contextKey) {
-  if(!contextKey.includes(".")) {
+  if (!contextKey.includes(".")) {
     throw new Error(`Object is not a context key!`);
   }
-  const [, key] = contextKey.split('.');
+  const [, key] = contextKey.split(".");
   return key;
 }
 
 const DebugLogging = {
   Off: "off",
-  GdbEventsOnly: "gdb events",
-  PythonLogsOnly: "python logs",
   Full: "full",
 };
 
@@ -65,5 +63,5 @@ module.exports = {
   ContextKeys,
   DebugLogging,
   CustomRequestsUI,
-  ContextKeyName
-}
+  ContextKeyName,
+};

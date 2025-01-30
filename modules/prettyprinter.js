@@ -18,12 +18,10 @@ class PrettyPrinter {
   }
 
   // eslint-disable-next-line no-unused-vars
-  valueHint(variable) {
-  }
+  valueHint(variable) {}
 
   // eslint-disable-next-line no-unused-vars
-  valueExpanded(children) {
-  }
+  valueExpanded(children) {}
 }
 
 class CachedValue extends PrettyPrinter {
@@ -130,7 +128,7 @@ class Variables {
   push(value) {
     const raw = value.getRaw(this.#printer.session);
     this.#variables.push(raw);
-  } 
+  }
 
   update(index, value) {
     if (index < this.#variables.length) {

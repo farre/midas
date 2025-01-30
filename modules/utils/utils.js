@@ -6,12 +6,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
 const { TerminalInterface } = require("../terminalInterface");
-const {
-  resolveCommand,
-  sudo,
-  sanitizeEnvVariables,
-  getAllPidsForQuickPick,
-} = require("./sysutils");
+const { resolveCommand, sudo, sanitizeEnvVariables, getAllPidsForQuickPick } = require("./sysutils");
 const { getReleaseNotes } = require("./releaseNotes");
 const { Regexes } = require("../constants");
 
@@ -162,11 +157,11 @@ async function buildTestFiles(testPath) {
   await new Promise((resolve) =>
     exec("cmake .. -DCMAKE_BUILD_TYPE=Debug", {
       cwd: buildPath,
-    }).once("exit", resolve)
+    }).once("exit", resolve),
   );
 
   await new Promise((resolve) =>
-    exec("cmake --build .", { cwd: buildPath }).once("exit", (exit_code) => resolve(exit_code))
+    exec("cmake --build .", { cwd: buildPath }).once("exit", (exit_code) => resolve(exit_code)),
   );
 }
 
@@ -216,7 +211,7 @@ function spawn(gdbPath, args) {
  */
 class ArrayMap {
   #storage = new Map();
-  constructor() { }
+  constructor() {}
   /**
    * Adds `value` to the array keyed by `key`. If no array is referenced by key, one is created.
    * @param {any} key
@@ -259,7 +254,7 @@ class ArrayMap {
 class ExclusiveArray {
   /** @type { T[] } */
   #data = [];
-  constructor() { }
+  constructor() {}
 
   /**
    * Compares `items` with the elements in this array and returns what elements needs removing from this array
@@ -437,7 +432,7 @@ function requiresMinimum(version, required_version, patch_required = false) {
   const throw_fn = () => {
     const { major, minor, patch } = required_version;
     throw new Error(
-      `Version ${major}.${minor}.${patch} is required. You have ${version.major}.${version.minor}.${version.patch}`
+      `Version ${major}.${minor}.${patch} is required. You have ${version.major}.${version.minor}.${version.patch}`,
     );
   };
   if (version.major < required_version.major) {

@@ -1,16 +1,7 @@
 const vscode = require("vscode");
-const { MidasDebugSession } = require("../debugSession");
-const fs = require("fs");
 const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
-const {
-  isNothing,
-  resolveCommand,
-  showErrorPopup,
-  getPid,
-  strEmpty,
-  getAPI
-} = require("../utils/utils");
-const { LaunchSpawnConfig, AttachSpawnConfig, RemoteLaunchSpawnConfig, RemoteAttachSpawnConfig } = require("../spawn");
+const { isNothing, resolveCommand, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
+const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
 
 const initializer = async (config) => {
@@ -21,7 +12,7 @@ const initializer = async (config) => {
     config.trace = "off";
   }
   // allStopMode is legacy name from gdb.
-  if(config.hasOwnProperty("allStopMode")) {
+  if (config.hasOwnProperty("allStopMode")) {
     vscode.window.showWarningMessage("allStopMode is a deprecated flag. Use noSingleThreadControl instead");
     config.noSingleThreadControl = config.allStopMode;
   }
@@ -30,7 +21,6 @@ const initializer = async (config) => {
     config.noSingleThreadControl = true;
   }
   if (!config.hasOwnProperty("gdbPath")) {
-
     config.gdbPath = await getAPI().resolveToolPath("gdb");
     if (config.gdbPath == undefined) {
       throw { type: InitExceptionTypes.GdbNotFound };
@@ -122,28 +112,16 @@ class DebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    if (config["use-dap"]) {
-      let terminal = null;
-      const midas_session = new GdbDAPSession(this.spawnConfig(config), terminal, null);
-      return new vscode.DebugAdapterInlineImplementation(midas_session);
-    } else {
-      let dbg_session = new MidasDebugSession(true, false, fs, this.spawnConfig(config));
-      return new vscode.DebugAdapterInlineImplementation(dbg_session);
-    }
+    let terminal = null;
+    const midas_session = new GdbDAPSession(this.spawnConfig(config), terminal, null);
+    return new vscode.DebugAdapterInlineImplementation(midas_session);
   }
 
   spawnConfig(config) {
     switch (config.request) {
       case "attach":
-        if (config.target != null) {
-          return new RemoteAttachSpawnConfig(config);
-        } else {
-          return new AttachSpawnConfig(config);
-        }
+        return new AttachSpawnConfig(config);
       case "launch":
-        if (config.target != null) {
-          return new RemoteLaunchSpawnConfig(config);
-        }
         return new LaunchSpawnConfig(config);
       default:
         throw new Error("Unknown request type");

@@ -89,7 +89,7 @@ async function getSudoPassword() {
   if (!pass) {
     pass = await vscode.window.showInputBox({ prompt: "input your sudo password", password: true });
   }
-  return pass
+  return pass;
 }
 
 async function cancelInstaller(password, pid) {
@@ -118,7 +118,7 @@ function systemInstall(repoType, packages, cancellable, logger) {
 
     // starts python installer services application
     const run_installer_services = () => {
-      getAPI().getPython().sudoExecute([repoType], pass)
+      getAPI().getPython().sudoExecute([repoType], pass);
     };
     let listeners = { download: new EventEmitter(), install: new EventEmitter() };
     const server = create_ipc_server(packages, listeners);
@@ -157,100 +157,104 @@ function systemInstall(repoType, packages, cancellable, logger) {
     listeners.download.on("start", async ({ packages, bytes }) => {
       logger.appendLine(`Download started for ${packages}`);
       remaining_download = packages;
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          cancellable: cancellable,
-          title: "Downloading dependencies",
-        },
-        (reporter, token) => {
-          return new Promise((resolve) => {
-            const wasCancelled = true;
-            listeners.download.on("finish", () => {
-              resolve(!wasCancelled); // download was not cancelled
-            }); // resolve this progress window, but not the installation progress (iresolve)
+      await vscode.window
+        .withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            cancellable: cancellable,
+            title: "Downloading dependencies",
+          },
+          (reporter, token) => {
+            return new Promise((resolve) => {
+              const wasCancelled = true;
+              listeners.download.on("finish", () => {
+                resolve(!wasCancelled); // download was not cancelled
+              }); // resolve this progress window, but not the installation progress (iresolve)
 
-            token.onCancellationRequested(async () => {
-              await cancelInstaller(pass, processInfo.pid);
-            });
-
-            listeners.download.on("cancel", () => {
-              logger.appendLine(`Download cancelled`);
-              server.close((err) => {
-                logger.appendLine("server closed.");
-                if (err) {
-                  logger.appendLine("Could not close InstallingManager connection.");
-                }
+              token.onCancellationRequested(async () => {
+                await cancelInstaller(pass, processInfo.pid);
               });
-              resolve(wasCancelled);
-            });
 
-            listeners.download.on("done", ({ done }) => {
-              installed_packages.push(done);
-              logger.appendLine(`Downloading of ${done} - done`);
-              remaining_download = remaining_download.filter((pkg_name) => pkg_name != done);
-              reporter.report({ message: remaining_download.join(", ") });
-            });
+              listeners.download.on("cancel", () => {
+                logger.appendLine(`Download cancelled`);
+                server.close((err) => {
+                  logger.appendLine("server closed.");
+                  if (err) {
+                    logger.appendLine("Could not close InstallingManager connection.");
+                  }
+                });
+                resolve(wasCancelled);
+              });
 
-            // eslint-disable-next-line no-unused-vars
-            listeners.download.on("update", ({ bytes, progress, increment }) => {
-              console.log(`Download update: ${bytes} bytes. Increment: ${increment}`);
-              reporter.report({
-                increment: increment,
-                message: remaining_download.join(", "),
+              listeners.download.on("done", ({ done }) => {
+                installed_packages.push(done);
+                logger.appendLine(`Downloading of ${done} - done`);
+                remaining_download = remaining_download.filter((pkg_name) => pkg_name != done);
+                reporter.report({ message: remaining_download.join(", ") });
+              });
+
+              // eslint-disable-next-line no-unused-vars
+              listeners.download.on("update", ({ bytes, progress, increment }) => {
+                console.log(`Download update: ${bytes} bytes. Increment: ${increment}`);
+                reporter.report({
+                  increment: increment,
+                  message: remaining_download.join(", "),
+                });
               });
             });
-          });
-        },
-      ).then(wasCancelled => {
-        if(wasCancelled) {
-          installResolve(false);
-        }
-      });
+          },
+        )
+        .then((wasCancelled) => {
+          if (wasCancelled) {
+            installResolve(false);
+          }
+        });
     });
 
     listeners.install.on("start", async () => {
       logger.appendLine(`Install started`);
-      await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          cancellable: cancellable,
-          title: "Installing dependencies",
-        },
-        (reporter, canceller) => {
-          return new Promise((resolve) => {
-            listeners.install.on("finish", () => {
-              logger.appendLine(`Install finished`);
-              server.close((err) => {
-                if (err) {
-                  logger.appendLine("Could not close InstallingManager connection. Remove ");
-                }
+      await vscode.window
+        .withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            cancellable: cancellable,
+            title: "Installing dependencies",
+          },
+          (reporter, canceller) => {
+            return new Promise((resolve) => {
+              listeners.install.on("finish", () => {
+                logger.appendLine(`Install finished`);
+                server.close((err) => {
+                  if (err) {
+                    logger.appendLine("Could not close InstallingManager connection. Remove ");
+                  }
+                });
+                resolve(true);
               });
-              resolve(true);
-            });
-            canceller.onCancellationRequested(async () => {
-              await cancelInstaller(pass, processInfo.pid);
-            });
-
-            listeners.install.on("cancel", () => {
-              logger.appendLine(`Install cancelled`);
-              server.close((err) => {
-                if (err) {
-                  logger.appendLine("Could not close InstallingManager connection. Remove ");
-                }
+              canceller.onCancellationRequested(async () => {
+                await cancelInstaller(pass, processInfo.pid);
               });
-              resolve(false); // user cancelled
-            });
 
-            listeners.install.on("update", (payload) => {
-              console.log(`Install update: ${JSON.stringify(payload)}`);
-              reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
+              listeners.install.on("cancel", () => {
+                logger.appendLine(`Install cancelled`);
+                server.close((err) => {
+                  if (err) {
+                    logger.appendLine("Could not close InstallingManager connection. Remove ");
+                  }
+                });
+                resolve(false); // user cancelled
+              });
+
+              listeners.install.on("update", (payload) => {
+                console.log(`Install update: ${JSON.stringify(payload)}`);
+                reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
+              });
             });
-          });
-        },
-      ).then(result => {
-        installResolve(result);
-      });
+          },
+        )
+        .then((result) => {
+          installResolve(result);
+        });
     });
     if (!error_or_finished) await run_installer_services();
   });

@@ -1,11 +1,10 @@
 {
-    "presets": [
-      [
-        "@babel/preset-env",
-        {
-          "shippedProposals": true
-        }
-      ]
+  "presets": [
+    [
+      "@babel/preset-env",
+      {
+        "shippedProposals": true
+      }
     ]
-  }
-  
+  ]
+}

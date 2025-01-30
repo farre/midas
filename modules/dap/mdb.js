@@ -3,8 +3,7 @@
 const { MidasCommunicationChannel, UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
-const { getAPI, } = require("../utils/utils");
-const { spawn } = require("child_process");
+const { getAPI } = require("../utils/utils");
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -41,7 +40,7 @@ class MdbProcess extends DebuggerProcessBase {
       const newOptions = ["record", this.path(), "-r", ...this.options.options];
       try {
         const p = rr;
-        this.process = spawn(p, newOptions);
+        this.spawnDebugger(p, newOptions);
       } catch (ex) {
         console.log(`Creating instance of ${this.path()} failed: ${ex}`);
         // re-throw exception - this must be a hard error
@@ -49,7 +48,7 @@ class MdbProcess extends DebuggerProcessBase {
       }
     } else {
       const spawnOptions = [...this.options.options];
-      this.process = spawn(this.path(), spawnOptions);
+      this.spawnDebugger(this.path(), spawnOptions);
     }
     this.socket = new MdbSocket("stdio", this.process, this.messages);
   }
@@ -95,7 +94,7 @@ class MdbSession extends MidasSessionBase {
 
   async initializeRequest(response, args) {
     await this.dbg.initialize();
-    args["RRSession"] = this.spawnConfig?.RRSession ?? false;
+    args["RRSession"] = this.spawnConfig?.isRRSession() ?? false;
     super.initializeRequest(response, args);
   }
 

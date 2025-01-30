@@ -10,10 +10,8 @@ async function build_all() {
 }
 
 build_all().then((exitCodes) => {
-  for(const exitCode of exitCodes) {
-    if(typeof exitCode === "number")
-      exit(exitCode);
-    else
-      throw new Error("Must return exit code");
+  for (const exitCode of exitCodes) {
+    if (typeof exitCode === "number") exit(exitCode);
+    else throw new Error("Must return exit code");
   }
 });
