@@ -23,14 +23,5 @@
 				"${workspaceFolder}/test/cppworkspace/thread"
 			]
 		},
-		{
-			"name": "Run MDB workspace",
-			"type": "extensionHost",
-			"request": "launch",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}",
-				"/home/prometheus/dev/cx/dbm"
-			]
-		}
 	]
 }
