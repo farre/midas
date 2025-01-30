@@ -16,7 +16,7 @@
 - ${workspaceFolder} and built-ins in launch.json, should now work for all sorts of config field values
 - Added new pretty printer features.
 - Support for using the canonical experimental debugger `mdb`
-- Added prettier to dev dependencies. use `npm run format` to format 
+- Added prettier to dev dependencies. use `npm run format` to format
 
 ### Fixes
 

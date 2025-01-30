@@ -1,224 +1,221 @@
 :root {
-	--input-padding-vertical: 6px;
-	--input-padding-horizontal: 4px;
-	--input-margin-vertical: 4px;
-	--input-margin-horizontal: 0;
+  --input-padding-vertical: 6px;
+  --input-padding-horizontal: 4px;
+  --input-margin-vertical: 4px;
+  --input-margin-horizontal: 0;
 }
 
 body {
-	padding: 0;
-	color: var(--vscode-foreground);
-	font-size: var(--vscode-font-size);
-	font-weight: var(--vscode-font-weight);
-	font-family: var(--vscode-font-family);
-	background-color: var(--vscode-editor-background);
+  padding: 0;
+  color: var(--vscode-foreground);
+  font-size: var(--vscode-font-size);
+  font-weight: var(--vscode-font-weight);
+  font-family: var(--vscode-font-family);
+  background-color: var(--vscode-editor-background);
 }
 
 ol,
 ul {
-	padding-left: var(--container-paddding);
+  padding-left: var(--container-paddding);
 }
 
 body > *,
 form > * {
-	margin-block-start: var(--input-margin-vertical);
-	margin-block-end: var(--input-margin-vertical);
+  margin-block-start: var(--input-margin-vertical);
+  margin-block-end: var(--input-margin-vertical);
 }
 
 *:focus {
-	outline-color: var(--vscode-focusBorder) !important;
+  outline-color: var(--vscode-focusBorder) !important;
 }
 
 a {
-	color: var(--vscode-textLink-foreground);
+  color: var(--vscode-textLink-foreground);
 }
 
 a:hover,
 a:active {
-	color: var(--vscode-textLink-activeForeground);
+  color: var(--vscode-textLink-activeForeground);
 }
 
 code {
-	font-size: var(--vscode-editor-font-size);
-	font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  font-family: var(--vscode-editor-font-family);
 }
 
 button {
-	border: none;
-	padding: var(--input-padding-vertical) var(--input-padding-horizontal);
-	width: 100%;
-	text-align: center;
-	outline: 1px solid transparent;
-	outline-offset: 2px !important;
-	color: var(--vscode-button-foreground);
-	background: var(--vscode-button-background);
+  border: none;
+  padding: var(--input-padding-vertical) var(--input-padding-horizontal);
+  width: 100%;
+  text-align: center;
+  outline: 1px solid transparent;
+  outline-offset: 2px !important;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
 }
 
 button:hover {
-	cursor: pointer;
-	background: var(--vscode-button-hoverBackground);
+  cursor: pointer;
+  background: var(--vscode-button-hoverBackground);
 }
 
 button:focus {
-	outline-color: var(--vscode-focusBorder);
+  outline-color: var(--vscode-focusBorder);
 }
 
 button.secondary {
-	color: var(--vscode-button-secondaryForeground);
-	background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
 }
 
 button.secondary:hover {
-	background: var(--vscode-button-secondaryHoverBackground);
+  background: var(--vscode-button-secondaryHoverBackground);
 }
 
-input:not([type='checkbox']),
+input:not([type="checkbox"]),
 textarea {
-	display: block;
-	width: 100%;
-	border: none;
-	font-family: var(--vscode-font-family);
-	padding: var(--input-padding-vertical) var(--input-padding-horizontal);
-	color: var(--vscode-input-foreground);
-	outline-color: var(--vscode-input-border);
-	background-color: var(--vscode-input-background);
+  display: block;
+  width: 100%;
+  border: none;
+  font-family: var(--vscode-font-family);
+  padding: var(--input-padding-vertical) var(--input-padding-horizontal);
+  color: var(--vscode-input-foreground);
+  outline-color: var(--vscode-input-border);
+  background-color: var(--vscode-input-background);
 }
 
 input::placeholder,
 textarea::placeholder {
-	color: var(--vscode-input-placeholderForeground);
+  color: var(--vscode-input-placeholderForeground);
 }
 
-
 .checkpoints-list-row.selected {
-	background-color: var(--vscode-selection-background);
+  background-color: var(--vscode-selection-background);
 }
 
 .checkpoints-list-row.selected:hover {
-	background-color: var(--vscode-inputOption-hoverBackground);
+  background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected {
-	background-color: var(--vscode-inputOption-hoverBackground);
+  background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected.focused {
-	background-color: #c4d9b1;
+  background-color: #c4d9b1;
 }
 
-
 .checkpoints-list-row.selected.focused {
-	color: var(--vscode-inputOption-hoverBackground);
+  color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected {
-	background-color: #d3dbcd;var(--vscode-inputOption-hoverBackground);
+  background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row.selected:hover {
-	background-color: var(--vscode-inputOption-hoverBackground);
+  background-color: var(--vscode-inputOption-hoverBackground);
 }
 
 .checkpoints-list-row:hover:not(.selected):not(.focused) {
-	background-color: var(--vscode-inputOption-hoverBackground);
+  background-color: var(--vscode-inputOption-hoverBackground);
 }
 
-
 .file-path {
-	color: var(--vscode-editor-foreground);
-	opacity: .7;
-	margin-left: .9em;
-	flex: 1;
-	text-overflow: ellipsis;
-	overflow: hidden;
+  color: var(--vscode-editor-foreground);
+  opacity: 0.7;
+  margin-left: 0.9em;
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .checkpoints-list-row {
-	display: flex;
-	box-sizing: border-box;
-	overflow: hidden;
-	width: 100%;
-	flex-wrap: wrap;
-	align-items: center;
+  display: flex;
+  box-sizing: border-box;
+  overflow: hidden;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
-	margin-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .checkpoints-list-row .row-button {
-	visibility: hidden;
+  visibility: hidden;
 }
 
 .checkpoints-list-row:hover .row-button {
-	visibility: visible;
+  visibility: visible;
 }
 
 .checkpoints-list-when {
-	flex: 0 0 50px;
-	user-select: none;
+  flex: 0 0 50px;
+  user-select: none;
 }
 
 #icons {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-    justify-content: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon {
-	width: 100px;
-	padding: 20px;
-	font-size: 28px;
-	display: flex;
-	flex-direction: column;
-	text-align: center;
+  width: 100px;
+  padding: 20px;
+  font-size: 28px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
 }
 
 .codicon {
-	padding: 5px 5px;
-	margin-right: 5px;
-	font-size: 16px;
-	display: flex;
+  padding: 5px 5px;
+  margin-right: 5px;
+  font-size: 16px;
+  display: flex;
 }
 
 .checkpoints-count-badge {
-	padding: 3px 6px;
-	border-radius: 11px;
-	font-size: 11px;
-	min-width: 18px;
-	min-height: 18px;
-	line-height: 11px;
-	font-weight: 400;
-	text-align: center;
-	display: inline-block;
-	box-sizing: border-box;
-	background-color: var(--vscode-badge-background);
-	color: var(--vscode-foreground-background);
+  padding: 3px 6px;
+  border-radius: 11px;
+  font-size: 11px;
+  min-width: 18px;
+  min-height: 18px;
+  line-height: 11px;
+  font-weight: 400;
+  text-align: center;
+  display: inline-block;
+  box-sizing: border-box;
+  background-color: var(--vscode-badge-background);
+  color: var(--vscode-foreground-background);
 }
 
 .checkpoints-action-bar {
-	display: flex;
-	align-items: center;
-	text-align: center;
+  display: flex;
+  align-items: center;
+  text-align: center;
 }
 
 .row-button {
-	border-radius: 2px;
-	font-size: 11px;
-	min-width: 18px;
-	min-height: 18px;
-	line-height: 11px;
-	font-weight: 400;
-	text-align: center;
+  border-radius: 2px;
+  font-size: 11px;
+  min-width: 18px;
+  min-height: 18px;
+  line-height: 11px;
+  font-weight: 400;
+  text-align: center;
 }
 
 .row-button:hover {
-	background-color: var(--vscode-widget-shadow)
+  background-color: var(--vscode-widget-shadow);
 }
 
 .file-path {
-	opacity: .7;
-	text-overflow: ellipsis;
-	overflow: hidden;
-	flex: 1;
-	user-select: none;
+  opacity: 0.7;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  flex: 1;
+  user-select: none;
 }

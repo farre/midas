@@ -94,6 +94,7 @@ The quickest way to configure is to open up the `launch.json` file and hit the a
 ## Normal debug session
 
 Example gdb session:
+
 ```json
 {
   "type": "midas-gdb",

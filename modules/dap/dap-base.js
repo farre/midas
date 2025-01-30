@@ -29,8 +29,8 @@ const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = 
  */
 
 /**
+ * @import { LaunchSpawnConfig, AttachSpawnConfig, RRSpawnConfig, MdbSpawnConfig } from "../spawn"
  * @typedef { import("./base-process-handle").DebuggerProcessBase } DebuggerProcessBase
- * @typedef { import("../spawn").SpawnConfig } SpawnConfig
  */
 
 class MidasSessionBase extends DebugSession {
@@ -55,7 +55,7 @@ class MidasSessionBase extends DebugSession {
   #printer;
   /**
    * @param { new (options) => DebuggerProcessBase } DebuggerProcessConstructor
-   * @param { SpawnConfig } spawnConfig
+   * @param { LaunchSpawnConfig | AttachSpawnConfig | RRSpawnConfig | MdbSpawnConfig } spawnConfig
    * @param { * } terminal
    * @param { * } checkpointsUI
    * @param { {response: (res: Response) => void, events: (evt: Event) => void } | null } callbacks
@@ -74,7 +74,7 @@ class MidasSessionBase extends DebugSession {
 
     const { response, events } = callbacks ?? { response: null, events: null };
 
-    if (spawnConfig.prettyPrinterPath?.length) {
+    if ("prettyPrinterPath" in spawnConfig && spawnConfig.prettyPrinterPath?.length) {
       const factory = new PrinterFactory(this);
       factory.loadPrettyPrinters(Uri.file(spawnConfig.prettyPrinterPath)).then((printer) => {
         this.#printer = printer;

@@ -18,6 +18,9 @@ class SpawnConfig {
   /** @type {boolean} */
   ignoreStandardLibrary;
 
+  /** @type { string } - Path to the directory where Midas should look for DAP Pretty printers. */
+  prettyPrinterPath;
+
   /**
    * @param {*} launchJson - The settings in launch.json
    */
@@ -27,8 +30,6 @@ class SpawnConfig {
     this.cwd = cwd;
     this.options = launchJson.gdbOptions ?? [];
     this.setupCommands = launchJson.setupCommands;
-    this.tracedProgramFilePath = launchJson.program;
-    this.attachOnFork = launchJson.attachOnFork ?? false;
     this.externalConsole = launchJson.externalConsole;
     this.trace = launchJson["trace"];
     this.prettyPrinterPath = launchJson.prettyPrinterPath;
@@ -121,11 +122,21 @@ class RRSpawnConfig extends SpawnConfig {
 }
 
 class MdbSpawnConfig {
+  // A parameter that informs mdb that the process that actually spawned it, was RR
+  // which means MDB has to configure itself properly (in order to alleviate RR recording and be able to debug MDB easier.)
+  // For instance, when recording Midas debugger under RR, we don't throw the entire systems thread resources in the thread pool
+  // but just use 1 or 2 (because adding more than that under RR is pointless)
+  #mdbRecordedUnderRr;
+
   constructor(config) {
     this.path = config.mdbPath ?? "mdb";
     this.options = config.dbgArgs ?? [];
     this.debug = config.debug;
-    this.RRSession = config?.RRSession;
+    this.#mdbRecordedUnderRr = config?.RRSession;
+  }
+
+  get isBeingRecorded() {
+    return this.#mdbRecordedUnderRr;
   }
 }
 
