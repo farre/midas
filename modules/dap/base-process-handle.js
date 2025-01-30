@@ -4,6 +4,7 @@ const fs = require("fs");
 const { spawn } = require("child_process");
 
 /**
+ * @import { Event, Response } from "./dap-base"
  * @typedef {import("@vscode/debugprotocol").DebugProtocol.Request } DAPRequest
  * @typedef {import("@vscode/debugprotocol").DebugProtocol.Response } DAPResponse
  */
@@ -40,21 +41,21 @@ class DebuggerProcessBase {
   /**
    * Exec the debugger application at `path` with `args`
    * @param { string } path - path to the debugger (gdb, mdb. path to rr is handled elsewhere.)
-   * @param {*} args - command line arguments for the debuggers
+   * @param { string[] } args - command line arguments for the debuggers
    */
   spawnDebugger(path, args) {
     this.#process = spawn(path, args);
   }
 
   /**
-   * @param {(response: import("./dap-base").Response) => void} cb
+   * @param {(response: Response) => void} cb
    */
   connectResponse(cb) {
     this.messages.on("response", cb);
   }
 
   /**
-   * @param {(response: import("./dap-base").Event) => void} cb
+   * @param {(response: Event) => void} cb
    */
   connectEvents(cb) {
     this.messages.on("event", cb);
@@ -89,9 +90,9 @@ class DebuggerProcessBase {
 
   /**
    * Callee can `await` on .waitableSendRequest(...)  for the response
-   * @param { import("./base-process-handle").DAPRequest } req
+   * @param { DAPRequest } req
    * @param {*} args
-   * @returns { Promise<import("./base-process-handle").DAPResponse> }
+   * @returns { Promise<DAPResponse> }
    */
   waitableSendRequest(req, args) {
     return new Promise((resolve, reject) => {

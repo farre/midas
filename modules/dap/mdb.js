@@ -94,7 +94,7 @@ class MdbSession extends MidasSessionBase {
 
   async initializeRequest(response, args) {
     await this.dbg.initialize();
-    args["RRSession"] = this.spawnConfig?.isRRSession() ?? false;
+    args["RRSession"] = this.spawnConfig?.isBeingRecorded ?? false;
     super.initializeRequest(response, args);
   }
 

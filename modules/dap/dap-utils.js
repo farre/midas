@@ -1,7 +1,12 @@
-const net = require("net");
 /**
- * @typedef { import("events").EventEmitter } EventEmitter
- * @typedef { import("./dap-base").Event | import("./dap-base").Response } DAPMessage
+ * @import { EventEmitter } from "events"
+ * @import { Event, Response } from "./dap-base"
+ */
+
+const net = require("net");
+
+/**
+ * @typedef { Event | Response } DAPMessage
  * @typedef { ( eventName: string | symbol, listener: (...args: any[]) => void, ) => EventEmitter } EventSubscriber
  * @typedef { ( buffer: string | Uint8Array, cb?: (err?: Error) => void) => boolean } WriteFn
  * @typedef { { recv : { on: EventSubscriber }, send: { write: WriteFn }}} DataChannel
