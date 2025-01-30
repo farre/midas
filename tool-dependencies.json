@@ -1,85 +1,55 @@
 {
-    "rr": {
-        "dnf": [
-            "ccache",
-            "cmake",
-            "make",
-            "gcc",
-            "gcc-c++",
-            "gdb",
-            "lldb",
-            "libgcc",
-            "libgcc.i686",
-            "glibc-devel",
-            "glibc-devel.i686",
-            "libstdc++-devel",
-            "libstdc++-devel.i686",
-            "libstdc++-devel.x86_64",
-            "python3-pexpect",
-            "man-pages",
-            "ninja-build",
-            "capnproto",
-            "capnproto-libs",
-            "capnproto-devel",
-            "zlib-devel",
-            "zlib-ng-compat-devel",
-            "libzstd-devel"
-        ],
-        "apt": [
-            "ccache",
-            "cmake",
-            "make",
-            "g++-multilib",
-            "gdb",
-            "lldb",
-            "pkg-config",
-            "coreutils",
-            "python3-pexpect",
-            "manpages-dev",
-            "git",
-            "ninja-build",
-            "capnproto",
-            "libcapnp-dev",
-            "zlib1g-dev",
-            "libzstd-dev"
-        ]
-    },
-    "gdb": {
-        "dnf": [
-            "mpfr-devel",
-            "texinfo",
-            "expat-devel",
-            "python3-devel",
-            "xz-devel",
-            "flex",
-            "bison"
-        ],
-        "apt": [
-            "libmpfr-dev",
-            "texinfo",
-            "libexpat1-dev",
-            "python3-dev",
-            "liblzma-dev",
-            "flex",
-            "bison"
-        ]
-    },
-    "mdb": {
-        "dnf": [
-            "ccache",
-            "cmake",
-            "make",
-            "gcc",
-            "gcc-c++",
-            "ninja-build"
-        ],
-        "apt": [
-            "ccache",
-            "cmake",
-            "make",
-            "gcc",
-            "g++",
-            "ninja-build"
-        ]
-    }
+  "rr": {
+    "dnf": [
+      "ccache",
+      "cmake",
+      "make",
+      "gcc",
+      "gcc-c++",
+      "gdb",
+      "lldb",
+      "libgcc",
+      "libgcc.i686",
+      "glibc-devel",
+      "glibc-devel.i686",
+      "libstdc++-devel",
+      "libstdc++-devel.i686",
+      "libstdc++-devel.x86_64",
+      "python3-pexpect",
+      "man-pages",
+      "ninja-build",
+      "capnproto",
+      "capnproto-libs",
+      "capnproto-devel",
+      "zlib-devel",
+      "zlib-ng-compat-devel",
+      "libzstd-devel"
+    ],
+    "apt": [
+      "ccache",
+      "cmake",
+      "make",
+      "g++-multilib",
+      "gdb",
+      "lldb",
+      "pkg-config",
+      "coreutils",
+      "python3-pexpect",
+      "manpages-dev",
+      "git",
+      "ninja-build",
+      "capnproto",
+      "libcapnp-dev",
+      "zlib1g-dev",
+      "libzstd-dev"
+    ]
+  },
+  "gdb": {
+    "dnf": ["mpfr-devel", "texinfo", "expat-devel", "python3-devel", "xz-devel", "flex", "bison"],
+    "apt": ["libmpfr-dev", "texinfo", "libexpat1-dev", "python3-dev", "liblzma-dev", "flex", "bison"]
+  },
+  "mdb": {
+    "dnf": ["ccache", "cmake", "make", "gcc", "gcc-c++", "ninja-build"],
+    "apt": ["ccache", "cmake", "make", "gcc", "g++", "ninja-build"]
+  }
 }

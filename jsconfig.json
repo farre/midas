@@ -1,9 +1,9 @@
 {
-	"compilerOptions": {
-		"module": "commonjs",
-		"target": "ES2021",
-		"checkJs": true,  /* Typecheck .js files. */
-		"lib": ["ES2021"]
-	},
-	"exclude": ["node_modules"]
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "checkJs": true /* Typecheck .js files. */,
+    "lib": ["ES2021"]
+  },
+  "exclude": ["node_modules"]
 }

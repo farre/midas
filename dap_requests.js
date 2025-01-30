@@ -17,7 +17,7 @@ const StackTraceArguments = {
   startFrame: null,
   levels: null,
   format: null,
-}
+};
 
-console.log(serialize_request("threads"))
-console.log(serialize_request("stacktrace", StackTraceArguments))
+console.log(serialize_request("threads"));
+console.log(serialize_request("stacktrace", StackTraceArguments));

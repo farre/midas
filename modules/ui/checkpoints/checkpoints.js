@@ -116,7 +116,7 @@ class CheckpointsViewProvider {
     const styleMainUri = webview.asWebviewUri(this.resourceUri("main.css"));
     const MessageProtocol = webview.asWebviewUri(this.resourceUri("ui_protocol.js"));
     const codiconsUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.#extensionUri, "node_modules", "@vscode/codicons", "dist", "codicon.css")
+      vscode.Uri.joinPath(this.#extensionUri, "node_modules", "@vscode/codicons", "dist", "codicon.css"),
     );
 
     // Use a nonce to only allow a specific script to be run.

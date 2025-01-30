@@ -1,6 +1,7 @@
 const { EventEmitter } = require("events");
 const { serializeRequest } = require("./dap-utils");
-const fs = require("fs")
+const fs = require("fs");
+const { spawn } = require("child_process");
 
 /**
  * @typedef {import("@vscode/debugprotocol").DebugProtocol.Request } DAPRequest
@@ -13,8 +14,12 @@ class DebuggerProcessBase {
   /** @type {EventEmitter} */
   messages;
 
+  /** @type { import("child_process").ChildProcess | null } */
+  #process;
+
   constructor(options) {
-    this.options = options
+    this.options = options;
+    this.#process = null;
     // @ts-ignore
     if (this.requestChannel === undefined) {
       throw new Error(`Derived type haven't provided 'comms' channel for which we send requests/recv responses over`);
@@ -26,6 +31,19 @@ class DebuggerProcessBase {
   // Override by derived type.
   async initialize() {
     throw new Error("initialize must be overriden by derived type");
+  }
+
+  get process() {
+    return this.#process;
+  }
+
+  /**
+   * Exec the debugger application at `path` with `args`
+   * @param { string } path - path to the debugger (gdb, mdb. path to rr is handled elsewhere.)
+   * @param {*} args - command line arguments for the debuggers
+   */
+  spawnDebugger(path, args) {
+    this.#process = spawn(path, args);
   }
 
   /**
@@ -42,19 +60,31 @@ class DebuggerProcessBase {
     this.messages.on("event", cb);
   }
 
+  /** @throws { Error } */
   sendRequest(req, args) {
     const output = serializeRequest(req.seq, req.command, args ?? req.arguments);
     this.requestChannel().write(output);
   }
 
+  /**
+   * @throws { Error }
+   * @returns { string }
+   */
   path() {
-    if(this.options.path == null) {
+    if (this.options.path == null) {
       throw new Error(`No path to debugger process provided`);
     }
-    if(!fs.existsSync(this.options.path)) {
+    if (!fs.existsSync(this.options.path)) {
       throw new Error(`${this.options.path} doesn't exist`);
     }
     return this.options.path;
+  }
+
+  /**
+   * @returns { import("./dap-utils").MidasCommunicationChannel }
+   */
+  requestChannel() {
+    throw new Error("Must be implemented by subclass");
   }
 
   /**

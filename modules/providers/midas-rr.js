@@ -1,5 +1,4 @@
 const vscode = require("vscode");
-const { MidasDebugSession } = require("../debugSession");
 const fs = require("fs");
 
 const { getFreeRandomPort } = require("../utils/netutils");
@@ -7,10 +6,9 @@ const { tracePicked, getTraces, parseProgram, generateGdbInit } = require("../ut
 const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = require("./initializer");
 const { spawnExternalRrConsole, showErrorPopup, getAPI } = require("../utils/utils");
 const krnl = require("../utils/kernelsettings");
-const { RRSpawnConfig, RemoteRRSpawnConfig } = require("../spawn");
+const { RRSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
 const { getExtensionPathOf } = require("../utils/sysutils");
-const { ContextKeys } = require("../constants");
 
 const initializerPopupChoices = {
   perf_event_paranoid: [
@@ -24,7 +22,7 @@ const initializerPopupChoices = {
 };
 
 const initializer = async (config) => {
-  config.tool = {}
+  config.tool = {};
   const API = await getAPI();
   if (!config.hasOwnProperty("trace")) {
     config.trace = "off";
@@ -184,10 +182,6 @@ class RRDebugAdapterFactory {
    */
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
-    if (config.remoteTargetConfig != null) {
-      let dbg_session = new MidasDebugSession(true, false, fs, new RemoteRRSpawnConfig(config), null, this.#cp_ui);
-      return new vscode.DebugAdapterInlineImplementation(dbg_session);
-    }
     const pid = config.replay.pid;
     const traceWorkspace = config.replay.traceWorkspace;
     const { address, port } = getAddrSetting(config);
@@ -209,20 +203,8 @@ class RRDebugAdapterFactory {
           { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },
           rrArgs,
         );
-        if (config["use-dap"]) {
-          let session = new GdbDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
-          return new vscode.DebugAdapterInlineImplementation(session);
-        } else {
-          let dbg_session = new MidasDebugSession(
-            true,
-            false,
-            fs,
-            new RRSpawnConfig(config),
-            terminalInterface,
-            this.#cp_ui,
-          );
-          return new vscode.DebugAdapterInlineImplementation(dbg_session);
-        }
+        let session = new GdbDAPSession(new RRSpawnConfig(config), terminalInterface, this.#cp_ui);
+        return new vscode.DebugAdapterInlineImplementation(session);
       } catch (err) {
         showErrorPopup("Failed to spawn external console");
         return undefined;
@@ -231,13 +213,8 @@ class RRDebugAdapterFactory {
       let term = vscode.window.createTerminal("rr terminal");
       term.sendText(cmd_str);
       term.show(true);
-      if (config["use-dap"]) {
-        let dbg_session = new GdbDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
-        return new vscode.DebugAdapterInlineImplementation(dbg_session);
-      } else {
-        let dbg_session = new MidasDebugSession(true, false, fs, new RRSpawnConfig(config), term, this.#cp_ui);
-        return new vscode.DebugAdapterInlineImplementation(dbg_session);
-      }
+      let dbg_session = new GdbDAPSession(new RRSpawnConfig(config), term, this.#cp_ui);
+      return new vscode.DebugAdapterInlineImplementation(dbg_session);
     }
   }
 }

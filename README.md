@@ -11,7 +11,6 @@ which consists of connecting to a remote target machine to debug there.
 
 ## Contents
 
-- [News](#news)
 - [Requirements](#requirements)
 - [Toolchain management](#toolchain-management)
 - [Launch configuration](#launch-configuration)
@@ -22,27 +21,11 @@ which consists of connecting to a remote target machine to debug there.
 - [Setup commands](#setup-commands)
 - [Midas Native](#midas-native)
 
-
 ## NEWS
 
-#### 0.20.0 - 0.22.X
-- Logpoints as a breakpoint type added. [Example usage is shown here](./docs/logpoints.gif)
-- Return values are displayed in `Locals` scope after a `stepOut` command has been issued. It's displayed as `(Return value): `.
-- Fixed issue with new interpreter where sub-objects in the `Variables` view, couldn't be added to `Watch` by right-clicking -> `Add To Watch`. That's fixed now.
-- Fixed other requested issues by users. Thanks for creating issues!
+Removed the old "GDB Machine Interface" implementation and made the repository substantially more lean.
 
-#### New interpreter 0.20.0 and up
-In the coming releases, Midas will start using it's custom DAP implementation inside GDB, as a polyfill for those who can't use the very newest GDB, which itself will have a built in DAP interpreter (hopefully) in release 14.0. This pretty major refactor aims to achieve 2 things, the aforementioned polyfill as well as being a more stable debug adapter as this relieves Midas of much it's responsibility since we don't have to work around some of the more quirky parts of GDB to maintain an acceptable debugging experience as far as performance goes.
-
-As such, users can (should) set the `use-dap` flag in launch.json (for all session types) to true. Only if Midas stops working, should you turn this off (please, file an issue on [github](https://github.com/farre/midas), whether or not you can determine what is not working). See [normal debug session](#normal-debug-session), [attach session](#attach-session) etc.
-
-You should definitely keep the setting `use-dap: true` if you don't encounter problems.
-
-#### RR session configuration change
-Starting with this version all `midas-rr` sessions (RR sessions) will have the configuration go from `launch` to `attach` type. See [launch.json example](#replayable-rr-debug-session) for example.
-
-#### Attach configuration change
-Debugging remote targets has changed to look more like how one would do it naturally in GDB. As such the `remoteTargetConfig` has been removed in favor of `target`. See [example](#remote-debug-sessions) below.
+To track new things, read the [changelog here](./CHANGELOG.md)
 
 [back to top](#contents)
 
@@ -75,18 +58,21 @@ Midas has been tested with the following GDB versions
 Currently Midas will only work for GDB versions above 9.1 due to the nature of the Python implementation of earlier GDB versions. There might be some work put into getting earlier versions to work. But it might not be possible depending on how far back Python support exists in GDB.
 
 [back to top](#contents)
+
 ## Toolchain management
+
 Midas aims to be able to support full toolchain management for debugging. At the moment, it currently only supports management of RR.
 
 If you don't have RR installed, Midas provides 3 ways of installing it for you. You execute the midas function `Get RR` (`ctrl + shift + p` to open the panel, type: `Midas: get rr` and hit enter) at which point you can choose
 to either:
+
 - Install from repository
 - Download .deb or .rpm file (Midas will figure out what package manager you are using) and install using that.
 - Build from source (recommended choice by Midas developers)
 
 This will install RR and also make it available from the VSCode terminal by simply entering `rr` as a command. If you let Midas manage the RR tool, you do not have to specify the path to RR in your `launch.json` file anymore.
 
-Currently, all three ways require that you run a Linux system that uses either `dnf` or `apt` as package managers to resolve dependencies. The first two options installs RR system wide, while the 3rd option (Build from source) downloads the latest master from github and builds it locally and places it in the Midas extension folder. This folder is typically found in `$HOME/.config/Code/User/globalStorage/farrese-midas/...`. For this to work you must *not* be running a virtual environment like `virtualenv`. If you are, open a VSCode window in a source folder where it's not active and re-run the command from there.
+Currently, all three ways require that you run a Linux system that uses either `dnf` or `apt` as package managers to resolve dependencies. The first two options installs RR system wide, while the 3rd option (Build from source) downloads the latest master from github and builds it locally and places it in the Midas extension folder. This folder is typically found in `$HOME/.config/Code/User/globalStorage/farrese-midas/...`. For this to work you must _not_ be running a virtual environment like `virtualenv`. If you are, open a VSCode window in a source folder where it's not active and re-run the command from there.
 
 N.B! You will be required to input your sudo password for all three of these to work. A message box will ask you if this is OK. Midas does not store your password nor any other information about you.
 
@@ -95,29 +81,32 @@ GDB. The justification for this, is that just in version 12 of GDB, debug symbol
 of lines of code. Midas wants to be able to make the process of staying on "current" as much as possible, as an opt-in feature.
 
 [back to top](#contents)
+
 ## Launch configuration
+
 Midas defines different debug sessions; "normal", "attach", and "replayable" and all three also come with an additional "remote" flavor, where the actual program
 is being run on a remote target.
 
 The quickest way to configure is to open up the `launch.json` file and hit the auto-complete keybinding (defaul: `ctrl+space`) and start typing "midas" and you will find the different session settings.
 
 [back to top](#contents)
+
 ## Normal debug session
 
+Example gdb session:
 ```json
 {
   "type": "midas-gdb",
   "request": "launch",
   "name": "Launch Debug",
-  "program": "/path/to/binary",
+  "program": "${workspaceFolder}/build/bin/foo",
   "cwd": "${workspaceFolder}",
-  "use-dap": true, // set to false only if Midas stops working.
   "gdbPath": "gdb", // if GDB is on $PATH, this field is not required
   "stopOnEntry": true,
   "trace": "Off",
   // allStopMode has been deprecated in favor of this field. they are equivalent allStopMode:true == noSingleThreadControl:true
   "noSingleThreadControl": true,
-  "ignoreStandardLibrary": true, // when stepping, try not to step into stdlib code
+  "ignoreStandardLibrary": true // when stepping, try not to step into stdlib code
 }
 ```
 
@@ -139,8 +128,6 @@ All stop mode, means that all stop / continue actions halt or start threads in u
 Trace has the following settings:
 
 - "Off", no logging
-- "GDB events" - gdb events are logged to the developer console
-- "Python logs" - logs performance and debug messages to performance_time.log, error.log and debug.log.
 - "Full" all logging turned on.
 
 The log files will be found where the extension is installed (typically at $HOME/.vscode/extensions/...). These are currently very bare bones though.
@@ -174,6 +161,7 @@ a shell with this command, external console should work on your Linux distro as 
 `x-terminal-emulator -e sh -c "tty > /tmp/someFileMidasDecidesAtRunTime && echo $$ >> /tmp/someFileMidasDecidesAtRunTime && sleep 100000000000000"`
 
 [back to top](#contents)
+
 ## Replayable RR debug session
 
 A minimum required launch config for RR is really simple as Midas will query RR for it's traces in `$RR_TRACE_DIR`.
@@ -182,9 +170,8 @@ A minimum required launch config for RR is really simple as Midas will query RR 
 {
   "type": "midas-rr",
   "request": "attach",
-  "use-dap": true, // set to false if Midas stops working.
   "name": "Minimum rr",
-  "trace": "Off",
+  "trace": "Off"
 }
 ```
 
@@ -198,7 +185,6 @@ Configuration example, for a rr debug session of for example a `firefox` test:
   "request": "attach",
   "name": "Launch replay debug session",
   "cwd": "${workspaceFolder}",
-  "use-dap": true,
   "stopOnEntry": true,
   "trace": "Off",
   "gdbPath": "gdb",
@@ -212,7 +198,9 @@ However, you shouldn't have to fill out a placeholder for yourself, VSCode shoul
 ![Default Launch config](docs/launchconfig.gif)
 
 [back to top](#contents)
+
 ## Attach session
+
 Attaching to a running process is basically done and setup the same way. Midas will provide a default setting:
 
 ```json
@@ -221,7 +209,6 @@ Attaching to a running process is basically done and setup the same way. Midas w
   "request": "attach",
   "name": "Attach",
   "program": "${workspaceFolder}",
-  "use-dap": true,
   "cwd": "${workspaceFolder}",
   "trace": "Off",
   "pid": "${command:getPid}",
@@ -236,6 +223,7 @@ Leave PID field as is (or remove the field entirely) and you will be asked for i
 [back to top](#contents)
 
 ## Remote debug sessions
+
 To use Midas to debug an application running on a remote target, the user must have first started a gdbserver that is running the application and listening for connections on some address. To connect to a gdbserver at address `127.0.0.1:12345`, use following configuration.
 
 ```json
@@ -243,20 +231,18 @@ To use Midas to debug an application running on a remote target, the user must h
   "type": "midas-gdb",
   "request": "attach",
   "name": "Attach to remote debug session hosted by gdbserver",
-  "setupCommands": [
-    "set substitute-path /home/foo/dev/remote-path /home/foo/dev/local-path"
-  ], // set of GDB commands you want executed before debugging starts.
-  "use-dap": true,
+  "setupCommands": ["set substitute-path /home/foo/dev/remote-path /home/foo/dev/local-path"], // set of GDB commands you want executed before debugging starts.
   "target": {
-    "type": "remote", // "extended-remote" or "remote"
+    "type": "extended-remote", // "extended-remote" or "remote"
     "parameter": "127.0.0.1:12345" // the parameter to the `target remote/extended-remote` command on the GDB CLI.
-  },
+  }
 }
 ```
 
 If the remote session is an RR replay, just replace `midas-gdb` with `midas-rr` in the `type` field launch.json.
 
 [back to top](#contents)
+
 ## Setup commands
 
 Another field that can be added is the `setupCommands` which takes an array of strings that are GDB commands to be executed before
@@ -269,7 +255,6 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
   "name": "Launch Debug",
   "program": "${workspaceFolder}/path/binary",
   "cwd": "${workspaceFolder}",
-  "use-dap": true,
   "stopOnEntry": true,
   "trace": "Off",
   "noSingleThreadControl": true,
@@ -278,10 +263,13 @@ loading the binary or file containing symbols (the `-iex "someCommand here"`). B
 ```
 
 [back to top](#contents)
+
 ## Midas Native
+
 There's a mode for a 3rd debugger which is being natively developed to work in Midas extension. As the debugger is in an alpha version, it won't be provided here, so it will have to be built manually from sources from [here](https://github.com/theIDinside/mdebug).
 
 [back to top](#contents)
+
 ## Usage
 
 Since VSCode is aimed to be as general as possible, some functionality might never be represented in the UI - as such it might appear unintuitive. [Describing such functionality is found here](docs/USAGE.md), like setting watch points, formatting displayed values etc. It's recommended to skim through, to get to know useful Midas features.
@@ -290,6 +278,7 @@ If Midas behaves strangely, there exists a midas command (`Create github issue l
 ![Issue logs](docs/how_to_create_logs.gif). Either save this file and add it to the issue or paste it into the issue itself. This command needs to be executed while the debug session is active & running in order for it to work. The logs it copies from are non-persistent to not swamp your file system.
 
 [back to top](#contents)
+
 ## Development
 
 To package extension, run the alias

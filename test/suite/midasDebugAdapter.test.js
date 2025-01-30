@@ -157,7 +157,10 @@ suite("Extension Breakpoints Test Suite", () => {
       const line = 20;
       const threadId = 1;
       await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
-      return Promise.all([dc.continueRequest({ threadId }), dc.assertStoppedLocation("breakpoint", { path: source.path, line })]);
+      return Promise.all([
+        dc.continueRequest({ threadId }),
+        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
+      ]);
     });
 
     test("should hit breakpoint after restart", async () => {
@@ -166,7 +169,10 @@ suite("Extension Breakpoints Test Suite", () => {
       const line = 20;
       const threadId = 1;
       await dc.setBreakpointsRequest({ source, breakpoints: [{ line }] });
-      return Promise.all([dc.continueRequest({ threadId }), dc.assertStoppedLocation("breakpoint", { path: source.path, line })]);
+      return Promise.all([
+        dc.continueRequest({ threadId }),
+        dc.assertStoppedLocation("breakpoint", { path: source.path, line }),
+      ]);
     });
   });
 });

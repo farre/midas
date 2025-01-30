@@ -3,6 +3,7 @@
 ## Release 0.24.0
 
 ### Features
+
 - Added `ignoreStandardLibrary` to launch and attach configurations. It will attempt at ignoring most c++ standard library files while stepping. It's a best approximation approach. Defaults to `true`.
 - Extended support for the debugger backend "midas" which henceforth will be known as "midas-native"
 - Added context menu support for call stack, to resume/pause all threads
@@ -11,14 +12,15 @@
 - Added pauseAll
 - continueAll/pauseAll is used for gdb's allStopMode, or MDB.
 - Deprecated allStopMode in launch.json; use noSingleThreadControl instead. It's a better name and will
-be also what this feature eventually be called by MDB.
+  be also what this feature eventually be called by MDB.
 - ${workspaceFolder} and built-ins in launch.json, should now work for all sorts of config field values
 - Added new pretty printer features.
 - Support for using the canonical experimental debugger `mdb`
-
+- Added prettier to dev dependencies. use `npm run format` to format 
 
 ### Fixes
 
+- Removed old Midas version that relied on GDB/MI and gdb-js. The exclusively supported variant is midas DAP implementation.
 - Make validation of config happen after substition of variables like ${workspaceFolder} so that _any_ configuration items can use the short-hands/built ins
 - Refactors and cleaning up the inherent messiness of supporting what essentially is 3 backends; midas-native (mdb, future hopefully mdb+rr), midas-gdb (gdb) and midas-rr (gdb+rr).
 - Added program args as a configuration item for launched program when `use-dap` is true, which seems to have been missing
@@ -38,17 +40,16 @@ be also what this feature eventually be called by MDB.
   in the list and add sub objects to `Watch` again.
 
 ### Features
+
 - Added `(Return Value)` variable to `Locals`, if the last command that executed was `stepOut` and it succeeded completely.
   This way you can inspect return values from a function.
 - Added `LogPoint` breakpoints that logs to the debug console and continues.
-
 
 ## Release 0.20.4
 
 ### Fixes
 
 - Fix the Get RR bug where it did not fire if the Midas config file gets into an invalid state, possibly by aborting a build etc.
-
 
 ## Release 0.20.3
 
@@ -66,7 +67,6 @@ be also what this feature eventually be called by MDB.
 
 - Added ability to name checkpoints
 
-
 ## Release 0.19.17
 
 ### Fixes
@@ -76,7 +76,6 @@ be also what this feature eventually be called by MDB.
 ### Features
 
 - Added `rrOptions` to `launch.json` for `midas-rr` debug sessions, which are command line options passed to RR.
-
 
 ## Release 0.19.15
 
@@ -88,7 +87,6 @@ be also what this feature eventually be called by MDB.
 
 - Added run to event
 - Midas now uses the output from `rr gdbinit` directly to increase stability so that if RR changes it, we don't break.
-
 
 ## Release 0.19.11
 

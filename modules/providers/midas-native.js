@@ -31,8 +31,10 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
 
   prepareAttachArgs(config) {
     const variants = [config.targetVariant?.rr, config.targetVariant?.remote, config.targetVariant?.native];
-    if (variants.filter(v => v != null).length != 1) {
-      throw new Error(`targetVariant on attach configuration must be one of either 'rr', 'remote' or 'native'. You have ${variants.length} set`);
+    if (variants.filter((v) => v != null).length != 1) {
+      throw new Error(
+        `targetVariant on attach configuration must be one of either 'rr', 'remote' or 'native'. You have ${variants.length} set`,
+      );
     }
 
     if (config.targetVariant?.rr) {
@@ -63,7 +65,6 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       config.RRSession = false;
       throw new Error(`Attach for ptrace not yet implemented`);
     }
-
   }
 
   async resolveDebugConfiguration(folder, config, token) {

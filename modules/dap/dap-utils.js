@@ -106,7 +106,7 @@ function parseBuffer(buffer, metadata) {
 }
 
 class MidasCommunicationChannel {
-  // TODO(simon): Use a better buffer here. Uint8 array?
+  // TODO(simon): Use a better buffer here. Uint8 array? Low hanging fruit-optimization for another day.
   /** @type { string } */
   buffer;
 
@@ -156,6 +156,11 @@ class MidasCommunicationChannel {
     });
   }
 
+  /**
+   * Write `data` to output channel
+   * @param { string } data
+   * @throws { Error }
+   */
   write(data) {
     this.channel.send.write(data, (err) => {
       if (err) {
@@ -175,7 +180,7 @@ class MidasCommunicationChannel {
 
 class UnixSocketCommunication extends MidasCommunicationChannel {
   constructor(path, emitter) {
-    super(path, emitter)
+    super(path, emitter);
   }
 
   /**
@@ -193,7 +198,9 @@ class UnixSocketCommunication extends MidasCommunicationChannel {
         this.buffer = this.buffer.concat(str);
         const packets = processBuffer(this.buffer).filter((i) => i.all_received);
         const { buffer: remaining_buffer, protocol_messages } = parseBuffer(this.buffer, packets);
-        console.log(`protocol messages=\n${JSON.stringify(protocol_messages, null, 2)}\nRemaining buffer=${remaining_buffer}`);
+        console.log(
+          `protocol messages=\n${JSON.stringify(protocol_messages, null, 2)}\nRemaining buffer=${remaining_buffer}`,
+        );
         this.buffer = remaining_buffer;
         for (const msg of protocol_messages) {
           const type = msg.type;
@@ -218,5 +225,5 @@ module.exports = {
   serializeRequest,
   parseBuffer,
   processBuffer,
-  connect_socket
+  connect_socket,
 };

@@ -14,7 +14,6 @@ Right click the variable in the variable window and pick the menu option for wha
 
 The reasoning behind this, is that the re-evaluation of watch points when new scopes are entered will slow them down. Doing this defeats the purpose of fast hardware watchpoints.
 
-
 ## Watch variables
 
 Since the VSCode UI for Watch Variables isn't extendable as of now, the design decision has been to add "keywords" that change the output of the watch variable contents. These are described here. In the future

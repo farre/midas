@@ -146,7 +146,7 @@ async function downloadFile(url, path, emitter) {
       } else {
         cleanup(
           "Could not resolve redirection for rr source zip",
-          `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`
+          `Download error. Server responded with: ${response.statusCode} - ${response.statusMessage}`,
         );
       }
     });
@@ -175,7 +175,7 @@ async function downloadFileHttp(url, path) {
         emitter.emit("cancel");
       });
       return await downloadFile(url, path, emitter);
-    }
+    },
   );
 }
 
@@ -284,7 +284,7 @@ class CMake extends BuildTool {
         "-B",
         this.#buildPath,
         "-DCMAKE_BUILD_TYPE=Debug",
-        this.usesNinja() ? "-G Ninja" : ""
+        this.usesNinja() ? "-G Ninja" : "",
       );
     } else {
       args.push(
@@ -293,7 +293,7 @@ class CMake extends BuildTool {
         "-B",
         this.#buildPath,
         "-DCMAKE_BUILD_TYPE=Release",
-        this.usesNinja() ? "-G Ninja" : ""
+        this.usesNinja() ? "-G Ninja" : "",
       );
     }
     args.push(this.compilerSetting(compiler));
@@ -734,7 +734,7 @@ class ManagedTool {
     if (this.#gitUrls.download) {
       const { path: zipFile, status } = await downloadFileHttp(
         this.#gitUrls.download,
-        path.join(this.#globalStorage, `${this.name}.zip`)
+        path.join(this.#globalStorage, `${this.name}.zip`),
       );
       if (status == "success") {
         try {
@@ -782,7 +782,7 @@ class ManagedTool {
               getAPI().getToolchain().serialize();
             }
           });
-        }
+        },
       );
     } catch (ex) {
       vs.window.showErrorMessage(`Failed to configure & install ${this.name.toUpperCase()}: ${ex}`);
@@ -860,7 +860,7 @@ class ManagedTool {
           return await this.install((report) => {
             reporter.report(report);
           }, emitter);
-        }
+        },
       );
       if (!cancelled && fs.existsSync(`${this.#root_dir}-old`)) {
         removeDirectory(`${this.#root_dir}-old`);

@@ -9,11 +9,11 @@ function create({ PrettyPrinter }) {
       const base = await expanded[0].children();
       const payload = await base[1].children();
       const payloadBase = await payload[0].children();
-      if (payloadBase.find(value => value.name === "_M_engaged").value == "false") {
+      if (payloadBase.find((value) => value.name === "_M_engaged").value == "false") {
         variable.value = "no value";
         variable.toLiteral();
       } else {
-        variable.cache(payloadBase.find(value => value.name === "_M_payload"));
+        variable.cache(payloadBase.find((value) => value.name === "_M_payload"));
       }
     }
 
@@ -28,4 +28,4 @@ function create({ PrettyPrinter }) {
   return new StdOptionalPrinter();
 }
 
-module.exports = { create }
+module.exports = { create };

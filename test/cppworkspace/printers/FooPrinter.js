@@ -1,5 +1,4 @@
-
-function create({PrettyPrinter}) {
+function create({ PrettyPrinter }) {
   class FooPrinter extends PrettyPrinter {
     constructor() {
       super("Foo");
@@ -7,10 +6,10 @@ function create({PrettyPrinter}) {
 
     async valueHint(variable) {
       const children = await variable.children();
-      const data = children.map(child => {
-        return `${child.name} = ${child.value}`
-      })
-      variable.value = `Foo { ${data.join(', ')} }`;
+      const data = children.map((child) => {
+        return `${child.name} = ${child.value}`;
+      });
+      variable.value = `Foo { ${data.join(", ")} }`;
       variable.toLiteral();
     }
   }
@@ -18,4 +17,4 @@ function create({PrettyPrinter}) {
   return new FooPrinter();
 }
 
-module.exports = { create }
+module.exports = { create };
