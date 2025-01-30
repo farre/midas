@@ -456,32 +456,6 @@ def set_databps(args):
     return {"breakpoints": [bp_to_ui(x) for x in watchpoints.values()]}
 
 
-# Disassemble backwards from end_pc .. (some address that's offset instructions from end_pc)
-def offset_disassemble(arch, end_pc, offset, count):
-    ins_at_pc = arch.disassemble(start_pc=end_pc)[0]
-    start = end_pc - 8 * offset
-    instructions = []
-    while len(instructions) < (offset + 1):
-        block = gdb.current_progspace().block_for_pc(start)
-        if block is None:
-            instructions = [
-                {"addr": 0, "asm": "unknown"}
-                for i in range(0, offset - len(instructions))
-            ] + instructions
-        else:
-            ins = arch.disassemble(start_pc=block.start, end_pc=end_pc)
-            instructions = ins + instructions
-        start = start - 8 * (offset - len(instructions))
-        end_pc = block.start
-
-    diff = len(instructions) - offset
-    result = instructions[diff : diff + count]
-    if result[-1]["addr"] == ins_at_pc["addr"]:
-        result.pop()
-        result = [instructions[diff - 1]] + result
-    return result[:count]
-
-
 @request(
     "disassemble",
     Args(
@@ -499,15 +473,70 @@ def disassemble(args):
     result = []
     instructionCount = safeInt(args["instructionCount"])
     instructionOffset = safeInt(args.get("instructionOffset"))
-    requestedCount = instructionOffset + instructionCount
-    # For now we ignore when instructionOffset < 0, arch.disassemble will fail
-    # and we return nothing. It's to error prone currently, to concatenate outputs
-    for elt in arch.disassemble(pc, count=requestedCount)[instructionOffset:]:
-        insn = {
-            "address": hex(elt["addr"]),
-            "instruction": elt["asm"]
-        }
-        result.append(insn)
+
+    # The basic idea here is to keep expanding a range of pages around the PC
+    # to disassemble until the range fully covers the request or we hit an
+    # unreadable page.
+    #
+    # GDB doesn't seem to allow querying the page size so just use the
+    # minimum page size on all platforms supported by rr which is 4096.
+    pageSize = 4096
+    endPC = pc | (pageSize - 1)
+    if instructionOffset < 0:
+        startPC = pc & -pageSize
+    else:
+        startPC = pc
+
+    # Keep track of the last successful disassembly in these variables.
+    # This lets us return at least a partial result if we go out of bounds.
+    dis = []
+    pcIdx = 0
+
+    while True:
+        try:
+            dis = arch.disassemble(start_pc=startPC, end_pc=endPC)
+        except gdb.MemoryError:
+            break
+
+        for i, elt in enumerate(dis):
+            if elt["addr"] >= pc:
+                pcIdx = i
+                break
+
+        # Not enough instructions at the start.
+        if pcIdx + instructionOffset < 0:
+            startPC -= pageSize
+            continue
+
+        # First instruction is too early. With variable-length instruction
+        # sets such as x86 we assume that we need to disassemble at least
+        # 64 bytes before the first instruction to synchronize the instruction
+        # stream.
+        if instructionOffset < 0 and dis[pcIdx + instructionOffset]["addr"] < startPC + 64:
+            startPC -= pageSize
+            continue
+
+        # Not enough instructions at the end.
+        if pcIdx + instructionOffset + instructionCount > len(dis):
+            endPC += pageSize
+            continue
+
+        break
+
+    result = []
+    for i in range(pcIdx + instructionOffset, pcIdx + instructionOffset + instructionCount):
+        if i < 0 or i >= len(dis):
+            # Instruction unreadable. This is the implementation defined
+            # "invalid instruction" value. VSCode will ignore it:
+            # https://github.com/microsoft/vscode/blob/92fb591f1b8f26539a80c5269fa6fb6f0b9499ee/src/vs/workbench/contrib/debug/browser/disassemblyView.ts#L494
+            result.append({})
+        else:
+            elt = dis[i]
+            result.append({
+                "address": hex(elt["addr"]),
+                "instruction": elt["asm"]
+            })
+
     return {
         "instructions": result,
     }
