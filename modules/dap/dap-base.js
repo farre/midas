@@ -122,7 +122,7 @@ class MidasSessionBase extends DebugSession {
                 vs.workspace.workspaceFolders[0],
                 {
                   type: ProvidedAdapterTypes.Native,
-                  name: "forked",
+                  name: body?.configuration?.name ?? "forked",
                   request: "attach",
                   childConfiguration: {
                     path: body.configuration.path,

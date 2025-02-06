@@ -573,6 +573,22 @@ async function activateExtension(context) {
     throw ex;
   }
 
+  vscode.debug.onDidReceiveDebugSessionCustomEvent((event) => {
+    switch (event.event) {
+      case "setSessionName": {
+        let name = event?.body?.name;
+        let pos = name?.lastIndexOf("/");
+        if (pos != -1 && pos != null) {
+          name = name.substring(pos + 1);
+        }
+        event.session.name = name;
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
   let api = InitializeGlobalApi(context);
   global.API.DebugSessionMap = new Map();
 
