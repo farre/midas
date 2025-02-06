@@ -1,9 +1,9 @@
-  <svg width="55" height="55" viewBox="0 0 55 55" xmlns="http://www.w3.org/2000/svg">
-    <rect x="0" y="0" width="7" height="55" fill="darkcyan" />
+  <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="5" width="7" height="45" fill="darkcyan" />
     <pattern id="checker" width="10" height="10" patternUnits="userSpaceOnUse">
-      <rect width="10" height="10" fill="greenyellow" />
+      <rect width="10" height="10" fill="#88d185" />
       <rect width="5" height="5" fill="black" />
       <rect x="5" y="5" width="5" height="5" fill="black" />
     </pattern>
-    <path d="M8 2 L55 15 L8 30 Z" fill="url(#checker)" stroke="chartreuse" stroke-width="2" />
+    <path d="M8 7 L50 20 L8 30 Z" fill="url(#checker)" stroke="chartreuse" stroke-width="2" />
   </svg>

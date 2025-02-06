@@ -1,5 +1,5 @@
   <svg width="50" height="50" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
     <!-- "play" icon -->
-    <polygon points="0,0 40,25 0,50" fill="greenyellow" />
-    <text x="32" y="50" font-size="28" font-family="Arial" font-weight="bold" fill="greenyellow">N</text>
+    <polygon points="0,5 40,25 0,45" fill="#88d185" />
+    <text x="32" y="50" font-size="28" font-family="Arial" font-weight="bold" fill="#88d185">N</text>
   </svg>
