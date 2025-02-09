@@ -438,7 +438,7 @@ class RegistersReference(VariablesReference):
             value = frame.read_register(reg)
             if can_var_ref(value):
                 ref = create_eager_var_ref(reg.name, value, None)
-                res.append(ref.ui_data(format))
+                res.append(ref.ui_data())
             else:
                 if value.type.code == gdb.TYPE_CODE_INT and format is not None and format["hex"]:
                     formattedValue = value.format_string(format="x")

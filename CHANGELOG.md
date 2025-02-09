@@ -1,6 +1,6 @@
 # MIDAS - Debug Adapter Extension for VSCode
 
-## Release 0.24.0
+## Release 0.24.N
 
 ### Features
 
@@ -31,6 +31,7 @@
 - Fixed hex-formatting bug for register values with the sign bit set.
 - Greatly improved stability and reliability of disassembly outputs
 - Fixed bug in InstructionBreakpoint requests
+- Fixed bug when register contents did not display
 
 ## Release 0.22.0
 
