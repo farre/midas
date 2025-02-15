@@ -40,6 +40,7 @@ const ContextKeys = {
   Running: "midas.Running",
   DebugType: "midas.debugType",
   RRSession: "midas.rrSession",
+  IsReplay: "midas.is-replay",
   NativeMode: "midas.native",
 };
 

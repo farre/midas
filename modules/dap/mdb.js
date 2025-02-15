@@ -4,6 +4,7 @@ const { MidasCommunicationChannel, UnixSocketCommunication } = require("./dap-ut
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
 const { getAPI } = require("../utils/utils");
+const { MdbSpawnConfig } = require("../spawn");
 
 class MdbSocket extends MidasCommunicationChannel {
   /** @type {import("child_process").ChildProcessWithoutNullStreams} */
@@ -88,19 +89,27 @@ class MdbSession extends MidasSessionBase {
       sessionType: "midas-native",
       singleThreadControl: true,
       nativeMode: true,
-      rrSession: false,
+      isReplay: this.getConfiguration().isReplay,
     });
   }
 
   async initializeRequest(response, args) {
+    args["RRSession"] = this.getConfiguration().isReplay;
     await this.dbg.initialize();
-    args["RRSession"] = this.spawnConfig?.isBeingRecorded ?? false;
     super.initializeRequest(response, args);
   }
 
   attachRequest(response, args, request) {
     const attachArgs = args.attachArguments;
     this.dbg.sendRequest(request, attachArgs);
+  }
+
+  /** @returns { MdbSpawnConfig } */
+  getConfiguration() {
+    if(this.spawnConfig instanceof MdbSpawnConfig ) {
+      return this.spawnConfig;
+    }
+    throw new Error(`Invalid configuration for MdbSession`);
   }
 }
 

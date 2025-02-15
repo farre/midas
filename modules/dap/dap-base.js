@@ -164,13 +164,13 @@ class MidasSessionBase extends DebugSession {
    * @param { "midas-gdb" | "midas-rr" | "midas-native" } configUI.sessionType - One of the midas sessions
    * @param { boolean } configUI.singleThreadControl - Configure UI for single thread control
    * @param { boolean | undefined } [configUI.nativeMode] - Configure the UI for native debugger mode
-   * @param { boolean | undefined } [configUI.rrSession] - Make RR UI widgets available
+   * @param { boolean | undefined } [configUI.isReplay] - Make RR UI widgets available
    */
-  configureUserInterfaceFor({ sessionType, singleThreadControl, nativeMode, rrSession }) {
+  configureUserInterfaceFor({ sessionType, singleThreadControl, nativeMode, isReplay }) {
     vs.commands.executeCommand("setContext", ContextKeys.DebugType, sessionType);
     vs.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, !singleThreadControl);
     vs.commands.executeCommand("setContext", ContextKeys.NativeMode, nativeMode ?? false);
-    vs.commands.executeCommand("setContext", ContextKeys.RRSession, rrSession ?? false);
+    vs.commands.executeCommand("setContext", ContextKeys.IsReplay, isReplay ?? false);
   }
 
   // If this is a child session, it holds no handle to a process. It's just a connection to a socket

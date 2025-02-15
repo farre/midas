@@ -544,7 +544,7 @@ function InitializeGlobalApi(ctx) {
 }
 
 function RestoreContextDefaults() {
-  vscode.commands.executeCommand("setContext", ContextKeys.RRSession, false);
+  vscode.commands.executeCommand("setContext", ContextKeys.IsReplay, false);
   vscode.commands.executeCommand("setContext", ContextKeys.NativeMode, false);
   vscode.commands.executeCommand("setContext", ContextKeys.NoSingleThreadControl, true);
 }

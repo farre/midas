@@ -133,6 +133,7 @@ class MdbSpawnConfig {
     this.options = config.dbgArgs ?? [];
     this.debug = config.debug;
     this.#mdbRecordedUnderRr = config?.RRSession;
+    this.isReplay = config?.attachArgs?.type == "rr";
   }
 
   get isBeingRecorded() {
