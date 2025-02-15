@@ -56,14 +56,14 @@ class GdbDAPSession extends MidasSessionBase {
         sessionType: "midas-rr",
         singleThreadControl: !spawnConfig.noSingleThreadControl,
         nativeMode: false,
-        rrSession: true,
+        isReplay: true,
       });
     } else {
       super.configureUserInterfaceFor({
         sessionType: "midas-gdb",
         singleThreadControl: !spawnConfig.noSingleThreadControl,
         nativeMode: false,
-        rrSession: false,
+        isReplay: false,
       });
     }
   }

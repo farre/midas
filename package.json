@@ -52,7 +52,7 @@
           "id": "midas.checkpoints-ui",
           "name": "Checkpoints",
           "contextualTitle": "RR Checkpoints",
-          "when": "midas.rrSession == true"
+          "when": "midas.is-replay == true"
         }
       ]
     },
@@ -107,7 +107,7 @@
         "title": "Reverse finish",
         "shortTitle": "Reverse finish",
         "icon": "$(debug-step-out)",
-        "enablement": "midas.rrSession == true && midas.Running == false"
+        "enablement": "midas.is-replay == true && midas.Running == false"
       },
       {
         "command": "midas.hot-reload-scripts",
@@ -185,17 +185,17 @@
         {
           "command": "midas.reverse-finish",
           "group": "midas",
-          "when": "midas.rrSession == true"
+          "when": "midas.is-replay == true"
         },
         {
           "command": "midas.set-checkpoint",
           "group": "midas",
-          "when": "midas.rrSession == true"
+          "when": "midas.is-replay == true"
         },
         {
           "command": "midas.run-to-event",
           "group": "midas",
-          "when": "midas.rrSession == true"
+          "when": "midas.is-replay == true"
         }
       ],
       "debug/callstack/context": [
@@ -789,7 +789,7 @@
           },
           "attach": {
             "required": [
-              "targetVariant"
+              "attachArgs"
             ],
             "properties": {
               "ignoreStandardLibrary": {
@@ -810,56 +810,31 @@
                 "description": "Path to the MDB executable",
                 "default": "mdb"
               },
-              "targetVariant": {
+              "attachArgs": {
                 "type": "object",
-                "description": "Configuration of the kind of target we are to attach to.",
+                "description": "Arguments that specify how the debug adapter should instruct MDB to attach",
+                "default": {},
                 "properties": {
-                  "remote": {
-                    "required": [
-                      "host"
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "ptrace",
+                      "gdbremote",
+                      "rr"
                     ],
-                    "type": "object",
-                    "description": "Remote stub that implements GDB Remote protocol to attach to",
-                    "properties": {
-                      "host": {
-                        "type": "string",
-                        "description": "Remote host address and port to attach to",
-                        "default": "127.0.0.1:12345"
-                      }
-                    }
+                    "description": "Configure what target we're attaching to, using ptrace or if it's a remote target like GdbServer/RR"
                   },
-                  "rr": {
-                    "type": "object",
-                    "required": [
-                      "host"
-                    ],
-                    "description": "Target is an RR instance",
-                    "properties": {
-                      "host": {
-                        "type": "string",
-                        "description": "Remote host address and port to attach to",
-                        "default": "127.0.0.1:12345"
-                      },
-                      "launch": {
-                        "type": "boolean",
-                        "description": "Let Midas handle the spawning of RR?",
-                        "default": true
-                      }
-                    }
+                  "pid": {
+                    "type": "number",
+                    "description": "This field is only relevant for the 'ptrace' attach type. Is ignored for any other type"
                   },
-                  "native": {
-                    "type": "object",
-                    "required": [
-                      "pid"
-                    ],
-                    "description": "Attach to a running process on this system",
-                    "properties": {
-                      "pid": {
-                        "type": "number",
-                        "description": "The running process' PID that we should attach to",
-                        "default": 12345
-                      }
-                    }
+                  "host": {
+                    "type": "string",
+                    "description": "The remote target's host. Ignored if type of attach is 'ptrace'"
+                  },
+                  "port": {
+                    "type": "number",
+                    "description": "The remote target's port. Ignored if type of attach is 'ptrace'"
                   }
                 }
               },

@@ -29,44 +29,6 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
     return "midas-native";
   }
 
-  prepareAttachArgs(config) {
-    const variants = [config.targetVariant?.rr, config.targetVariant?.remote, config.targetVariant?.native];
-    if (variants.filter((v) => v != null).length != 1) {
-      throw new Error(
-        `targetVariant on attach configuration must be one of either 'rr', 'remote' or 'native'. You have ${variants.length} set`,
-      );
-    }
-
-    if (config.targetVariant?.rr) {
-      const [host, port] = config.targetVariant.rr.host.split(":");
-      const portNumber = Number.parseInt(port);
-      config.RRSession = true;
-      return {
-        type: "rr",
-        host: host,
-        port: portNumber,
-        noSingleThreadControl: true,
-      };
-    }
-
-    if (config.targetVariant?.remote) {
-      const [host, port] = config.targetVariant.rr.host.split(":");
-      const portNumber = Number.parseInt(port);
-      config.RRSession = false;
-      return {
-        type: "gdbremote",
-        host: host,
-        port: portNumber,
-        noSingleThreadControl: true,
-      };
-    }
-
-    if (config.targetVariant?.native) {
-      config.RRSession = false;
-      throw new Error(`Attach for ptrace not yet implemented`);
-    }
-  }
-
   async resolveDebugConfiguration(folder, config, token) {
     return config;
   }
@@ -100,11 +62,11 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
         }
         return null;
       }
-      if (config.request == "attach" && config["targetVariant"] == null) {
-        throw new Error("targetVariant field is missing. This field is required to determine target to attach to.");
+      if (config.request == "attach" && config.attachArgs == null) {
+        throw new Error("attachArgs field is missing. This field is required to determine target to attach to.");
       }
       if (config.request == "attach") {
-        config.attachArguments = this.prepareAttachArgs(config);
+        config.attachArguments = config.attachArgs;
       }
 
       return config;
