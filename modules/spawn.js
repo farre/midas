@@ -134,10 +134,19 @@ class MdbSpawnConfig {
     this.debug = config.debug;
     this.#mdbRecordedUnderRr = config?.RRSession;
     this.isReplay = config?.attachArgs?.type == "rr";
+    this.prettyPrinterPath = config?.prettyPrinterPath;
+    if (config.childConfiguration) {
+      this.processId = config.childConfiguration.processId;
+      this.autoAttached = true;
+    }
   }
 
   get isBeingRecorded() {
     return this.#mdbRecordedUnderRr;
+  }
+
+  get attached() {
+    return this.autoAttached ?? false;
   }
 }
 

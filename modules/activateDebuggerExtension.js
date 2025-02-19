@@ -189,7 +189,7 @@ class UIDebugSession {
 
   /** @returns { Thenable<boolean> } */
   SelectedThreadInUI(id) {
-    return this.#session.customRequest(CustomRequests.OnSelectedThread, { id: id });
+    return this.#session.customRequest(CustomRequestsUI.OnSelectedThread, { id: id });
   }
 
   /** @param {string} sessionId @returns { boolean } */
@@ -198,7 +198,7 @@ class UIDebugSession {
   }
 
   static SelectedThreadInUi(session, id) {
-    return session.customRequest(CustomRequests.OnSelectedThread, { id: id });
+    return session.customRequest(CustomRequestsUI.OnSelectedThread, { id: id });
   }
 }
 
@@ -594,12 +594,6 @@ async function activateExtension(context) {
 
   vscode.debug.onDidStartDebugSession((session) => {
     api.AddDebugSession(session);
-  });
-
-  vscode.debug.onDidChangeActiveStackItem((uiElement) => {
-    if (uiElement.threadId) {
-      UIDebugSession.SelectedThreadInUi(uiElement.session, uiElement.threadId);
-    }
   });
 
   vscode.debug.onDidTerminateDebugSession((session) => {
