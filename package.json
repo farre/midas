@@ -820,7 +820,8 @@
                     "enum": [
                       "ptrace",
                       "gdbremote",
-                      "rr"
+                      "rr",
+                      "auto"
                     ],
                     "description": "Configure what target we're attaching to, using ptrace or if it's a remote target like GdbServer/RR"
                   },
