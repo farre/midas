@@ -1,9 +1,8 @@
 const vscode = require("vscode");
 const { ConfigurationProviderInitializer, InitExceptionTypes } = require("./initializer");
 const { showErrorPopup, getAPI } = require("../utils/utils");
-const { ContextKeys } = require("../constants");
 const { MdbSpawnConfig } = require("../spawn");
-const { MdbSession, MdbChildSession } = require("../dap/mdb");
+const { MidasSessionController, MdbProcess, MidasNativeSession } = require("../dap/mdb");
 const fs = require("fs");
 const { EventEmitter } = require("events");
 
@@ -72,15 +71,20 @@ class MdbConfigurationProvider extends ConfigurationProviderInitializer {
       return config;
     } else {
       // Assume MDB sends well-formed and sane config to itself.
-      if (config.childConfiguration == null && config.childConfiguration?.path == null) {
+      if (!config.childConfiguration) {
         throw new Error(`Child session could not spawn: No path was provided in the configuration`);
       }
+      config.attachArguments = {
+        type: "auto",
+        processId: config.childConfiguration.processId
+      };
       return config;
     }
   }
 }
 
 class MdbDebugAdapterFactory {
+  /** @type {MidasSessionController} */
   static RootSession = null;
   #cp_ui;
   constructor(checkpointsUI) {
@@ -91,19 +95,24 @@ class MdbDebugAdapterFactory {
    * @returns ProviderResult<vscode.DebugAdapterDescriptor>
    */
   async createDebugAdapterDescriptor(session) {
+    const config = session.configuration;
+    let cleanUp = new EventEmitter();
+    cleanUp.on("shutdown", () => {
+      MdbDebugAdapterFactory.RootSession = null;
+    });
     if (MdbDebugAdapterFactory.RootSession == null) {
-      const config = session.configuration;
-      let cleanUp = new EventEmitter();
-      cleanUp.on("shutdown", () => {
-        MdbDebugAdapterFactory.RootSession = null;
-      });
-      const mdb = new MdbSession(this.spawnConfig(config), null, this.#cp_ui, cleanUp);
-      MdbDebugAdapterFactory.RootSession = mdb;
-      return new vscode.DebugAdapterInlineImplementation(MdbDebugAdapterFactory.RootSession);
-    } else {
-      const mdb = new MdbChildSession(session.configuration.childConfiguration);
-      return new vscode.DebugAdapterInlineImplementation(mdb);
+      MdbDebugAdapterFactory.RootSession = new MidasSessionController(
+        new MdbProcess(this.spawnConfig(config)),
+        this.spawnConfig(config),
+        null,
+        this.#cp_ui,
+        cleanUp,
+      );
     }
+
+    return new vscode.DebugAdapterInlineImplementation(
+      new MidasNativeSession(MdbDebugAdapterFactory.RootSession, this.spawnConfig(config)),
+    );
   }
 
   spawnConfig(config) {

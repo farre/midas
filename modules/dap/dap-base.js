@@ -7,9 +7,10 @@ const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = 
 
 /**
  *
- * @typedef { Object } ProtocolMessage
+ * @typedef { Object } MidasExtendedProtocolMessage
  * @property { number } seq
  * @property { 'request' | 'response' | 'event' | string } type
+ * @property { number } processId
  *
  * @typedef ProtocolResponse
  * @type { Object }
@@ -24,8 +25,8 @@ const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = 
  * @property { string } event
  * @property { any? } body
  *
- * @typedef { ProtocolMessage & ProtocolResponse } Response
- * @typedef { ProtocolMessage & ProtocolEvent } Event
+ * @typedef { MidasExtendedProtocolMessage & ProtocolResponse } Response
+ * @typedef { MidasExtendedProtocolMessage & ProtocolEvent } Event
  */
 
 /**
@@ -55,7 +56,7 @@ class MidasSessionBase extends DebugSession {
   #printer;
   /**
    * @param { new (options) => DebuggerProcessBase } DebuggerProcessConstructor
-   * @param { LaunchSpawnConfig | AttachSpawnConfig | RRSpawnConfig | MdbSpawnConfig } spawnConfig
+   * @param { LaunchSpawnConfig | AttachSpawnConfig | RRSpawnConfig } spawnConfig
    * @param { * } terminal
    * @param { * } checkpointsUI
    * @param { {response: (res: Response) => void, events: (evt: Event) => void } | null } callbacks
@@ -545,7 +546,7 @@ class MidasSessionBase extends DebugSession {
         break;
       }
 
-      case CustomRequests.OnSelectedThread: {
+      case CustomRequestsUI.OnSelectedThread: {
         return this.OnSelectedThread(request, args.id);
       }
       default:

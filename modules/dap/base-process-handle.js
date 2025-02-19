@@ -109,5 +109,5 @@ class DebuggerProcessBase {
 }
 
 module.exports = {
-  DebuggerProcessBase,
+  DebuggerProcessBase
 };
