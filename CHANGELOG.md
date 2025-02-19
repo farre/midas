@@ -32,6 +32,7 @@
 - Greatly improved stability and reliability of disassembly outputs
 - Fixed bug in InstructionBreakpoint requests
 - Fixed bug when register contents did not display
+- Removed selected thread from UI. It behaves out of the box in a way I'm not wanting to deal with right now.
 
 ## Release 0.22.0
 
