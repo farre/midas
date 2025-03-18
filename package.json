@@ -65,6 +65,9 @@
       },
       {
         "language": "rust"
+      },
+      {
+        "language": "go"
       }
     ],
     "commands": [
@@ -225,7 +228,13 @@
           "c",
           "cpp",
           "cuda-cpp",
-          "rust"
+          "rust",
+          {
+            "id": "go",
+            "extensions": [
+              ".go"
+            ]
+          }
         ],
         "configurationAttributes": {
           "launch": {
@@ -512,7 +521,13 @@
           "c",
           "cpp",
           "cuda-cpp",
-          "rust"
+          "rust",
+          {
+            "id": "go",
+            "extensions": [
+              ".go"
+            ]
+					}
         ],
         "configurationAttributes": {
           "attach": {
