@@ -17,6 +17,7 @@
 - Added new pretty printer features.
 - Support for using the canonical experimental debugger `mdb`
 - Added prettier to dev dependencies. use `npm run format` to format
+- Added `go` identifier to `package.json`
 
 ### Fixes
 
