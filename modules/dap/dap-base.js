@@ -89,6 +89,8 @@ class MidasSessionBase extends DebugSession {
         if (!res.success) {
           const err = (res.body?.error ?? { stacktrace: "No stack trace info" }).stacktrace;
           console.log(`[request error]: ${res.command} failed\n${err}`);
+          this.sendErrorResponse(res, { id: 1, format: `Communications error: ${res.message ?? "Unknown"}`, showUser: true });
+          return;
         }
         switch (res.command) {
           case CustomRequests.DeleteCheckpoint:

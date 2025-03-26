@@ -89,23 +89,36 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
       parameter: await setServerAddress(),
     };
 
-    if (config.traceWorkspace && !config.replay.pid) {
-      config = await tracePicked(config.rrPath, config.traceWorkspace).then((replay_parameters) => {
-        if (replay_parameters) {
-          config.replay.parameters = replay_parameters;
-          return config;
-        } else {
-          throw new Error("You did not pick a trace.");
-        }
-      });
-    } else if (!config.traceWorkspace && !config.replay) {
-      const options = {
+    const pickTrace = async (traces) => {
+      const result = await vscode.window.showQuickPick(traces, {
         canPickMany: false,
         ignoreFocusOut: true,
-        title: "Select process to debug",
-      };
+        title: "Pick trace to configure for replay",
+      });
+
+      if(!result) {
+        throw new Error("No trace picked");
+      }
+      return result;
+    };
+
+    if (config.traceWorkspace) {
+      try {
+        const replay_parameters = await getTraces(config.rrPath, config.traceWorkspace)
+          .then((traces) => pickTrace(traces))
+          .then((traceDir) => tracePicked(config.rrPath, `${config.traceWorkspace}/${traceDir}`));
+        config.program = parseProgram(replay_parameters.cmd);
+        config.replay = replay_parameters;
+      } catch(ex) {
+        vscode.window.showErrorMessage(
+          `Could not configure trace to replay using traceWorkspace ${config.traceWorkspace}. Exception message: ${ex}`,
+          { modal: true },
+        );
+        return null;
+      }
+    } else {
       const traces = await getTraces(config.rrPath);
-      const ws = await vscode.window.showQuickPick(traces, options);
+      const ws = await pickTrace(traces);
       const replay_parameters = await tracePicked(config.rrPath, ws);
       if (replay_parameters) {
         try {
@@ -114,7 +127,6 @@ class RRConfigurationProvider extends ConfigurationProviderInitializer {
           throw new Error("Could not parse binary");
         }
         config.replay = replay_parameters;
-        return config;
       } else {
         throw new Error("You did not pick a trace.");
       }
@@ -183,7 +195,7 @@ class RRDebugAdapterFactory {
   async createDebugAdapterDescriptor(session) {
     const config = session.configuration;
     const pid = config.replay.pid;
-    const traceWorkspace = config.replay.traceWorkspace;
+    const traceDirectory = config.replay.traceDirectory;
     const { address, port } = getAddrSetting(config);
     const rrInitData = await generateGdbInit(config.rrPath);
     const rrInitFilePath = getExtensionPathOf("rrinit");
@@ -191,13 +203,13 @@ class RRDebugAdapterFactory {
     let cmd_str = null;
     const rrOptions = (config.rrOptions ?? []).join(" ");
     if (config.replay.noexec) {
-      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${rrOptions} ${traceWorkspace}`;
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -f ${pid} -k ${rrOptions} ${traceDirectory}`;
     } else {
-      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${rrOptions} ${traceWorkspace}`;
+      cmd_str = `${config.rrPath} replay -h ${address} -s ${port} -p ${pid} -k ${rrOptions} ${traceDirectory}`;
     }
 
     if (config.externalConsole) {
-      const rrArgs = { path: config.rrPath, address, port, pid, traceWorkspace };
+      const rrArgs = { path: config.rrPath, address, port, pid, traceWorkspace: traceDirectory };
       try {
         let terminalInterface = await spawnExternalRrConsole(
           { terminal: config.externalConsole.path, closeOnExit: config.externalConsole.closeTerminalOnEndOfSession },

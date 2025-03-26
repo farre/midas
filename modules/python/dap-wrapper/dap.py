@@ -70,7 +70,9 @@ def iterate_options(opts):
     return
 
 def loadRRConfiguration(path):
+    gdb.execute("set non-stop off")
     gdb.execute(f"source {path}")
+
 
 # All requests use post_event; so here we _must_ use gdb.execute, so that we don't create weird out-of-order scenarios.
 class Session:

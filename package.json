@@ -586,7 +586,7 @@
               },
               "traceWorkspace": {
                 "type": "string",
-                "description": "trace workspace. Can be found running the rr command `rr ls`. If not set, user will be prompted for."
+                "description": "Traces workspace. User can provide a root directory for where traces are stored (an overload for _RR_TRACE_DIR). If the user provides this, Midas will let users pick from the traces found there."
               },
               "setupCommands": {
                 "type": "array",

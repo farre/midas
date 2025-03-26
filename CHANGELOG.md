@@ -4,6 +4,7 @@
 
 ### Features
 
+- Changed `traceWorkspace` configuration property. It now specifies a "trace workspace" directory, i.e. a directory that contains trace directories (so an overload for `$_RR_TRACE_DIR`)
 - Added `ignoreStandardLibrary` to launch and attach configurations. It will attempt at ignoring most c++ standard library files while stepping. It's a best approximation approach. Defaults to `true`.
 - Extended support for the debugger backend "midas" which henceforth will be known as "midas-native"
 - Added context menu support for call stack, to resume/pause all threads
@@ -34,6 +35,8 @@
 - Fixed bug in InstructionBreakpoint requests
 - Fixed bug when register contents did not display
 - Removed selected thread from UI. It behaves out of the box in a way I'm not wanting to deal with right now.
+- Fixed DAP interpreter bug where error in the DAP did not propagate (and therefore wasn't displayed) to the frontend.
+- Always make sure `non-stop` is set to off for rr sessions.
 
 ## Release 0.22.0
 

@@ -5,11 +5,13 @@ const { Regexes } = require("../constants");
 
 /**
  * @param { string } rr - Path to rr
+ * @param { string | "" } workspaceDir - Workspace directory containing N traces
  * @returns { Promise<string[]> }
  */
-async function getTraces(rr) {
+async function getTraces(rr, workspaceDir = "") {
   return new Promise((resolve, reject) => {
-    subprocess.exec(`${rr} ls -t -r`, (err, stdout, stderr) => {
+    const command = `${rr} ls ${workspaceDir} -t -r`;
+    subprocess.exec(command, (err, stdout, stderr) => {
       if (err) {
         reject(stderr);
       } else {
@@ -117,8 +119,8 @@ function parseProgram(rr_ps_output_cmd) {
   return rr_ps_output_cmd.split(" ")[0];
 }
 
-const tracePicked = async (rr, traceWorkspace) => {
-  if (traceWorkspace == null || traceWorkspace == undefined) {
+const tracePicked = async (rr, traceDirectory) => {
+  if (traceDirectory == null || traceDirectory == undefined) {
     throw new Error("You did not pick a trace");
   }
   const options = {
@@ -126,11 +128,11 @@ const tracePicked = async (rr, traceWorkspace) => {
     ignoreFocusOut: true,
     title: "Select process to debug",
   };
-  return await vscode.window.showQuickPick(getTraceInfo(rr, traceWorkspace), options).then((selection) => {
+  return await vscode.window.showQuickPick(getTraceInfo(rr, traceDirectory), options).then((selection) => {
     if (selection) {
       const replay_parameters = {
         pid: selection.value,
-        traceWorkspace: traceWorkspace,
+        traceDirectory,
         cmd: selection.binary,
         noexec: selection.noexec,
       };
