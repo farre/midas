@@ -1,4 +1,5 @@
 import gdb
+import gdb.types
 import traceback
 from io import StringIO
 from os import path, unlink
@@ -711,14 +712,11 @@ def next(args):
 @request("pause", Args(["threadId"]))
 def pause(args):
     global singleThreadControl
-    threadId = args.get("threadId")
+    global logger
+    threadId = args["threadId"]
     cmd = None
     if threadId is not None:
-        try:
-            gdb.select_thread(threadId)
-        except:
-            pass
-        cmd = "interrupt"
+        cmd = f"thread apply {threadId} interrupt"
     else:
         cmd = "interrupt -a"
 

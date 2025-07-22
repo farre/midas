@@ -1,4 +1,6 @@
 import gdb
+import gdb.types
+
 from os import path
 import sys
 

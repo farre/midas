@@ -37,6 +37,8 @@
 - Removed selected thread from UI. It behaves out of the box in a way I'm not wanting to deal with right now.
 - Fixed DAP interpreter bug where error in the DAP did not propagate (and therefore wasn't displayed) to the frontend.
 - Always make sure `non-stop` is set to off for rr sessions.
+- Fixed "not imported module gdb.types" bug
+- Fixed pause issues in single-thread control mode, where pausing of individual threads did not work.
 
 ## Release 0.22.0
 
