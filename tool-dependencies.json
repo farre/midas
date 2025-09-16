@@ -42,6 +42,20 @@
       "libcapnp-dev",
       "zlib1g-dev",
       "libzstd-dev"
+    ],
+    "pacman": [
+      "ccache",
+      "cmake",
+      "make",
+      "gcc",
+      "gdb",
+      "lldb",
+      "glibc",
+      "python-pexpect",
+      "ninja",
+      "capnproto",
+      "zlib",
+      "zstd"
     ]
   },
   "gdb": {
