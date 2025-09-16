@@ -34,11 +34,13 @@ class ToolDependencies {
   #name;
   #apt;
   #dnf;
+  #pacman;
 
   constructor(name, deps) {
     this.#name = name;
     this.#apt = deps["apt"];
     this.#dnf = deps["dnf"];
+    this.#pacman = deps["pacman"];
   }
 
   async config() {
@@ -76,6 +78,17 @@ class ToolDependencies {
         name: "dnf",
         repoType: getExtensionPathOf("modules/python/dnf_manager.py"),
         packages: this.#dnf,
+      };
+    }
+
+    if (!strEmpty(await which("pacman"))) {
+      if (!(await verifyPackageManagerImport(["-c", `import pyalpm`]))) {
+        throw new Error(`[${this.#name}][Python Error]: Could not import ALPM module on a verified pacman system.`);
+      }
+      return {
+        name: "pacman",
+        repoType: getExtensionPathOf("modules/python/pacman_manager.py"),
+        packages: this.#pacman,
       };
     }
     throw new Error(`[${this.#name}]: Could not resolve what package manager is used on your system`);
