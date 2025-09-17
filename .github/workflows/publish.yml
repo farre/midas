@@ -38,8 +38,7 @@ jobs:
   publish:
     name: Publish Github Action
     needs:
-      - build-lint-test
-      - coverage
+      - build
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 10
