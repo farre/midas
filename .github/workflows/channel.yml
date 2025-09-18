@@ -3,7 +3,7 @@ name: Channel
 on: 
   workflow_call:
     inputs:
-      config-path:
+      file:
         required: true
         type: string
 
@@ -21,7 +21,7 @@ jobs:
         uses: sergeysova/jq-action@v2
         id: version
         with:
-          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' ${{ inputs.config-path }}
+          cmd: echo ${{ inputs.file }} | jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")'
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
