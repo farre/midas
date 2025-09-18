@@ -50,14 +50,17 @@ jobs:
         with:
           cmd: jq '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")'
       - name: Major version
+        uses: sergeysova/jq-action@v2
         id: major
         with:
           cmd: 'echo ${{ steps.channel.outputs.value }} | jq .major'
       - name: Minor version
+        uses: sergeysova/jq-action@v2
         id: minor
         with:
           cmd: 'echo ${{ steps.channel.outputs.value }} | jq .minor'
       - name: Dot version
+        uses: sergeysova/jq-action@v2
         id: dot
         with:
           cmd: 'echo ${{ steps.channel.outputs.value }} | jq .dot'
