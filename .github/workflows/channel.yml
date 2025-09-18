@@ -10,11 +10,16 @@ jobs:
     steps:
       - name: Checkout Source
         uses: actions/checkout@v2
+      - name: Raw Channel Version
+        uses: sergeysova/jq-action@v2
+        id: rawchannel
+        with:
+          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' package.json
       - name: Channel Version
         uses: sergeysova/jq-action@v2
         id: channel
         with:
-          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' package.json
+          cmd: echo '${{ steps.rawchannel.outputs.value }}' | jq '{major: .major | tonumber, minor: .minor | tonumber, dot: .dot | tonumber}'
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
