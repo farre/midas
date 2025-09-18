@@ -14,7 +14,7 @@ jobs:
         uses: sergeysova/jq-action@v2
         id: channel
         with:
-          cmd: jq '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")'
+          cmd: jq '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)") package.json'
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
