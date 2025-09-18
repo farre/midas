@@ -1,102 +1,132 @@
-name: Publish
+name: Test
 
 on: workflow_dispatch
 
 jobs:
-  build:
-    name: Node ${{ matrix.node }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    strategy:
-      fail-fast: true
-      matrix:
-        os:
-          - ubuntu-latest
-        node:
-          - 16
-    outputs:
-      vsixPath: ${{ steps.packageExtension.outputs.vsixPath }}
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v2
-      - name: Install Node ${{ matrix.node }}
-        uses: actions/setup-node@v1
-        with:
-          node-version: ${{ matrix.node }}
-      - name: Install Dependencies
-        run: npm ci
-      - name: Package Extension
-        id: packageExtension
-        uses: HaaLeo/publish-vscode-extension@v1
-        with:
-          pat: stub
-          dryRun: true
-      - name: Upload Extension Package as Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.os }}
-          path: ${{ steps.packageExtension.outputs.vsixPath }}
-
-  channel:
-    name: Release Channel
+  check-version:
+    name: Check if version released
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    outputs:
+      pre-release: ${{ steps.pre-release.outputs.value }}
+      version: ${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}
+      tag-version: v.${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}
+      has-tag: ${{ steps.check-tag.outputs.exists }}
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v5
       - name: Channel Version
         uses: sergeysova/jq-action@v2
-        id: channel
+        id: version
         with:
-          cmd: jq '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")'
+          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' package.json
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
         with:
-          cmd: 'echo ${{ steps.channel.outputs.value }} | jq .major'
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.major | tonumber'
       - name: Minor version
         uses: sergeysova/jq-action@v2
         id: minor
         with:
-          cmd: 'echo ${{ steps.channel.outputs.value }} | jq .minor'
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.minor | tonumber'
       - name: Dot version
         uses: sergeysova/jq-action@v2
         id: dot
         with:
-          cmd: 'echo ${{ steps.channel.outputs.value }} | jq .dot'
-      - name: Show Channel Version
-        run: 'echo "channel ${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}"'
-          
-    
-
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.dot | tonumber'
+      - name: Pre-Release
+        uses: sergeysova/jq-action@v2
+        id: pre-release
+        with:
+          cmd: echo '${{ steps.minor.outputs.value }}' | jq '. % 2 | . != 0'
+      - name: Tag
+        id: tag
+        run: echo "v.${{ steps.version.outputs.version }}"
+      - name: Check tag
+        uses: mukunku/tag-exists-action@v1.6.0
+        id: check-tag
+        with:
+          tag: "v.${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}"
+      - name: Check minor tag
+        uses: mukunku/tag-exists-action@v1.6.0
+        id: check-minor-tag
+        with:
+          tag: "v.${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.0"
+      - name: Show Channel Information
+        run: echo pre = ${{ steps.pre-release.outputs.value }}, dot = ${{ steps.check-tag.outputs.exists }}, minor = ${{ steps.check-minor-tag.outputs.exists }}
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    needs: check-version
+    if: ${{ needs.check-version.outputs.has-tag != 'true' }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: true
+    outputs:
+      vsixPath: ${{ steps.packageExtension.outputs.vsixPath }}
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v5
+      - name: Install Node 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - name: Install Dependencies
+        run: npm ci
+      - name: Package Extension
+        id: packageExtension
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: stub
+          dryRun: true
+          yarn: true
+      - name: Upload Extension Package as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: midas
+          path: ${{ steps.packageExtension.outputs.vsixPath }}
   publish:
     name: Publish Github Action
     needs:
       - build
-    if: github.event_name == 'release'
+      - check-version
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v2
-      - name: Install Node v16
-        uses: actions/setup-node@v1
+        uses: actions/checkout@v5
+      - name: Install Node 2-
+        uses: actions/setup-node@v5
         with:
-          node-version: 16
+          node-version: 20
       - name: Install Dependencies
         run: npm ci
       - name: Download Build Artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v5
         with:
-          name: ubuntu-latest
+          name: midas
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            # Summary
+            See [changelog](https://github.com/farre/midas/blob/main/release_notes/${{needs.check-version.outputs.version }}.md
+          name: Release of ${{ needs.check-version.outputs.version }}
+          tag_name: ${{ needs.check-version.outputs.tag-version }}
+          fail_on_unmatched_files: true
+          files: ${{ needs.build.outputs.vsixPath }}
+          prerelease: ${{ needs.check-version.outputs.pre-release }}
       - name: Publish to Visual Studio Marketplace
-        uses: HaaLeo/publish-vscode-extension@v1
+        uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
-          extensionFile: ${{ needs.build-lint-test.outputs.vsixPath }}
+          extensionFile: ${{ needs.build.outputs.vsixPath }}
           registryUrl: https://marketplace.visualstudio.com
+          preRelease: ${{ needs.check-version.outputs.pre-release }}
       - name: Publish to Open VSX Registry
-        uses: HaaLeo/publish-vscode-extension@v1
+        uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
-          extensionFile: ${{ needs.build-lint-test.outputs.vsixPath }}
+          extensionFile: ${{ needs.build.outputs.vsixPath }}
+          preRelease: ${{ needs.check-version.outputs.pre-release }}
