@@ -1,0 +1,21 @@
+name: Test
+
+on: workflow_dispatch
+
+jobs:
+  checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v2   
+  channel-info:
+    uses: farre/midas/.github/workflows/channel.yml@workflow
+    needs: checkout
+    with:
+      config-path: package.json
+  show:
+    runs-on: ubuntu-latest
+    needs: channel-info
+    steps:
+      - name: Show Channel Information
+        run: echo ${{ needs.channel-info.pre-release }} ${{ needs.channel-info.major }}.${{ needs.channel-info.mino }}.${{ needs.channel-info.dot }}
