@@ -19,7 +19,7 @@ jobs:
         uses: sergeysova/jq-action@v2
         id: channel
         with:
-          cmd: echo '${{ steps.rawchannel.outputs.value }}' | jq '{major\\: .major | tonumber, minor\\: .minor | tonumber, dot\\: .dot | tonumber}'
+          cmd: "echo '${{ steps.rawchannel.outputs.value }}' | jq '{major: .major | tonumber, minor: .minor | tonumber, dot: .dot | tonumber}'"
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
