@@ -1,34 +1,45 @@
 name: Channel
 
-on: workflow_dispatch
+on: 
+  workflow_call:
+    inputs:
+      config-path:
+        required: true
+        type: string
 
 jobs:
   channel:
     name: Release Channel
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    outputs:
+      major: ${{ steps.major.outputs.value }}
+      minor: ${{ steps.minor.outputs.value }}
+      dot: ${{ steps.dot.outputs.value }}
+      pre-release: ${{ steps.pre-release.outputs.value }}
     steps:
-      - name: Checkout Source
-        uses: actions/checkout@v2
       - name: Channel Version
         uses: sergeysova/jq-action@v2
-        id: channel
+        id: version
         with:
-          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' package.json
+          cmd: jq -c '.version | capture("(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<dot>[0-9]+)")' ${{ inputs.config-path }}
       - name: Major version
         uses: sergeysova/jq-action@v2
         id: major
         with:
-          cmd: echo '${{ steps.channel.outputs.value }}' | jq '.major | tonumber'
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.major | tonumber'
       - name: Minor version
         uses: sergeysova/jq-action@v2
         id: minor
         with:
-          cmd: echo '${{ steps.channel.outputs.value }}' | jq '.minor | tonumber'
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.minor | tonumber'
       - name: Dot version
         uses: sergeysova/jq-action@v2
         id: dot
         with:
-          cmd: echo '${{ steps.channel.outputs.value }}' | jq '.dot | tonumber'
-      - name: Show Channel Version
-        run: 'echo "channel ${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}"'
+          cmd: echo '${{ steps.version.outputs.value }}' | jq '.dot | tonumber'
+      - name: Pre-Release
+        uses: sergeysova/jq-action@v2
+        id: pre-release
+        with:
+          cmd: echo '${{ steps.minor.outputs.value }}' | jq '. % 2 | . != 0'
+          
