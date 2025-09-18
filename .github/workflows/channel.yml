@@ -29,6 +29,6 @@ jobs:
         uses: sergeysova/jq-action@v2
         id: dot
         with:
-          cmd: echo '${{ steps.channel.outputs.value }}' | jq '.dot tonumer'
+          cmd: echo '${{ steps.channel.outputs.value }}' | jq '.dot | tonumber'
       - name: Show Channel Version
         run: 'echo "channel ${{ steps.major.outputs.value }}.${{ steps.minor.outputs.value }}.${{ steps.dot.outputs.value }}"'
