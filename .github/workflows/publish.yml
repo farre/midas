@@ -112,7 +112,7 @@ jobs:
           generate_release_notes: true
           body: |
             # Summary
-            See [changelog](https://github.com/farre/midas/blob/main/release_notes/${{needs.check-version.outputs.version }}.md
+            See [changelog](https://github.com/farre/midas/blob/main/release_notes/${{needs.check-version.outputs.version }}.md)
           name: Release of ${{ needs.check-version.outputs.version }}
           tag_name: ${{ needs.check-version.outputs.tag-version }}
           fail_on_unmatched_files: true
