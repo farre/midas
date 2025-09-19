@@ -117,16 +117,3 @@ jobs:
           fail_on_unmatched_files: true
           files: ${{ needs.build.outputs.vsixPath }}
           prerelease: ${{ needs.check-version.outputs.pre-release }}
-      - name: Publish to Visual Studio Marketplace
-        uses: HaaLeo/publish-vscode-extension@v2
-        with:
-          pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
-          extensionFile: ${{ needs.build.outputs.vsixPath }}
-          registryUrl: https://marketplace.visualstudio.com
-          preRelease: ${{ needs.check-version.outputs.pre-release }}
-      - name: Publish to Open VSX Registry
-        uses: HaaLeo/publish-vscode-extension@v2
-        with:
-          pat: ${{ secrets.OPEN_VSX_TOKEN }}
-          extensionFile: ${{ needs.build.outputs.vsixPath }}
-          preRelease: ${{ needs.check-version.outputs.pre-release }}
