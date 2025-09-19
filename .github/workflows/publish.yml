@@ -80,6 +80,7 @@ jobs:
           pat: stub
           dryRun: true
           yarn: true
+          preRelease: ${{ needs.check-version.outputs.pre-release }}
       - name: Upload Extension Package as Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -123,10 +124,12 @@ jobs:
           pat: ${{ secrets.VS_MARKETPLACE_TOKEN }}
           extensionFile: ${{ needs.build.outputs.vsixPath }}
           registryUrl: https://marketplace.visualstudio.com
+          yarn: true
           preRelease: ${{ needs.check-version.outputs.pre-release }}
       - name: Publish to Open VSX Registry
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.OPEN_VSX_TOKEN }}
           extensionFile: ${{ needs.build.outputs.vsixPath }}
+          yarn: true
           preRelease: ${{ needs.check-version.outputs.pre-release }}
