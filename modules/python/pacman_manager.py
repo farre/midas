@@ -116,7 +116,7 @@ class MidasProgress:
     return closure
 
   def start(self):
-    self.report("start", 'download', {"packages": self.names, "bytes": 0})
+    self.report("start", 'download', {"packages": list(self.names), "bytes": 0})
     self.report('start', 'install')
 
   def stop(self):

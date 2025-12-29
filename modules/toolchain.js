@@ -4,7 +4,7 @@ const { EventEmitter } = require("events");
 const { spawn, execSync } = require("child_process");
 const { sanitizeEnvVariables, which, getExtensionPathOf } = require("./utils/sysutils");
 const path = require("path");
-const { getAPI, kill_pid, Tool, createEmptyMidasConfig, strEmpty } = require("./utils/utils");
+const { getAPI, Tool, createEmptyMidasConfig, strEmpty } = require("./utils/utils");
 const { systemInstall } = require("./utils/installerProgress");
 const { consoleLog, consoleErr } = require("./utils/log");
 
@@ -253,7 +253,7 @@ class CMake extends BuildTool {
   #spawn(args) {
     return getAPI()
       .getRequiredSystemTool("cmake")
-      .spawn(args, { stdio: "pipe", env: sanitizeEnvVariables(), shell: true, detached: true });
+      .spawn(args, { shell: false, env: sanitizeEnvVariables() });
   }
 
   /**
@@ -262,9 +262,9 @@ class CMake extends BuildTool {
   compilerSetting(choice) {
     switch (choice) {
       case "clang":
-        return `-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang`;
+        return ["-DCMAKE_CXX_COMPILER=clang++", "-DCMAKE_C_COMPILER=clang"]
       case "gcc":
-        return `-DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc`;
+        return ["-DCMAKE_CXX_COMPILER=g++", "-DCMAKE_C_COMPILER=gcc"];
       default:
         throw new Error(`Unsupported compiler ${choice}`);
     }
@@ -301,7 +301,7 @@ class CMake extends BuildTool {
         this.usesNinja() ? "-G Ninja" : "",
       );
     }
-    args.push(this.compilerSetting(compiler));
+    args.push(...this.compilerSetting(compiler));
     args.push(...cmakeArguments.map((arg) => `-D${arg}`));
     return new Promise((resolve, reject) => {
       let process = this.#spawn(args);
@@ -388,7 +388,7 @@ class GdbMake extends BuildTool {
   }
 
   #spawn(args) {
-    return getAPI().getMake().spawn(args, { stdio: "pipe", env: sanitizeEnvVariables(), shell: true, detached: true });
+    return getAPI().getMake().spawn(args, { env: sanitizeEnvVariables() });
   }
 
   /**
@@ -731,6 +731,11 @@ class ManagedTool {
     }
   }
 
+  move(from, to) {
+    execSync(`mv "${from}" "${to}"`);
+    consoleLog(`renamed dir ${from} to ${to}`);
+  }
+
   async #downloadSource() {
     if (fs.existsSync(this.sourceDirectory)) {
       fs.rmSync(this.sourceDirectory, { recursive: true });
@@ -745,8 +750,7 @@ class ManagedTool {
         try {
           await this.unzipTodir(zipFile, this.#globalStorage);
           const folder = path.join(this.#globalStorage, this.buildConfig.unzipFolder);
-          execSync(`mv ${folder} ${this.sourceDirectory}`);
-          this.log(`renamed dir ${folder} to ${this.sourceDirectory}`);
+          this.move(folder, this.sourceDirectory); 
         } catch (ex) {
           consoleErr(`unzip failed: ${ex}`);
           this.removeFile(this.sourceDirectory);
@@ -821,11 +825,6 @@ class ManagedTool {
     }
   }
 
-  async checkUserConfiguredUpdateFrequency() {
-    // todo: implement some frequency setting here
-    return true;
-  }
-
   async update() {
     // This functionality has kept popping up with bugs, that we now log as much as possible
     // to save ourselves from the headaches we create ourselves here.
@@ -837,61 +836,28 @@ class ManagedTool {
     const { date } = await this.queryGit();
     const gitDate = new Date(date);
 
-    if (!(configDate < gitDate && (await this.checkUserConfiguredUpdateFrequency()))) {
+    if (configDate >= gitDate) {
+      consoleLog(`tool ${this.#name} last update:\n${configDate}\nqueried update older or same:\n${gitDate}`);
       return false;
     }
     let choice =
       (await vs.window.showInformationMessage(`${this.name} have updates. Update now?`, "yes", "no")) ?? "no";
+
     if (choice == "no") {
       consoleLog(`User selected to not update tool.`);
       return false;
     }
 
-    let backup = false;
-    let cancelled = false;
-    let success = false;
-    const removeDirectory = (dir) => fs.rmSync(dir, { recursive: true });
-    try {
-      fs.renameSync(this.#root_dir, `${this.#root_dir}-old`);
-      backup = true;
-      success = await vs.window.withProgress(
-        {
-          location: vs.ProgressLocation.Notification,
-          cancellable: true,
-          title: "Updating...",
-        },
-        async (reporter, token) => {
-          let emitter = new EventEmitter();
-          token.onCancellationRequested(() => {
-            emitter.emit("cancel");
-            cancelled = true;
-          });
-          return await this.install((report) => {
-            reporter.report(report);
-          }, emitter);
-        },
-      );
-      if (!cancelled && fs.existsSync(`${this.#root_dir}-old`)) {
-        removeDirectory(`${this.#root_dir}-old`);
+    return getAPI().getToolchain().installDependencies(this).then(async (wasNotCancelled) => {
+      if (wasNotCancelled) {
+        consoleLog(`Begin update of ${this.name}`);
+        await this.beginInstallerUI();
+        return true;
+      } else {
+        vs.window.showInformationMessage("Update cancelled.");
+        return false;
       }
-    } catch (ex) {
-      if (backup) {
-        if (fs.existsSync(this.#root_dir)) {
-          removeDirectory(this.#root_dir);
-        }
-        fs.renameSync(`${this.#root_dir}-old`, `${this.#root_dir}`);
-        cancelled = false;
-      }
-    }
-
-    if (cancelled && fs.existsSync(`${this.#root_dir}-old`)) {
-      if (fs.existsSync(this.#root_dir)) {
-        removeDirectory(this.#root_dir);
-      }
-      fs.renameSync(`${this.#root_dir}-old`, `${this.#root_dir}`);
-      cancelled = false;
-    }
-    return success;
+    });
   }
 
   asTool() {
@@ -1036,7 +1002,8 @@ class ManagedToolchain {
     const exported = this.getToolList()
       .filter((t) => t.managed)
       .map((t) => t.getExportPath());
-    this.extensionContext.environmentVariableCollection.append("PATH", `:${exported.join(":")}`);
+    consoleLog(`Prepending ${exported} to $PATH, to make the terminal search here first.`);
+    this.extensionContext.environmentVariableCollection.prepend("PATH", `${exported.join(":")}:`);
   }
 
   get version() {
@@ -1056,11 +1023,9 @@ class ManagedToolchain {
   }
 
   async checkUpdates() {
-    let changed = false;
-    for await (const updated of this.getToolList().map((t) => t.update())) {
-      changed = changed || updated;
+    for(const tool of this.getToolList()) {
+      tool.update();
     }
-    return changed;
   }
 
   getToolList() {

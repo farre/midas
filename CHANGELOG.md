@@ -39,6 +39,7 @@
 - Always make sure `non-stop` is set to off for rr sessions.
 - Fixed "not imported module gdb.types" bug
 - Fixed pause issues in single-thread control mode, where pausing of individual threads did not work.
+- Update of managed tools no longer is atomic, as this creates hard to debug bugs. This unfortunately means that if update fails, or installation fails, we can't gracefully try again/fix it, but instead the responsibility is on the user to do `Get rr` (for instance).
 
 ## Release 0.22.0
 

@@ -443,21 +443,9 @@ class MidasAPI extends APIInit {
     }
   }
 
-  async checkToolchainUpdates() {
-    const manager = this.getToolchain();
-    for (const tool of ["rr", "gdb", "mdb"]) {
-      try {
-        manager.getTool(tool).update();
-      } catch (ex) {}
-    }
-  }
-
   async updatesCheck() {
     try {
-      const changed = await this.toolchain.checkUpdates();
-      if (changed) {
-        this.toolchain.serialize();
-      }
+      await this.toolchain.checkUpdates();
     } catch (ex) {
       vscode.window.showErrorMessage(`Failed to update: ${ex}`);
     }
