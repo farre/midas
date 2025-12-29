@@ -22,6 +22,7 @@ const { debugLogging } = require("./buildMode");
 const { ProvidedAdapterTypes, DebugLogging, CustomRequests, CustomRequestsUI, ContextKeys } = require("./constants");
 const { execSync } = require("child_process");
 const { ManagedToolchain } = require("./toolchain");
+const { consoleLog, consoleErr } = require("./utils/log");
 
 function cloneNonExistingSubProperties(obj) {
   return (key, value) => {
@@ -96,7 +97,7 @@ class MidasDebugAdapterTracker {
    * The debug adapter has exited with the given exit code or signal.
    */
   onExit(code, signal) {
-    console.log(`The debug adapter exited with code: ${code} and signal: ${signal}`);
+    consoleLog(`The debug adapter exited with code: ${code} and signal: ${signal}`);
   }
 }
 
@@ -313,7 +314,7 @@ class MidasAPI extends APIInit {
         showReleaseNotes();
       }
     } catch (ex) {
-      console.log(`exception caught, won't show release notes: ${ex}`);
+      consoleErr(`Exception caught, won't show release notes: ${ex}`);
     }
   }
 
@@ -321,9 +322,9 @@ class MidasAPI extends APIInit {
     try {
       const data = JSON.stringify(cfg, null, 2);
       fs.writeFileSync(this.configFile, data);
-      console.log(`Wrote configuration ${data}`);
+      consoleLog(`Wrote configuration ${data}`);
     } catch (err) {
-      console.log(`Failed to write configuration. Error: ${err}`);
+      consoleErr(`Failed to write configuration. Error: ${err}`);
     }
   }
 
@@ -569,7 +570,7 @@ async function activateExtension(context) {
     registerDebuggerType(context, RRConfigurationProvider, RRDebugAdapterFactory, checkpointProvider);
     registerDebuggerType(context, MdbConfigurationProvider, MdbDebugAdapterFactory, checkpointProvider);
   } catch (ex) {
-    console.log(`Failed to init Midas`);
+    consoleErr(`Failed to init Midas`);
     throw ex;
   }
 

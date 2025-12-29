@@ -5,6 +5,7 @@ const { UnixSocketCommunication } = require("./dap-utils");
 const { DebuggerProcessBase } = require("./base-process-handle");
 const { MidasSessionBase } = require("./dap-base");
 const { CustomRequests } = require("../constants");
+const { consoleErr } = require("../utils/log");
 
 class GdbProcess extends DebuggerProcessBase {
   constructor(options) {
@@ -15,7 +16,7 @@ class GdbProcess extends DebuggerProcessBase {
       const args = this.spawnArgs();
       this.spawnDebugger(p, args);
     } catch (ex) {
-      console.log(`Creating instance of GdbProcess failed: ${ex}`);
+      consoleErr(`Creating instance of GdbProcess failed: ${ex}`);
       // re-throw exception - this must be a hard error
       throw ex;
     }

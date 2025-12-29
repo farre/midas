@@ -2,6 +2,7 @@ const vscode = require("vscode");
 const path = require("path");
 const subprocess = require("child_process");
 const { Regexes } = require("../constants");
+const { consoleErr } = require("./log");
 
 /**
  * @param { string } rr - Path to rr
@@ -94,7 +95,7 @@ async function getTraceInfo(rr, trace) {
           }
         }
       } catch (ex) {
-        console.log(`Failed to prepare RR replay parameters: ${ex}`);
+        consoleErr(`Failed to prepare RR replay parameters: ${ex}`);
         throw new Error(`Failed to prepare RR replay parameters`);
       }
       return {

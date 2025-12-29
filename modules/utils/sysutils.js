@@ -3,6 +3,7 @@ const { exec, spawn: _spawn, execSync } = require("child_process");
 const fsp = require("fs/promises");
 const fs = require("fs");
 const Path = require("path");
+const { consoleErr } = require("./log");
 
 /**
  * Returns a full constructed path of `fileOrDir` inside the extension directory.
@@ -63,7 +64,7 @@ function whereis(binary) {
           .filter((s) => s != "");
         resolve(result);
       } catch (err) {
-        console.log(`could not perform 'whereis': ${err}`);
+        consoleErr(`could not perform 'whereis': ${err}`);
         reject([]);
       }
     });

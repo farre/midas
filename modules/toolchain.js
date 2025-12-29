@@ -6,15 +6,7 @@ const { sanitizeEnvVariables, which, getExtensionPathOf } = require("./utils/sys
 const path = require("path");
 const { getAPI, kill_pid, Tool, createEmptyMidasConfig, strEmpty } = require("./utils/utils");
 const { systemInstall } = require("./utils/installerProgress");
-
-const DefaultConfigTemplate = {
-  midas_version: "",
-  toolchain: {
-    rr: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-    gdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-    mdb: { root_dir: "", path: "", version: "", managed: false, git: { sha: null, date: null } },
-  },
-};
+const { consoleLog, consoleErr } = require("./utils/log");
 
 const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
 function cmakeProgress(str, last) {
@@ -110,7 +102,7 @@ async function downloadFile(url, path, emitter) {
   return new Promise((resolve, reject) => {
     const output_stream = fs.createWriteStream(path, { flags: "wx" });
     const cleanup = (err, exception) => {
-      console.log(`Exception: ${err}`);
+      consoleErr(`Exception: ${err}`);
       output_stream.close();
       removeFile(path);
       reject(exception);
@@ -331,7 +323,7 @@ class CMake extends BuildTool {
         }
       });
       process.on("error", (err) => {
-        console.log(`Failed to configure: ${err}`);
+        consoleErr(`Failed to configure: ${err}`);
         reject(err);
       });
     });
@@ -456,7 +448,7 @@ class GdbMake extends BuildTool {
         }
       });
       process.on("error", (err) => {
-        console.log(`Failed to configure: ${err}`);
+        consoleErr(`Failed to configure: ${err}`);
         reject(err);
       });
     });
@@ -711,7 +703,7 @@ class ManagedTool {
       });
 
       request.on("error", (err) => {
-        console.log(`Error: ${err}`);
+        consoleErr(`Error: ${err}`);
         rej(`Error ${err}`);
       });
     });
@@ -735,7 +727,7 @@ class ManagedTool {
     try {
       fs.unlinkSync(path);
     } catch (ex) {
-      console.log(`failed to remove file ${path}: ${ex}`);
+      consoleErr(`failed to remove file ${path}: ${ex}`);
     }
   }
 
@@ -756,7 +748,7 @@ class ManagedTool {
           execSync(`mv ${folder} ${this.sourceDirectory}`);
           this.log(`renamed dir ${folder} to ${this.sourceDirectory}`);
         } catch (ex) {
-          console.log(`unzip failed: ${ex}`);
+          consoleErr(`unzip failed: ${ex}`);
           this.removeFile(this.sourceDirectory);
           this.removeFile(zipFile);
           throw new Error(`Failed to unzip: ${ex}`);
@@ -835,7 +827,10 @@ class ManagedTool {
   }
 
   async update() {
+    // This functionality has kept popping up with bugs, that we now log as much as possible
+    // to save ourselves from the headaches we create ourselves here.
     if (!this.managed) {
+      consoleLog(`tool ${this.#name} not managed, will not update.`);
       return false;
     }
     const configDate = new Date(this.#git.date ?? null);
@@ -848,6 +843,7 @@ class ManagedTool {
     let choice =
       (await vs.window.showInformationMessage(`${this.name} have updates. Update now?`, "yes", "no")) ?? "no";
     if (choice == "no") {
+      consoleLog(`User selected to not update tool.`);
       return false;
     }
 
@@ -1094,8 +1090,10 @@ class ManagedToolchain {
    * @returns
    */
   installDependencies(tool) {
+    // TODO: Make this a cheaper call, for cases where we *know* system dependencies previously has been met.
+    // will also mean user doesn't have to input sudo password every update.
     return tool.dependencies.config().then(({ name, repoType, packages }) => {
-      console.log(`repo type: ${name}. installer service: ${repoType}. Required packages: ${packages.join(" ")}`);
+      consoleLog(`repo type: ${name}. installer service: ${repoType}. Required packages: ${packages.join(" ")}`);
       return systemInstall(repoType, packages, true, this.#toolchainInstallLogger);
     });
   }

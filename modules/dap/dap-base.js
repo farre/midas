@@ -4,6 +4,7 @@ const vs = require("vscode");
 const { toHexString, getAPI } = require("../utils/utils");
 const { PrinterFactory } = require("../prettyprinter.js");
 const { CustomRequests, ProvidedAdapterTypes, CustomRequestsUI, ContextKeys } = require("../constants");
+const { consoleLog, consoleErr } = require("../utils/log");
 
 /**
  *
@@ -46,7 +47,7 @@ class MidasSessionBase extends DebugSession {
   /** @type {import("../ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
   #checkpointsUI;
   #defaultLogger = (output) => {
-    console.log(output);
+    consoleLog(output);
   };
 
   spawnConfig;
@@ -88,7 +89,7 @@ class MidasSessionBase extends DebugSession {
       this.dbg.connectResponse((res) => {
         if (!res.success) {
           const err = (res.body?.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-          console.log(`[request error]: ${res.command} failed\n${err}`);
+          consoleErr(`request error: ${res.command} failed\n${err}`);
           this.sendErrorResponse(res, { id: 1, format: `Communications error: ${res.message ?? "Unknown"}`, showUser: true });
           return;
         }
@@ -135,7 +136,7 @@ class MidasSessionBase extends DebugSession {
               )
               .then((bool) => {
                 if (bool) {
-                  console.log(`child session started`);
+                  consoleLog(`child session started`);
                 }
               });
             return;
@@ -294,7 +295,7 @@ class MidasSessionBase extends DebugSession {
           }
         }
       } catch (e) {
-        console.log(e.message);
+        consoleErr(e.message);
       }
 
       this.sendResponse(response);
@@ -639,7 +640,7 @@ class MidasSessionBase extends DebugSession {
         this.threadCache.add(thread.id);
       }
     } catch (ex) {
-      console.log(`not iterable?`);
+      consoleErr(`not iterable?`);
     }
   }
 }

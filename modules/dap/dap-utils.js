@@ -4,6 +4,7 @@
  */
 
 const net = require("net");
+const { consoleLog } = require("../utils/log");
 
 /**
  * @typedef { Event | Response } DAPMessage
@@ -203,7 +204,7 @@ class UnixSocketCommunication extends MidasCommunicationChannel {
         this.buffer = this.buffer.concat(str);
         const packets = processBuffer(this.buffer).filter((i) => i.all_received);
         const { buffer: remaining_buffer, protocol_messages } = parseBuffer(this.buffer, packets);
-        console.log(
+        consoleLog(
           `protocol messages=\n${JSON.stringify(protocol_messages, null, 2)}\nRemaining buffer=${remaining_buffer}`,
         );
         this.buffer = remaining_buffer;

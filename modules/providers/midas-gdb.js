@@ -3,6 +3,7 @@ const { ConfigurationProviderInitializer, InitExceptionTypes, gdbSettingsOk } = 
 const { isNothing, resolveCommand, showErrorPopup, getPid, strEmpty, getAPI } = require("../utils/utils");
 const { LaunchSpawnConfig, AttachSpawnConfig } = require("../spawn");
 const { GdbDAPSession } = require("../dap/gdb");
+const { consoleErr } = require("../utils/log");
 
 const initializer = async (config) => {
   if (!config.hasOwnProperty("stopOnEntry")) {
@@ -86,7 +87,7 @@ class ConfigurationProvider extends ConfigurationProviderInitializer {
           vscode.window.showErrorMessage(`Gdb could not be found on your system`);
           break;
         default:
-          console.log(`Unexpected exception: ${err}`);
+          consoleErr(`Unexpected exception: ${err}`);
           break;
       }
       return null;

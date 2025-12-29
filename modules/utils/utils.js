@@ -1,7 +1,7 @@
 // @ts-check
 "use strict";
 
-const { exec, spawn: _spawn } = require("child_process");
+const { exec, spawn: _spawn, spawnSync, execSync } = require("child_process");
 const vscode = require("vscode");
 const fs = require("fs");
 const Path = require("path");
@@ -9,6 +9,7 @@ const { TerminalInterface } = require("../terminalInterface");
 const { resolveCommand, sudo, sanitizeEnvVariables, getAllPidsForQuickPick } = require("./sysutils");
 const { getReleaseNotes } = require("./releaseNotes");
 const { Regexes } = require("../constants");
+const { consoleLog } = require("./log");
 
 /** @typedef { { sha: string, date: Date } } GitMetadata */
 /** @typedef { { root_dir: string, path: string, version: string, managed: boolean, git: GitMetadata } } ManagedTool */
@@ -61,22 +62,26 @@ class Tool {
 
     await sudo([this.path, ...args], pass, (code) => {
       if (code == 0) {
-        console.log(`Application executed successfully`);
+        consoleLog(`Application executed successfully`);
       } else {
         throw new Error(`${this.path} failed, returned exit code ${code}`);
       }
     });
   }
 
-  execute(args, logger = null, spawnOptions = { stdio: "pipe", shell: true, env: sanitizeEnvVariables() }) {
+  execute(args, logger = null, spawnOptions = { stdio: "pipe", env: sanitizeEnvVariables() }) {
     try {
       return new Promise((resolve, reject) => {
-        console.log(`executing ${this.path} ${args.join(" ")}`);
-        let app = _spawn(this.path, args, spawnOptions);
+        consoleLog(`executing ${this.path} ${args.map(s => `"${s}"`).join(" ")}`);
+        let app = _spawn(this.path, args);
         app.stdout.on("data", (data) => {
-          const output = data.toString().trim();
           if (logger != null) {
-            logger.appendLine(output);
+            logger.appendLine(data.toString().trim());
+          }
+        });
+        app.stderr.on("data", data => {
+          if (logger != null) {
+            logger?.appendLine(data.toString().trim());
           }
         });
         app.on("error", (err) => {
@@ -101,9 +106,9 @@ class Tool {
   spawn(args, spawnOptions) {
     const spawnWithArgs = this.spawnArgs.concat(args);
     try {
-      console.log(`spawning ${this.path} ${spawnWithArgs.join(" ")} (options: ${JSON.stringify(spawnOptions)})`);
+      consoleLog(`spawning ${this.path} ${spawnWithArgs.join(" ")} \n(options: ${JSON.stringify(spawnOptions)})`);
     } catch (ex) {
-      console.log(`spawning ${this.path} ${spawnWithArgs.join(" ")}`);
+      consoleLog(`spawning ${this.path} ${spawnWithArgs.join(" ")}`);
     }
 
     return _spawn(this.path, spawnWithArgs, spawnOptions);

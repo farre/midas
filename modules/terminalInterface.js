@@ -1,4 +1,5 @@
 const { execSync } = require("child_process");
+const { consoleErr } = require("./utils/log");
 // Make our externally spawned consoles interchangeable with VSCode terminals
 class TerminalInterface {
   #process;
@@ -29,7 +30,7 @@ class TerminalInterface {
       try {
         execSync(`kill ${this.#ppid}`);
       } catch (err) {
-        console.log(`Process ${this.#ppid} is already dead`);
+        consoleErr(`Process ${this.#ppid} is already dead`);
       }
     }
     this.#process.kill("SIGTERM");
@@ -39,7 +40,7 @@ class TerminalInterface {
     try {
       execSync(`kill ${this.#children}`);
     } catch (err) {
-      console.log(`Process ${this.#ppid} is already dead`);
+      consoleErr(`Process ${this.#ppid} is already dead`);
     }
   }
 

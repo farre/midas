@@ -1,6 +1,7 @@
 "use strict";
 
 const { workspace, Uri } = require("vscode");
+const { consoleLog, consoleErr } = require("./utils/log");
 
 class PrettyPrinter {
   #pattern = "";
@@ -150,7 +151,7 @@ class Printer {
   }
 
   constructor(session, regexp, printers) {
-    console.log(regexp);
+    consoleLog(regexp);
     this.#session = session;
     this.#regexp = new RegExp(`^${regexp}$`, "i");
     this.#printers = printers;
@@ -261,7 +262,7 @@ class PrinterFactory {
         const { create } = require(uri.path);
         this.add(create(printerlib));
       } catch (e) {
-        console.log(e.message);
+        consoleErr(e.message);
       }
     }
     return this.printer();

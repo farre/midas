@@ -1,4 +1,5 @@
 const net = require("net");
+const { consoleLog, consoleErr } = require("./log");
 
 /**
  * @param { net.Server } server
@@ -22,11 +23,11 @@ async function getFreeRandomPort(portRange = { begin: 50505, end: 65000 }) {
   for (let port = portRange.begin; port < portRange.end; port++) {
     try {
       let p = await getPort(server, port);
-      console.log(`port found on: ${p}`);
+      consoleLog(`port found on: ${p}`);
       server.close();
       return p;
     } catch (err) {
-      console.log(`port ${port} already taken`);
+      consoleErr(`port ${port} already taken`);
     }
   }
   throw new Error("Could not find port");

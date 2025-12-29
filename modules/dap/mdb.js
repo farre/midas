@@ -8,6 +8,7 @@ const { CustomRequests, ProvidedAdapterTypes, ContextKeys } = require("../consta
 const vs = require("vscode");
 const { DebugSession, TerminatedEvent, InvalidatedEvent } = require("@vscode/debugadapter");
 const { randomUUID } = require("crypto");
+const { consoleLog, consoleErr } = require("../utils/log");
 
 /**
  * Serialize request, preparing it to be sent over the wire to GDB
@@ -86,7 +87,7 @@ class MdbProcess extends DebuggerProcessBase {
         const p = rr;
         this.spawnDebugger(p, newOptions);
       } catch (ex) {
-        console.log(`Creating instance of ${this.path()} failed: ${ex}`);
+        consoleErr(`Creating instance of ${this.path()} failed: ${ex}`);
         // re-throw exception - this must be a hard error
         throw ex;
       }
@@ -141,7 +142,7 @@ class MidasSessionController {
   /** @type {import("../ui/checkpoints/checkpoints").CheckpointsViewProvider }*/
   #checkpointsUI;
   #defaultLogger = (output) => {
-    console.log(output);
+    consoleLog(output);
   };
 
   spawnConfig;
@@ -184,7 +185,7 @@ class MidasSessionController {
     this.dbg.connectResponse((res) => {
       if (!res.success) {
         const err = (res.body?.error ?? { stacktrace: "No stack trace info" }).stacktrace;
-        console.log(`[request error]: ${res.command} failed\n${err}`);
+        consoleErr(`[request error]: ${res.command} failed\n${err}`);
       }
       switch (res.command) {
         case CustomRequests.DeleteCheckpoint:
@@ -252,7 +253,7 @@ class MidasSessionController {
             )
             .then((bool) => {
               if (bool) {
-                console.log(`child session started`);
+                consoleLog(`child session started`);
               }
             });
           break;

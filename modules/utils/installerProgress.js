@@ -5,6 +5,7 @@ const { sudo, which } = require("./sysutils");
 const os = require("os");
 const { existsSync, unlinkSync } = require("fs");
 const { getAPI } = require("./utils");
+const { consoleLog } = require("./log");
 
 const InstallerExceptions = {
   PackageManagerNotFound: "PkgManNotFound",
@@ -195,7 +196,7 @@ function systemInstall(repoType, packages, cancellable, logger) {
 
               // eslint-disable-next-line no-unused-vars
               listeners.download.on("update", ({ bytes, progress, increment }) => {
-                console.log(`Download update: ${bytes} bytes. Increment: ${increment}`);
+                consoleLog(`Download update: ${bytes} bytes. Increment: ${increment}`);
                 reporter.report({
                   increment: increment,
                   message: remaining_download.join(", "),
@@ -246,7 +247,7 @@ function systemInstall(repoType, packages, cancellable, logger) {
               });
 
               listeners.install.on("update", (payload) => {
-                console.log(`Install update: ${JSON.stringify(payload)}`);
+                consoleLog(`Install update: ${JSON.stringify(payload)}`);
                 reporter.report({ message: `Installing ${payload.package}...`, increment: payload.increment });
               });
             });

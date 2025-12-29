@@ -2,6 +2,7 @@
 
 const vscode = require("vscode");
 const path = require("path");
+const { consoleLog } = require("./log");
 
 const versionRE = /([0-9]+)\.([0-9]+)\.([0-9]+)/;
 const notesRE = /(^# .*$)?(?:^##(?<category>.*)$\s*(?<note>(?:[\S\s](?!##))*))*/gm;
@@ -78,7 +79,7 @@ function addReleaseNote(entry, notes) {
     }
   }
 
-  console.log(JSON.stringify(entry));
+  consoleLog(JSON.stringify(entry));
 
   return entry;
 }
