@@ -4,6 +4,14 @@ const subprocess = require("child_process");
 const { Regexes } = require("../constants");
 const { consoleErr } = require("./log");
 
+function isFlatpack() {
+  return !!process.env.FLATPAK_ID || process.env.container === "flatpack";
+}
+
+function escapeFromFlatpack(command) {
+  return isFlatpack() ? `flatpak-spawn --host ${command}` : command;
+}
+
 /**
  * @param { string } rr - Path to rr
  * @param { string | "" } workspaceDir - Workspace directory containing N traces
@@ -11,7 +19,7 @@ const { consoleErr } = require("./log");
  */
 async function getTraces(rr, workspaceDir = "") {
   return new Promise((resolve, reject) => {
-    const command = `${rr} ls ${workspaceDir} -t -r`;
+    const command = escapeFromFlatpack(`${rr} ls ${workspaceDir} -t -r`);
     subprocess.exec(command, (err, stdout, stderr) => {
       if (err) {
         reject(stderr);
@@ -74,7 +82,8 @@ function fallbackParseOfrrps(data) {
  */
 async function getTraceInfo(rr, trace) {
   return new Promise((resolve, reject) => {
-    subprocess.exec(`${rr} ps ${trace}`, (error, stdout, stderr) => {
+    const command = escapeFromFlatpack(`${rr} ps ${trace}`);
+    subprocess.exec(command, (error, stdout, stderr) => {
       if (error) {
         reject(stderr);
       } else {
@@ -150,7 +159,8 @@ const tracePicked = async (rr, traceDirectory) => {
  */
 function getGdbInit(rr) {
   return new Promise((res, rej) => {
-    subprocess.exec(`${rr} gdbinit`, (error, stdout) => {
+    const command = escapeFromFlatpack(`${rr} gdbinit`);
+    subprocess.exec(command, (error, stdout) => {
       if (error) rej(error);
       else res(stdout.toString());
     });
