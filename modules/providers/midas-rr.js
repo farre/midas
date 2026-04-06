@@ -11,7 +11,7 @@ const { GdbDAPSession } = require("../dap/gdb");
 const { getExtensionPathOf } = require("../utils/sysutils");
 
 const initializerPopupChoices = {
-  perf_event_paranoid: [
+  perfEventParanoid: [
     {
       title: "Read more...",
       action: async () => {
@@ -46,12 +46,12 @@ const initializer = async (config) => {
     config.setupCommands = [];
   }
 
-  const perf_event_paranoid = krnl.readPerfEventParanoid();
-  if (perf_event_paranoid > 1) {
+  const perfEventParanoid = krnl.readPerfEventParanoid();
+  if (perfEventParanoid > 2) {
     let choice = await showErrorPopup(
-      "perf_event_paranoid not set to <= 1.",
+      "perf_event_paranoid not set to <= 2.",
       "rr needs it to be set to 1 to be performant.",
-      initializerPopupChoices.perf_event_paranoid,
+      initializerPopupChoices.perfEventParanoid,
     );
     if (choice) await choice.action();
     throw new Error("Canceled");
