@@ -51,8 +51,10 @@
       "gdb",
       "lldb",
       "glibc",
+      "lib32-gcc-libs",
       "python-pexpect",
       "ninja",
+      "pkgconf",
       "capnproto",
       "zlib",
       "zstd"
