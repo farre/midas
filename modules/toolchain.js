@@ -732,7 +732,7 @@ class ManagedTool {
   }
 
   move(from, to) {
-    execSync(`mv "${from}" "${to}"`);
+    fs.renameSync(from, to);
     consoleLog(`renamed dir ${from} to ${to}`);
   }
 
