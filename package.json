@@ -9,7 +9,7 @@
     "debug",
     "rr"
   ],
-  "version": "0.25.4",
+  "version": "0.25.5",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -41,6 +41,11 @@
             "type": "string",
             "default": null,
             "description": "Path to GDB. This setting is not required, as Midas will look for GDB in $PATH if not set."
+          },
+          "midas.toolchainDirectory": {
+            "type": "string",
+            "default": null,
+            "description": "Directory where Midas downloads, builds and runs managed toolchains (rr, gdb, mdb). Defaults to the extension's global storage folder. Use a path without spaces; rr relies on LD_PRELOAD, which cannot handle paths containing spaces."
           }
         }
       }
