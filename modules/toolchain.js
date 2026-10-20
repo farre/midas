@@ -7,6 +7,37 @@ const path = require("path");
 const { getAPI, Tool, createEmptyMidasConfig, strEmpty } = require("./utils/utils");
 const { systemInstall } = require("./utils/installerProgress");
 const { consoleLog, consoleErr } = require("./utils/log");
+const os = require("os");
+
+/**
+ * Resolves the directory where managed toolchains are downloaded, built and run from.
+ * Uses the `midas.toolchainDirectory` setting if set, otherwise the extension's global storage.
+ * @param {import("vscode").ExtensionContext} context
+ * @returns {string}
+ */
+function resolveToolchainDirectory(context) {
+  const cfg = vs.workspace.getConfiguration("midas");
+  const configured = cfg.get("toolchainDirectory");
+  if (strEmpty(configured)) {
+    return context.globalStorageUri.fsPath;
+  }
+  const expanded = configured.replace(/^~(?=$|\/)/, os.homedir());
+  const dir = path.resolve(expanded);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  } catch (ex) {
+    const { workspaceValue } = cfg.inspect("toolchainDirectory");
+    const target = workspaceValue !== undefined ? vs.ConfigurationTarget.Workspace : vs.ConfigurationTarget.Global;
+    cfg.update("toolchainDirectory", undefined, target);
+    vs.window.showWarningMessage(
+      `Could not create toolchain directory ${dir}: ${ex}. Reverting to the default toolchain directory.`,
+    );
+    return context.globalStorageUri.fsPath;
+  }
+}
 
 const matcher = /(\n)\[(?<current>\d+)\/(?<total>\d+)\]/g;
 function cmakeProgress(str, last) {
@@ -516,7 +547,7 @@ class GitMetadata {
 }
 
 class ManagedToolConfig {
-  /** @typedef {{binaryPath: string, args: string[]}} SpawnArgs */
+  /** @typedef {{binaryPath: string, args: string[] | ((tool: ManagedTool) => string[])}} SpawnArgs */
   /** @type {SpawnArgs} */
   spawnArgs;
 
@@ -580,7 +611,6 @@ class ManagedTool {
   #git;
   #name;
   #isDebugBuild;
-  #globalStorage;
   #logger;
   #gitUrls;
   /** @type {import("vscode").ExtensionContext} */
@@ -593,7 +623,6 @@ class ManagedTool {
 
   /** @param { ManagedToolConfig } buildConfig */
   constructor(context, logger, name, gitUrls, config, buildDebug, buildConfig, deps) {
-    this.#globalStorage = context.globalStorageUri.fsPath;
     this.#logger = logger;
     this.#name = name;
     this.#gitUrls = gitUrls;
@@ -627,11 +656,19 @@ class ManagedTool {
   }
 
   getExportPath() {
-    return path.dirname(this.#path);
+    if (strEmpty(vs.workspace.getConfiguration("midas").get("toolchainDirectory"))) {
+      return path.dirname(this.#path);
+    }
+    const buildDir = this.#isDebugBuild ? "build-debug" : "build";
+    return path.dirname(path.join(this.#toolchainDirectory(), this.name, buildDir, this.buildConfig.spawnArgs.binaryPath));
   }
 
   get name() {
     return this.#name;
+  }
+
+  #toolchainDirectory() {
+    return resolveToolchainDirectory(this.#context);
   }
 
   // Produces the root (source) dir of this tool and if it's not yet managed by midas
@@ -640,7 +677,7 @@ class ManagedTool {
     if (this.#root_dir) {
       return this.#root_dir;
     } else {
-      return path.join(this.#globalStorage, this.name);
+      return path.join(this.#toolchainDirectory(), this.name);
     }
   }
 
@@ -656,18 +693,21 @@ class ManagedTool {
       return this.#path;
     } else {
       const isRelease = !(this.#isDebugBuild && false);
+      const root = this.#toolchainDirectory();
       if (isRelease) {
-        return this.#path ?? path.join(this.#globalStorage, this.name, "build", this.buildConfig.spawnArgs.binaryPath);
+        return this.#path ?? path.join(root, this.name, "build", this.buildConfig.spawnArgs.binaryPath);
       } else {
-        return (
-          this.#path ?? path.join(this.#globalStorage, this.name, "build-debug", this.buildConfig.spawnArgs.binaryPath)
-        );
+        return this.#path ?? path.join(root, this.name, "build-debug", this.buildConfig.spawnArgs.binaryPath);
       }
     }
   }
 
   get spawnArgs() {
-    return this.buildConfig?.spawnArgs?.args ?? [];
+    const args = this.buildConfig?.spawnArgs?.args;
+    if (typeof args === "function") {
+      return args(this);
+    }
+    return args ?? [];
   }
 
   get version() {
@@ -742,15 +782,16 @@ class ManagedTool {
     }
 
     if (this.#gitUrls.download) {
+      const toolchainDirectory = this.#toolchainDirectory();
       const { path: zipFile, status } = await downloadFileHttp(
         this.#gitUrls.download,
-        path.join(this.#globalStorage, `${this.name}.zip`),
+        path.join(toolchainDirectory, `${this.name}.zip`),
       );
       if (status == "success") {
         try {
-          await this.unzipTodir(zipFile, this.#globalStorage);
-          const folder = path.join(this.#globalStorage, this.buildConfig.unzipFolder);
-          this.move(folder, this.sourceDirectory); 
+          await this.unzipTodir(zipFile, toolchainDirectory);
+          const folder = path.join(toolchainDirectory, this.buildConfig.unzipFolder);
+          this.move(folder, this.sourceDirectory);
         } catch (ex) {
           consoleErr(`unzip failed: ${ex}`);
           this.removeFile(this.sourceDirectory);
@@ -861,7 +902,7 @@ class ManagedTool {
   }
 
   asTool() {
-    return new Tool(this.name, this.path, this.buildConfig.spawnArgs.args);
+    return new Tool(this.name, this.path, this.spawnArgs);
   }
 
   /**
@@ -871,7 +912,7 @@ class ManagedTool {
     if (!fs.existsSync(this.path)) {
       throw new Error(`Path ${this.path} doesn't exist`);
     }
-    const spawnWithArgs = (this.buildConfig.spawnArgs.args ?? []).concat(args);
+    const spawnWithArgs = this.spawnArgs.concat(args);
     return spawn(this.path, spawnWithArgs, spawnOptions);
   }
 }
@@ -952,8 +993,8 @@ class ManagedToolchain {
   }
 
   static gdbConfig() {
-    const gdbSpawnArgs = ManagedToolchain.spawnArgs("gdb/gdb", [
-      `--data-directory=${getAPI().getStoragePathOf("binutils-gdb")}/build/gdb/data-directory`,
+    const gdbSpawnArgs = ManagedToolchain.spawnArgs("gdb/gdb", (tool) => [
+      `--data-directory=${path.join(tool.buildDirectory, "gdb", "data-directory")}`,
     ]);
     const gdbcfg = new ManagedToolConfig(gdbSpawnArgs, "binutils-gdb-master", GdbMake, [
       `--with-python=${ManagedToolchain.determinePython3Path()}`,

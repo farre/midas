@@ -547,6 +547,14 @@ async function activateExtension(context) {
 
   context.subscriptions.push(releaseNotesProvider());
 
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("midas.toolchainDirectory")) {
+        getAPI().getToolchain().exportEnvironment();
+      }
+    }),
+  );
+
   const checkpointProvider = new CheckpointsViewProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(checkpointProvider.type, checkpointProvider, {
