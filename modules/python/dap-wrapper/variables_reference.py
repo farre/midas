@@ -23,19 +23,49 @@ def clear_variable_references(evt):
 gdb.events.cont.connect(clear_variable_references)
 
 def can_var_ref(value):
-    if hasattr(value, "type"):
-        return can_var_ref_type(value.type)
-    else:
+    if not hasattr(value, "type"):
         return False
+    if not can_var_ref_type(value.type):
+        return False
+
+    underlying_type = gdb.types.get_basic_type(value.type)
+    if underlying_type.code == gdb.TYPE_CODE_PTR:
+        return is_valid_pointer(value)
+
+    return True
 
 
 def can_var_ref_type(type):
     underlying_type = gdb.types.get_basic_type(type)
     code = underlying_type.code
     if code == gdb.TYPE_CODE_PTR:
-        code = underlying_type.target().code
+        target_type = gdb.types.get_basic_type(underlying_type.target())
+        if target_type.code == gdb.TYPE_CODE_VOID or target_type.code == gdb.TYPE_CODE_FUNC:
+            return False
+        # Follow pointers recursively; e.g. a pointer to a pointer to a struct.
+        if target_type.code == gdb.TYPE_CODE_PTR:
+            return can_var_ref_type(target_type)
+        return True
 
     return code == gdb.TYPE_CODE_STRUCT or code == gdb.TYPE_CODE_UNION or code == gdb.TYPE_CODE_ARRAY
+
+
+def is_valid_pointer(value):
+    try:
+        address = int(value)
+    except (gdb.error, TypeError, ValueError):
+        return False
+
+    if address == 0:
+        return False
+
+    try:
+        # Make sure the pointee is actually readable before folding it out.
+        gdb.selected_inferior().read_memory(address, 1)
+    except (gdb.error, AttributeError):
+        return False
+
+    return True
 
 
 # Base class Widget Reference - representing a container-item/widget in the VSCode UI
@@ -251,29 +281,72 @@ class VariableValueReference(VariablesReference):
         self.evaluateName = evaluateName
 
     def is_dereffable_non_primitive(self):
-        return self.value_cache.type.code == gdb.TYPE_CODE_PTR and can_var_ref_type(
-            self.value_cache.type.target()
-        )
+        type = gdb.types.get_basic_type(self.value_cache.type)
+        if type.code != gdb.TYPE_CODE_PTR:
+            return False
+        return can_var_ref_type(type) and is_valid_pointer(self.value_cache)
 
     def is_ref_type(self):
-        code = self.value_cache.type.code
+        code = gdb.types.get_basic_type(self.value_cache.type).code
         return code == gdb.TYPE_CODE_REF or code == gdb.TYPE_CODE_RVALUE_REF
+
+    def is_pointer(self):
+        return gdb.types.get_basic_type(self.type).code == gdb.TYPE_CODE_PTR
+
+    def target_type(self):
+        type = gdb.types.get_basic_type(self.type)
+        while type.code == gdb.TYPE_CODE_PTR:
+            type = gdb.types.get_basic_type(type.target())
+        return type
+
+    def get_pointer_value(self):
+        if not self.is_pointer():
+            return None
+        try:
+            return hex(int(self.value_getter()))
+        except (gdb.error, AttributeError, TypeError, ValueError):
+            return None
 
     def get_value(self):
         if self.value_cache is None:
             self.value_cache = self.value_getter()
-            if self.is_dereffable_non_primitive():
-                self.value_cache = self.value_cache.dereference()
-            elif self.is_ref_type():
-                self.value_cache = self.value_cache.referenced_value()
+            while True:
+                if self.is_dereffable_non_primitive():
+                    try:
+                        self.value_cache = self.value_cache.dereference()
+                    except gdb.error:
+                        break
+                elif self.is_ref_type():
+                    try:
+                        self.value_cache = self.value_cache.referenced_value()
+                    except gdb.error:
+                        break
+                else:
+                    break
         return self.value_cache
 
     def ui_data(self):
         addr = hex(int(self.addr)) if self.addr is not None else None
         evalName = self.evaluateName
+        value = f"{self.type}"
+        if self.is_pointer():
+            pointer_value = self.get_pointer_value()
+            target_code = self.target_type().code
+            if target_code == gdb.TYPE_CODE_STRUCT or target_code == gdb.TYPE_CODE_UNION or target_code == gdb.TYPE_CODE_ARRAY:
+                if pointer_value is not None:
+                    value = f"{self.type} ({pointer_value})"
+            else:
+                try:
+                    dereferenced_value = self.get_value()
+                    value = f"{self.type} {dereferenced_value}"
+                    if pointer_value is not None:
+                        value = f"{value} ({pointer_value})"
+                except (gdb.error, AttributeError, TypeError, ValueError):
+                    if pointer_value is not None:
+                        value = f"{self.type} ({pointer_value})"
         return {
             "name": self.name,
-            "value": f"{self.type}",
+            "value": value,
             "type": f"{self.type.name}",
             "evaluateName": evalName,
             "variablesReference": self.id,
@@ -306,7 +379,24 @@ class VariableValueReference(VariablesReference):
     def contents_type(self, value, format, start, count):
         res = []
         for field in members(value):
+            evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
             if can_var_ref_type(field.type):
+                field_type = gdb.types.get_basic_type(field.type)
+                if field_type.code == gdb.TYPE_CODE_PTR:
+                    try:
+                        field_value = value[field]
+                    except gdb.error:
+                        field_value = None
+                    if field_value is not None and not is_valid_pointer(field_value):
+                        res.append(
+                            value_ui_data(
+                                field.name,
+                                field_value,
+                                evaluateName=evalName,
+                                format=format,
+                            )
+                        )
+                        continue
                 # since we defer creating values for the members, we calculate actual address in memory by
                 # offset of the member inside the type.ja
                 if hasattr(field, "bitpos") and value.address is not None:
@@ -314,11 +404,9 @@ class VariableValueReference(VariablesReference):
                 else:
                     # Is a static member
                     addr = None
-                evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
                 ref = create_deferred_var_ref(field.type, field, value, addr, evaluateName=evalName)
                 res.append(ref.ui_data())
             else:
-                evalName = f"{self.evaluateName}.{field.name}" if self.evaluateName is not None else None
                 res.append(value_ui_data(field.name, value[field], evaluateName=evalName, format=format))
         return res
 
@@ -329,12 +417,38 @@ class VariableValueReference(VariablesReference):
         for n in range(lo, high+1):
             evaluateName = f"*({self.evaluateName}+{n})@1" if self.evaluateName is not None else None
             if can_var_ref_type(target_type):
+                if gdb.types.get_basic_type(target_type).code == gdb.TYPE_CODE_PTR:
+                    try:
+                        sub_value = value[n]
+                    except gdb.error:
+                        sub_value = None
+                    if sub_value is not None and not is_valid_pointer(sub_value):
+                        res.append(
+                            value_ui_data(
+                                f"@{n}",
+                                sub_value,
+                                evaluateName,
+                                format=format,
+                            )
+                        )
+                        continue
                 ref = create_deferred_var_ref(target_type, n, value, None, evaluateName=evaluateName)
                 res.append(ref.ui_data())
             else:
                 sub_value = value[n]
                 res.append(value_ui_data(f"@{n}", sub_value, evaluateName, format=format))
         return res
+
+    def contents_value(self, value, format):
+        evaluateName = f"*({self.evaluateName})" if self.evaluateName is not None else None
+        return [
+            value_ui_data(
+                f"*{self.name}",
+                value,
+                evaluateName=evaluateName,
+                format=format,
+            )
+        ]
 
     def contents(self, format=None, start=None, count=None):
         try:
@@ -343,10 +457,13 @@ class VariableValueReference(VariablesReference):
             if pp is not None:
                 return self.pp_contents(pp, format, start, count)
             else:
-                if value.type.strip_typedefs().code == gdb.TYPE_CODE_ARRAY:
+                value_type = value.type.strip_typedefs()
+                if value_type.code == gdb.TYPE_CODE_ARRAY:
                     return self.contents_array(value=value, format=format, start=start, count=count)
-                else:
+                elif value_type.code == gdb.TYPE_CODE_STRUCT or value_type.code == gdb.TYPE_CODE_UNION:
                     return self.contents_type(value=value, format=format, start=start, count=count)
+                else:
+                    return self.contents_value(value=value, format=format)
         except gdb.error as mem_exception:
             return [
                 {"name": "error", "value": f"{mem_exception}", "variablesReference": 0}
